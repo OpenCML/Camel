@@ -530,9 +530,9 @@ and a `Set<T>` as an array, in key order.
   it (section 2). Verified with and without `std::macro`, through `std::opt` and
   `std::cxx::inline`, on the four backends, and under heap verification with a collection at
   every allocation.
-- **`std::cpp`, `onnx::export`.** Each refuses the graph with `TranslationRefused` and a
+- **`std::cpp`, `onnx::export_model`.** Each refuses the graph with `TranslationRefused` and a
   position (at the array the collection is built from, which they do not translate either).
-  `onnx::export` evaluates what does not depend on the model's input, so a program whose
+  `onnx::export_model` evaluates what does not depend on the model's input, so a program whose
   collections are all constant still exports as the constant model it is.
 - **Autodiff.** A collection has no tangent. Left alone, activity analysis ended at one and
   what was read back out of it was taken for a constant: `grad` of `x * m[1]` with

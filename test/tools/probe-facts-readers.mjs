@@ -34,7 +34,7 @@
 // `skipped`), and a corpus whose `skipped` grows without `silent` growing says so.
 //
 // Every case runs in its own scratch directory (`fs.mkdtempSync`), never in the checkout: cases
-// that export a model (`onnx::export out=m.onnx`) write beside the program, and before this the
+// that export a model (`onnx::export_model out=m.onnx`) write beside the program, and before this the
 // sweep left a dozen files in the tree it measured.
 //
 // Usage:

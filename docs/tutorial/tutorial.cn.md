@@ -993,7 +993,7 @@ camel docs/tutorial/examples/14_passes.cml --dump-after-each-pass snap std::cxx:
 
 几条规则：
 
-- 遍按书写顺序运行。执行图的遍（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`）返回部分求值后剩下的子图或空图，写在"已经交回空图"的那一遍后面的遍不会运行。把图打印或导出的遍（`std::rgir`、`onnx::export`）画完把图原样交下去，所以写在它们后面的遍照样运行；`std::nop` 让流水线到此停住、什么也不执行。
+- 遍按书写顺序运行。执行图的遍（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`）返回部分求值后剩下的子图或空图，写在"已经交回空图"的那一遍后面的遍不会运行。把图打印或导出的遍（`std::rgir`、`onnx::export_model`）画完把图原样交下去，所以写在它们后面的遍照样运行；`std::nop` 让流水线到此停住、什么也不执行。
 - 不写任何遍，或者写下的遍跑完图还在，最后运行默认的 `std::nvm`。只想看图不想运行程序，就在末尾写 `std::nop`。
 - 语言不限制遍的顺序，而顺序可以影响结果：遍会改图，可以有副作用。标准库的优化遍以不改变程序结果为目标，这由测试保证，不是语言层面的约定。
 
@@ -1051,11 +1051,11 @@ camel docs/tutorial/examples/15_model.cml --arg x=docs/tutorial/examples/x.npy
 **导出它**：同一份源码，换一组遍。程序里没有为导出写任何东西，连 `import onnx` 都不需要：
 
 ```bash
-camel docs/tutorial/examples/15_model.cml std::macro std::opt 'onnx::export out="model.onnx"'
+camel docs/tutorial/examples/15_model.cml std::macro std::opt 'onnx::export_model out="model.onnx"'
 ```
 
 ```text
-onnx::export: wrote model.onnx
+onnx::export_model: wrote model.onnx
 ```
 
 得到的 `model.onnx` 有一个形状为 `[2, 3]` 的输入 `x` 和一个输出 `output`；用 ONNX Runtime 喂同一个 `x.npy`，得到同样的 `[[2.], [0.]]`。

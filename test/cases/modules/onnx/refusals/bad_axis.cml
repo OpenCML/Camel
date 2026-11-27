@@ -1,6 +1,6 @@
 /**
  * A dynamic axis out of range is an error about the request, not about a node of the
- * function: onnx::export reports it at the export_model call (line 11).
+ * function: onnx::export_model reports it at the export_model call (line 11).
  */
 
 import { export_model } from onnx

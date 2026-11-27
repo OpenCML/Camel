@@ -156,7 +156,7 @@
 
 - **默认流水线。** 不给出任何遍时运行 `std::default`；它是 `std::nodevm`（节点虚拟机）的别名，本文其余地方用的 `std::nvm` 是同一个遍的另一个别名（同样，`std::fvm` 是 `std::fastvm`，`std::jit` 是 `std::fastvm::jit`，`std::tf` 与 `std::prl` 是 `std::taskflow`）。给出的遍都没有消耗图时，在它们之后也运行这个默认遍。`.opencmlrc`（`passes.fallback`）可以改变它。
 - **所有遍的名字都在运行之前检查。** 程序编译之后（模块贡献的遍此时才存在）、第一个遍运行之前、第一份 `--dump-after-each-pass` 快照写出之前，流水线和后备遍的所有名字都被解析（先解析别名）。第一个未知的名字报告为 `RuntimeDiag::UnrecognizedGraphPass`，阶段为 `pass:<name>`，可用的遍和别名列在 stderr 上（`Pass <std::no_such_pass> not found, available passes are:`，然后是 `Available aliases are:`），退出码为 1。此时什么都没有执行：`camel f.cml std::nvm std::no_such_pass` 不会运行程序。`module::pass` 这样的名字按它所指的模块区分：模块在、但没有这个遍，报告为 `RuntimeDiag::PassNotProvidedByModule`（模块声明了该函数却没有 `export` 时是 `RuntimeDiag::PassNotExportedByModule`），只写出模块和它确实提供的遍，不再列出全部遍；模块在、但加载或编译失败，报告为 `RuntimeDiag::InvalidPassParameter`，带上加载器或编译器的原因（编译错误还带它的文件与位置）。
-- **写在消耗图的遍之后的遍永远不会运行。** 调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`）执行程序，翻译遍（`std::gir`、`std::rgir`、`std::cpp`、`onnx::export`、字节码和即时编译的转储）翻译程序；二者都不把图传下去，流水线到此结束。`camel f.cml std::nvm std::cxx::inline` 在节点虚拟机上运行程序，永远不会运行 `std::cxx::inline`。这种写法被接受，但在任何东西运行之前会在 stderr 上给出警告 `RuntimeDiag::PassesNeverRun`（`0x0410000F`，阶段 `pass:<消耗图的遍>`），列出不会运行的遍（见“警告”）。
+- **写在消耗图的遍之后的遍永远不会运行。** 调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`）执行程序，翻译遍（`std::gir`、`std::rgir`、`std::cpp`、`onnx::export_model`、字节码和即时编译的转储）翻译程序；二者都不把图传下去，流水线到此结束。`camel f.cml std::nvm std::cxx::inline` 在节点虚拟机上运行程序，永远不会运行 `std::cxx::inline`。这种写法被接受，但在任何东西运行之前会在 stderr 上给出警告 `RuntimeDiag::PassesNeverRun`（`0x0410000F`，阶段 `pass:<消耗图的遍>`），列出不会运行的遍（见“警告”）。
 - **语言不限制遍的顺序，而顺序可能有影响。** 一个遍并不承诺得到与另一种顺序相同的图：它修改图，并且可能有副作用。“任意遍序列给出相同行为”不是 Camel 的性质。
 - **标准优化遍**（`std::cxx::devirtualize`、`std::cxx::specialize`、`std::cxx::inline`、`std::cxx::fold`、`std::cxx::cse`、`std::cxx::dce`、`std::opt`、`tensor::fuse`）力求保持程序的结果。这是对这些遍的质量要求，由测试检查，不是语言保证。
 - **`std::macro` 是可选的。** 没有它，`#macro` 函数就是一个随程序运行的普通函数。
@@ -164,7 +164,7 @@
 
 ### 遍的参数
 
-遍是标准库里的函数（设计原则 9.3）：它的名字、说明和参数是模块 `.cml` 文件里的一条声明——核心的遍在 `src/stdlib/std.cml`，模块的遍在 `src/stdlib/<module>.cml`——流水线从那里读取。参数写作遍名之后的 `key=value` **词，不带括号**：`camel m.cml std::opt safe_fp=true growth_budget=8192 std::fvm`。值是一个词，按声明给这个参数的类型读（设计原则 9.3）：`bool`、`int`、`float` 参数取该类型的 Camel 常量表达式——布尔、整数、浮点字面量，以及作用在它们上的运算符（`n=2*8`、`growth_budget=2*8+1`）——值必须是一个词，带空格的表达式省掉空格写；`int[]` 参数取数组常量，元素全是整数（`axes=[0,1]`，空数组写 `[]`）；`string` 参数取那个词的原文，不需要引号（`onnx::export out=model.onnx` 写出的文件就叫 `model.onnx`），值里有空格时用 shell 的引号，与任何命令行工具一样；引号必须作为那个词的一部分到达命令行，所以整条遍写法要一起引起来（`'onnx::export out="a b.onnx"'`）；声明写成 `T?` 的参数另外接受 `null`，默认值是 `null` 时可以整个省略，省略即 `null`（不是"没有值"）。声明就是函数自己的 `with` 列表，所以遵守函数的规则（设计原则 4.4）：名字、`:`、类型（`bool`、`int`、`float`、`string`、`int[]`，以及可空的 `T?`）、默认值写 `= 值`；没有默认值的参数是必需参数，必需参数不能跟在有默认值的参数后面。用 Camel 写的遍，其声明就是函数自己的 `with` 列表、写不出默认值，因此只取 `bool`、`int`、`float`、`string` 四种标量；`int[]` 与 `T?` 需要一条带默认值的声明。**默认值是在声明处求值一次的常量表达式**，不在每次调用时重算：帮助列表显示值本身（`top: int = 24`，不是 `top=8*3`）。`when` 子句是遍的适用条件：流水线认的是 `is_function::<F>()`，别的条件会被拒绝而不是假定成立。遍只收它所作用的那个函数，一个普通形参；带同样条件、普通形参更多的无函数体声明是要一个函数的算子（`onnx::export_model(f, example)`），不是遍。括号形式（`std::opt(safe_fp=true)`）、命令行上的冒号写法（`safe_fp: true`）和位置参数都已删除，均报告 `RuntimeDiag::InvalidPassParameter`（`0x04000060`），消息说明应该怎么写。声明在流水线解析时按模块搜索路径读取；找不到模块的 `.cml` 文件，或文件里没有声明这个遍，流水线拒绝这个遍，而不是拿声明从未给过的默认值去跑内核：消息写明模块和读到的文件（或找过的那些路径），所以缺少标准库的安装会直接说出来，而不是把遍报成不存在。
+遍是标准库里的函数（设计原则 9.3）：它的名字、说明和参数是模块 `.cml` 文件里的一条声明——核心的遍在 `src/stdlib/std.cml`，模块的遍在 `src/stdlib/<module>.cml`——流水线从那里读取。参数写作遍名之后的 `key=value` **词，不带括号**：`camel m.cml std::opt safe_fp=true growth_budget=8192 std::fvm`。值是一个词，按声明给这个参数的类型读（设计原则 9.3）：`bool`、`int`、`float` 参数取该类型的 Camel 常量表达式——布尔、整数、浮点字面量，以及作用在它们上的运算符（`n=2*8`、`growth_budget=2*8+1`）——值必须是一个词，带空格的表达式省掉空格写；`int[]` 参数取数组常量，元素全是整数（`axes=[0,1]`，空数组写 `[]`）；`string` 参数取那个词的原文，不需要引号（`onnx::export_model out=model.onnx` 写出的文件就叫 `model.onnx`），值里有空格时用 shell 的引号，与任何命令行工具一样；引号必须作为那个词的一部分到达命令行，所以整条遍写法要一起引起来（`'onnx::export_model out="a b.onnx"'`）；声明写成 `T?` 的参数另外接受 `null`，默认值是 `null` 时可以整个省略，省略即 `null`（不是"没有值"）。声明就是函数自己的 `with` 列表，所以遵守函数的规则（设计原则 4.4）：名字、`:`、类型（`bool`、`int`、`float`、`string`、`int[]`，以及可空的 `T?`）、默认值写 `= 值`；没有默认值的参数是必需参数，必需参数不能跟在有默认值的参数后面。用 Camel 写的遍，其声明就是函数自己的 `with` 列表、写不出默认值，因此只取 `bool`、`int`、`float`、`string` 四种标量；`int[]` 与 `T?` 需要一条带默认值的声明。**默认值是在声明处求值一次的常量表达式**，不在每次调用时重算：帮助列表显示值本身（`top: int = 24`，不是 `top=8*3`）。`when` 子句是遍的适用条件：流水线认的是 `is_function::<F>()`，别的条件会被拒绝而不是假定成立。遍只收它所作用的那个函数，一个普通形参；带同样条件、普通形参更多的无函数体声明是要一个函数的算子（`onnx::export_model(f, example)`），不是遍。括号形式（`std::opt(safe_fp=true)`）、命令行上的冒号写法（`safe_fp: true`）和位置参数都已删除，均报告 `RuntimeDiag::InvalidPassParameter`（`0x04000060`），消息说明应该怎么写。声明在流水线解析时按模块搜索路径读取；找不到模块的 `.cml` 文件，或文件里没有声明这个遍，流水线拒绝这个遍，而不是拿声明从未给过的默认值去跑内核：消息写明模块和读到的文件（或找过的那些路径），所以缺少标准库的安装会直接说出来，而不是把遍报成不存在。
 
 遍的设置是参数：
 
@@ -180,7 +180,7 @@
 | `std::jit` | `hot_threshold: int = 1`（同一调用点调用多少次后编译一张图；0 表示第一次调用就编译）。**含循环区域的图在 0 与 1（默认）这两个"尽早编译"的阈值下第一次调用就编译**：使图变贵的是轮次，调用次数看不见轮次；显式把阈值设到 1 以上仍按调用次数走（`hot_threshold=1000000000` 因此仍表示"什么都不编译"） |
 | `std::tf`、`std::prl` | `linear: bool = false`（逐节点求值），`fanout_all: bool = false`（把每个无序的高阶调用都展开成并行任务），`diag: bool = false`（打印对每张图的决定），`segments: bool = false`（打印当前计划的分段（不是理论上可以切成的分段）：每段的条目与链、每条链等谁，以及每个算子落在哪一段），`bytecode: bool = true`（把串行的图交给字节码解释器），`gc_stats: int = 0`（1：运行结束时打印统计；2：另外每次回收一行），`gc_stress: bool = false`（本次运行的工作就是回收压力：它要求的每次回收都一对一地服务，而不是按闸门的节奏），`blocking_leaves: bool = true`（阻塞算子为等待而离开它的 GC 区域，于是在 sleep 或设备同步里的工作者等待时不会停下整个世界；关掉则等待期间一直持着该区域，回收若撞见它就在 500 ms 后放弃，闸门在拒绝反复出现之后报出来） |
 | `std::profile` | `top: int = 24`（算子表的行数；0 表示写出运行过的每个算子），`hints: bool = true`（报告在主机上运行的逐元素循环，以及它们为什么没有交给设备），`json: string? = null`（另外把报告作为一个 JSON 对象写入该文件；null（默认值）不写），`report: bool = true`（写出文本报告；false 只打开下面的诊断），`gc_stats: int = 0`（退出时分配器的统计：1 一行，2 另外每次回收一行），`type_stats: bool = false`（退出时类型存储的统计），`effect_trace: string? = null`（为每个执行过的有效应算子追加一行 JSON 到该文件；null（默认值）不写；见“效应追踪”），`opstats: bool = false`（退出时打印内核计时表：每个算子一行，带它的调用次数、总时间与每次调用的时间，由提供这些内核的模块测量），`variant_trace: bool = false`（为每个在重定位时被运行时读取类型的值打印一行：值、读它时用的类型，以及它带的 tag 与字段数） |
-| `onnx::export` | `out: string = ""`（模型文件；见下），`trace: bool = false`（把每个被下降的调用连同它实参的事实打到标准错误上），`dump: bool = false`（打印被翻译的那张简化后的图，与 `std::rgir` 相同），`prep_stats: bool = false`（打印导出收到这个函数时的大小，以及导出自己做完简化之后的大小） |
+| `onnx::export_model` | `out: string = ""`（模型文件；见下），`trace: bool = false`（把每个被下降的调用连同它实参的事实打到标准错误上），`dump: bool = false`（打印被翻译的那张简化后的图，与 `std::rgir` 相同），`prep_stats: bool = false`（打印导出收到这个函数时的大小，以及导出自己做完简化之后的大小） |
 | `std::cxx::saturate` | `rounds: int = 6`（标准规则库的饱和轮数），`strict: bool = false`（只保留逐位成立的规则，与 `std::opt` 的 `safe_fp=true` 相同） |
 | `std::jgir` | `canonical: bool = false`（键按规范顺序排列，两次运行可以逐字节比较），`egraph: bool = false`（写出 `egraph-serialize` 读取的文档，它的 e-class 就是“一个值有多种写法”的那些类；社区工具 `egraph-visualizer` 能打开它） |
 
@@ -188,7 +188,7 @@
 
 ### 模块的遍
 
-`std::` 前缀只给核心自带的遍。模块的遍用模块自己的名字：`tiles::compile`、`tensor::fuse`、`onnx::export_model`（短别名 `onnx::export`）。每个遍，无论核心的还是模块的，都是模块 `.cml` 文件里的一条无函数体声明——`export func fuse::<F>(f: F): F! when is_function::<F>()`——`registerModulePass` 只绑定它的内核；编译器不为这样的声明建图或算子组。模块可以为自己的遍登记别名（`registerPassAlias`），核心不认识任何模块的名字。
+`std::` 前缀只给核心自带的遍。模块的遍用模块自己的名字：`tiles::compile`、`tensor::fuse`、`onnx::export_model`。一个遍只有一个名字，没有短别名：名字就是它那条声明写的名字，解析按写下的名字来。每个遍，无论核心的还是模块的，都是模块 `.cml` 文件里的一条无函数体声明——`export func fuse::<F>(f: F): F! when is_function::<F>()`——`registerModulePass` 只绑定它的内核；编译器不为这样的声明建图或算子组。核心不认识任何模块的名字。
 
 模块的遍只在流水线写出它们的位置运行：流水线是显式组合的，导入模块不会加入任何遍。需要某个遍的库（如自动微分需要它之前的 `std::macro`）在前提不满足时给出诊断并说明要加哪个遍；标签没有读到它的遍时给出警告。模块遍的参数就是它声明的 `with` 列表，和核心的遍用同一套检查。
 
@@ -206,7 +206,7 @@
 - `std::fvm`：高性能字节码虚拟机调度器
 - `std::jit`：启用即时编译的字节码虚拟机调度器。即时编译器只为 x86-64 生成代码；在其他处理器的构建中（arm64 macOS、arm64 Linux；`ENABLE_FASTVM_JIT` 关闭）`std::jit` 仍被接受，程序在字节码解释器上运行，与 `std::fvm` 相同，结果一致。这种构建里写出 `std::jit` 会在程序运行之前于 stderr 报一次警告 `RuntimeDiag::JitWithoutCodeGenerator`（`0x04100018`，阶段 `pass:std::jit`），说明这个遍在这里做了什么；它不阻止运行，`-Wno-jit-without-code-generator` 可以关掉，`-Werror` 可以把它变成错误
 - `std::gir`：转储当前的图中间表示并停止
-- `tensor::fuse`、`onnx::export`：由模块贡献的遍。在命令行上写 `<module>::<pass>` 时，如果程序没有导入模块 `<module>`，就加载它，所以程序不必仅仅为了让某个模块的遍来翻译它而导入该模块。找不到模块，或模块里没有这个遍，名字就仍是未知的（`RuntimeDiag::UnrecognizedGraphPass`）
+- `tensor::fuse`、`onnx::export_model`：由模块贡献的遍。在命令行上写 `<module>::<pass>` 时，如果程序没有导入模块 `<module>`，就加载它，所以程序不必仅仅为了让某个模块的遍来翻译它而导入该模块。找不到模块，或模块里没有这个遍，名字就仍是未知的（`RuntimeDiag::UnrecognizedGraphPass`）
 
 ### 遍的顺序：`std::macro` 在内联遍之前
 
@@ -227,21 +227,21 @@
 - 流水线里没有 `std::macro` 时一切照旧：这次调用是普通调用，只有在被执行到时才可能失败。
 - `onnx::export_model` 在程序运行期间用同一个求值器展开它所导出函数中的宏；那里求值失败是同一条诊断，阶段为 `run`。
 
-### 以遍的形式导出 ONNX（`onnx::export`）
+### 以遍的形式导出 ONNX（`onnx::export_model`）
 
-    camel m.cml std::macro std::opt onnx::export out=model.onnx
+    camel m.cml std::macro std::opt onnx::export_model out=model.onnx
 
-`onnx::export` 是 `onnx` 模块贡献的翻译遍。作为流水线的最后一个遍，它写出一个 ONNX 模型并消耗图：程序不执行。
+`onnx::export_model` 是 `onnx` 模块贡献的翻译遍。作为流水线的最后一个遍，它写出一个 ONNX 模型并消耗图：程序不执行。
 
 - **导出什么** 在程序里声明，用的就是运行期导出的那次调用：`onnx::export_model`，实参依次是导出的函数、`example`、目标路径，随后可选 `dynamic_axes` 与 `target`。这个遍在前面各遍留下的入口图里查找这次调用，并在那里读取它的实参，所以到那时它们必须是图中的常量：函数（闭包可以捕获常量）、示例输入（它们的 dtype 和形状成为模型输入）、`dynamic_axes` 和 `target`。`dynamic_axes` 作用于每一个张量实参，不能单独指定其中某一个：只有一个张量实参时，它的第 0 轴是符号尺寸 `batch`；有多个时（权重与数据一起传入），每个实参得到自己的符号尺寸（`<input>_dim0`），因此不对它们是否相等作任何断言。以结构体传入的参数永远不是动态的。只在运行期存在的值（随机初始权重、加载的文件）对遍不可用；这样的程序用 `camel m.cml` 导出，由它运行 `export_model`。
 - **写到哪里**：如果给了参数 `out` 就写到那里（此时要求恰好有一次 `export_model` 调用），否则写到这次调用的 `path` 实参，它必须是字符串字面量（遍不对 `get_env(...)` 求值）。
 - **这个遍自己做什么**：它把示例的类型（dtype 和形状）绑定到函数的参数上，重新推断节点类型，然后用只有导出才知道的两件事完成对函数私有副本的化简：示例的形状（形状运算被折叠，以形状为界的递归被展开），以及把依赖数据的分支的梯度拆成每个分支臂一次调用，这只对从不执行该图的使用者成立。这与 `export_model` 所做的化简相同，所以两个入口接受相同的函数并写出等价的模型。这个遍不展开宏（那是它之前的 `std::macro` 的事），并且仍然需要在它之前运行 `std::opt`：只有 `main` 被内联进入口图之后，导出请求才可见。
-- **拒绝**：如果图还需要上述某一步（入口图仍然调用 `main`、`grad` 之类的宏算子没有展开、函数里还留有不是尾递归的调用：深度取决于模型输入的尾递归导出为 ONNX `Loop`），或者含有 ONNX 无法表达的东西（非纯算子、没有下降规则的算子），这个遍不写任何文件，以非零状态退出，诊断为 `RuntimeDiag::TranslationRefused`（`0x0400000B`，阶段 `pass:onnx::export`）；消息指出应当运行的遍。每次拒绝都有源码位置：有肇事节点时是该节点；`export_model` 调用写在条件在编译期未知的分支的某个分支臂里时是该分支（`if (get_env('MODE') ?? '') == ... then export_model<out: ...>(fn, example)`：这个遍不运行程序，无法判断请求是否发出；消息给出这次调用的位置）；针对整个请求的拒绝定位在 `export_model` 调用（动态轴越界、未知的 target、示例的个数、结果不是张量、模型文件无法写出；给了参数 `out` 而有多次调用时是第二次调用）；看不到调用时（入口图仍然调用 `main`，请求在它里面），或者拒绝针对的是作为模型的 `main` 时（参数没有形状、没有给参数 `out`），定位在入口函数 `main`。内联器已经运行却仍然看不到调用时，消息说明内联器为什么留下了请求所在的那次调用：它的增长预算用尽（消息给出预算、它是默认值还是由 `growth_budget` 参数设置、已经花掉多少、这次调用需要多少，并指出要调高哪个遍的哪个参数），或者发出请求的函数会到达一个递归并且不小，或者它是递归的，或者它太大而无法复制到各调用点。只有在没有任何做内联的遍运行过时，消息才要求运行 `std::opt`。非纯算子只要能从函数的结果到达就会被拒绝，不论经由数据边还是控制边，也不论是否在它调用的函数内部：`sync` 函数里的一条 `println` 语句在该 `println` 处被拒绝，而不是从模型里漏掉。`onnx::export_model` 做同样的检查。
+- **拒绝**：如果图还需要上述某一步（入口图仍然调用 `main`、`grad` 之类的宏算子没有展开、函数里还留有不是尾递归的调用：深度取决于模型输入的尾递归导出为 ONNX `Loop`），或者含有 ONNX 无法表达的东西（非纯算子、没有下降规则的算子），这个遍不写任何文件，以非零状态退出，诊断为 `RuntimeDiag::TranslationRefused`（`0x0400000B`，阶段 `pass:onnx::export_model`）；消息指出应当运行的遍。每次拒绝都有源码位置：有肇事节点时是该节点；`export_model` 调用写在条件在编译期未知的分支的某个分支臂里时是该分支（`if (get_env('MODE') ?? '') == ... then export_model<out: ...>(fn, example)`：这个遍不运行程序，无法判断请求是否发出；消息给出这次调用的位置）；针对整个请求的拒绝定位在 `export_model` 调用（动态轴越界、未知的 target、示例的个数、结果不是张量、模型文件无法写出；给了参数 `out` 而有多次调用时是第二次调用）；看不到调用时（入口图仍然调用 `main`，请求在它里面），或者拒绝针对的是作为模型的 `main` 时（参数没有形状、没有给参数 `out`），定位在入口函数 `main`。内联器已经运行却仍然看不到调用时，消息说明内联器为什么留下了请求所在的那次调用：它的增长预算用尽（消息给出预算、它是默认值还是由 `growth_budget` 参数设置、已经花掉多少、这次调用需要多少，并指出要调高哪个遍的哪个参数），或者发出请求的函数会到达一个递归并且不小，或者它是递归的，或者它太大而无法复制到各调用点。只有在没有任何做内联的遍运行过时，消息才要求运行 `std::opt`。非纯算子只要能从函数的结果到达就会被拒绝，不论经由数据边还是控制边，也不论是否在它调用的函数内部：`sync` 函数里的一条 `println` 语句在该 `println` 处被拒绝，而不是从模型里漏掉。`onnx::export_model` 做同样的检查。
 
 **没有 `export_model` 调用的程序：`main` 就是模型。** 只做计算的程序用同样的遍组合导出，程序里不必为导出写任何东西（连 `import onnx` 也不必：写出遍的名字就会加载模块）：
 
-    camel model.cml std::macro std::opt onnx::export out=model.onnx
-    camel model.cml --arg p=weights std::macro std::opt onnx::export out=model.onnx
+    camel model.cml std::macro std::opt onnx::export_model out=model.onnx
+    camel model.cml --arg p=weights std::macro std::opt onnx::export_model out=model.onnx
 
 当程序里任何地方都没有 `export_model` 调用时，这个遍翻译入口图本身，也就是 `main` 的计算：
 
@@ -361,7 +361,7 @@
 
 其他标为“否”的上限是编译期常量（`generic.h`、内联器的配置）；它们没有命令行选项，也没有 `.opencmlrc` 键（`.opencmlrc` 只配置遍列表）。
 
-`std::opt` 对实参是常量的递归每轮展开一层（`fib(15)` 会变成它的整棵调用树）；让它停下的是增长预算。`onnx::export_model` 化简它所导出的函数时不受增长预算和内联大小上限约束，因为导出必须得到直线代码；通过 `std::opt onnx::export` 导出的流水线则受它们约束，对大模型可能需要在做内联的那个遍上调高 `growth_budget`，例如 `std::opt growth_budget=8192`（此时导出遍以 `TranslationRefused` 拒绝，而不是写出不完整的模型，拒绝消息给出预算、它的值、设置它的遍和参数）。
+`std::opt` 对实参是常量的递归每轮展开一层（`fib(15)` 会变成它的整棵调用树）；让它停下的是增长预算。`onnx::export_model` 化简它所导出的函数时不受增长预算和内联大小上限约束，因为导出必须得到直线代码；通过 `std::opt onnx::export_model` 导出的流水线则受它们约束，对大模型可能需要在做内联的那个遍上调高 `growth_budget`，例如 `std::opt growth_budget=8192`（此时导出遍以 `TranslationRefused` 拒绝，而不是写出不完整的模型，拒绝消息给出预算、它的值、设置它的遍和参数）。
 
 ---
 

@@ -53,7 +53,7 @@ struct ExportOptions {
     /// Axes of the tensor arguments left dynamic in the model (e.g. {0} for a variable batch
     /// size). The examples' extents on these axes are not baked into the graph.
     std::vector<int64_t> dynamicAxes;
-    /// Print every lowered call with the facts of its arguments (`onnx::export trace=true`).
+    /// Print every lowered call with the facts of its arguments (`onnx::export_model trace=true`).
     bool trace = false;
     /// Print the simplified graph that is translated, as std::rgir does (`dump=true`).
     bool dump = false;
@@ -81,7 +81,7 @@ Model exportFunction(
     const ExportOptions &options = {});
 
 /**
- * The export of the onnx::export pass (passes/export.h): translates the graph of `fn` as the
+ * The export of the onnx::export_model pass (passes/export.h): translates the graph of `fn` as the
  * preceding passes left it. `captures` binds the closure slots of a function whose closure the
  * program builds from constants (empty when `fn` carries its own closure or has none).
  *

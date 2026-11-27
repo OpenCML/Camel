@@ -301,7 +301,7 @@ same output on `std::nvm`, `std::fvm`, `std::jit`, `std::prl` and through `std::
 `std::cxx::inline`, `std::opt`, `std::cxx::fold`, `std::cxx::cse std::cxx::dce`,
 `std::macro std::opt` and `std::cxx::inline std::opt`. No pass, backend or exporter was changed.
 
-Not verified: `std::cpp`, `onnx::export` and autodiff over a graph that holds these nodes
+Not verified: `std::cpp`, `onnx::export_model` and autodiff over a graph that holds these nodes
 (they are expected to refuse it the way they refuse tuples and unknown operators), and a
 collection that runs while a box is the only reference to its payload beyond what the
 ordinary test programs do.

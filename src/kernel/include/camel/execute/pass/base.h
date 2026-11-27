@@ -120,7 +120,7 @@ struct PassApplyResult {
 
 /**
  * Checks every name of a pass list, after alias resolution, before anything runs. Passes
- * contributed by modules ("tensor::fuse", "onnx::export") exist once the program's modules
+ * contributed by modules ("tensor::fuse", "onnx::export_model") exist once the program's modules
  * are loaded, so this is called after compilation. Throws RuntimeDiag::UnrecognizedGraphPass
  * with stage `pass:<name>` for the first unknown name, after listing the available passes on
  * stderr. applyPassesDetailed calls it for its own list; a driver that runs several lists

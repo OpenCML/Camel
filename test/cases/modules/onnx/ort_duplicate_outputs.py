@@ -7,7 +7,7 @@ returned twice, and one computed scalar returned twice. Structural CSE used to m
 output reuse the first output's Identity node, so the graph named one value as two outputs.
 
 The program is run twice, by the operator (default run) and by the pass (std::macro std::opt
-onnx::export). Every model must pass onnx.checker's full check, give every graph output and
+onnx::export_model). Every model must pass onnx.checker's full check, give every graph output and
 every output ONNX Runtime reports a distinct name, load on ONNX Runtime with as many outputs as
 the function returns, and return the values the function computes.
 
@@ -101,7 +101,7 @@ def check(path: Path, model: str, label: str) -> bool:
 
 def main() -> int:
     ok = True
-    for label, passes in [("operator", []), ("pass", ["std::macro", "std::opt", "onnx::export"])]:
+    for label, passes in [("operator", []), ("pass", ["std::macro", "std::opt", "onnx::export_model"])]:
         with tempfile.TemporaryDirectory() as tmp:
             env = dict(os.environ, CAMEL_HOME=str(HOME))
             proc = subprocess.run(

@@ -169,16 +169,6 @@ PassImplementationRegistry &passImplementations() {
     return registry;
 }
 
-struct ModuleAliasRegistry {
-    std::mutex mutex;
-    std::map<std::string, std::string> aliases;
-};
-
-ModuleAliasRegistry &moduleAliases() {
-    static ModuleAliasRegistry registry;
-    return registry;
-}
-
 /// Declares the core's tag readers on first resolution, so a run that never resolves a pass pays
 /// nothing for the table.
 void ensureCoreTagReaders() {
@@ -343,15 +333,8 @@ void registerModulePass(const std::string &path, PassDescriptor descriptor) {
         registry.passes.insert_or_assign(path, std::move(descriptor));
     }
     if (readsTags) {
-        // The pass is a reader of tag facts; so is every alias that already names it.
+        // The pass is a reader of tag facts.
         camel::core::tag::declareReader(path);
-        auto &aliases = moduleAliases();
-        std::lock_guard lock(aliases.mutex);
-        for (const auto &[alias, target] : aliases.aliases) {
-            if (target == path) {
-                camel::core::tag::declareReader(alias);
-            }
-        }
     }
 }
 
@@ -359,43 +342,16 @@ void registerModulePass(const std::string &path, PassFactory factory) {
     registerModulePass(path, passWithoutParameters(std::move(factory)));
 }
 
-void registerPassAlias(const std::string &alias, const std::string &target) {
-    // The core's namespace belongs to the core. A bare alias may not shadow a core declaration
-    // either: resolution tries the written name as a declaration before any alias.
-    if (alias.starts_with("std::") || passAliases.contains(alias)) {
-        CAMEL_LOG_WARN_S(
-            "Pass",
-            "alias '{}' -> '{}' ignored: the name belongs to the core's std:: namespace",
-            alias,
-            target);
-        return;
-    }
-    auto &registry = moduleAliases();
-    {
-        std::lock_guard lock(registry.mutex);
-        registry.aliases.insert_or_assign(alias, target);
-    }
-    // An alias of a reader is a reader too: a tag may name the short name.
-    if (camel::core::tag::isReader(target)) {
-        camel::core::tag::declareReader(alias);
-    }
-}
-
 namespace {
 
-/// The pass a written name resolves to: the core's table first, then the aliases the loaded
-/// modules registered. The core's table has one entry, `std::opt` -- the default pipeline's name,
-/// which is a choice rather than a spelling of another pass -- so no sub-pass of the optimizer is
-/// reachable under an old name; a module's short aliases (`registerPassAlias`) are the
-/// rest of what this answers.
+/// The pass a written name resolves to: the core's table, whose one entry `std::opt` is the default
+/// pipeline's name -- a choice rather than a spelling of another pass -- so no sub-pass of the
+/// optimizer is reachable under an old name.
 std::string resolveAlias(const std::string &name) {
     if (auto it = passAliases.find(name); it != passAliases.end()) {
         return it->second;
     }
-    auto &registry = moduleAliases();
-    std::lock_guard lock(registry.mutex);
-    auto it = registry.aliases.find(name);
-    return it == registry.aliases.end() ? name : it->second;
+    return name;
 }
 
 /// A pass a name resolves to: how to make it and the parameters its declaration gives. The
@@ -896,13 +852,6 @@ void listAvailablePasses(const std::string &name, const context_ptr_t &ctx) {
     help << std::format("Available aliases are:\n");
     for (const auto &[alias, target] : passAliases) {
         help << std::format("  {} -> {}\n", alias, target);
-    }
-    {
-        auto &registry = moduleAliases();
-        std::lock_guard lock(registry.mutex);
-        for (const auto &[alias, target] : registry.aliases) {
-            help << std::format("  {} -> {}\n", alias, target);
-        }
     }
     help << std::endl;
     help << "A pass is written `name`, followed by its parameters as `key=value` words; a value is "

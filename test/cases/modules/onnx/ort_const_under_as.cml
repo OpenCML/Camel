@@ -1,7 +1,7 @@
 /**
  * A constant under `as` is still a constant, and `as` on a value that depends on the model
  * input is a checked assertion. Three models, each exported by both routes (the operator in a
- * default run, the pass onnx::export after std::macro std::opt), from an example that
+ * default run, the pass onnx::export_model after std::macro std::opt), from an example that
  * is itself a tensor of literals converted with `as`:
  *
  *   affine   weights built from literals and converted to a shaped type (one of them to a type
@@ -42,7 +42,7 @@ func step(x: f32[...]) => (float, f32[...]) {
 }
 
 // The refusal of the first request that was refused, or 'exported' when all three were written.
-// The requests stay the program's own statements (see main): the `onnx::export` pass reads them
+// The requests stay the program's own statements (see main): the `onnx::export_model` pass reads them
 // from the top level of the entry graph, while the error they answer is handled here.
 func report(r1: void!, r2: void!, r3: void!) => string! {
     return match r1 {

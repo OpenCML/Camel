@@ -316,12 +316,12 @@ error[RuntimeDiag::MaxRecursionDepthExceeded]: Maximum recursion depth (1000) ex
 | `std::opt`（默认流水线的名字）、`std::cxx::inline`、`std::cxx::fold`、`std::cxx::cse`、`std::cxx::dce` | 优化 |
 | `std::rgir`、`std::gir` | 打印图（DOT 格式），不运行 |
 | `std::stats` | 打印图的统计数字，图原样传下去 |
-| `onnx::export`、`std::cpp` | 转译为 ONNX 模型、C++ 源码 |
+| `onnx::export_model`、`std::cpp` | 转译为 ONNX 模型、C++ 源码 |
 
 - **语言不限制遍的顺序，顺序可以影响结果。** 遍会修改图，可以有副作用；“任意遍序列下行为相同”不是语言的性质。
 - 调度遍与转译遍消费掉图，写在它们之后的遍不会运行（有警告 `RuntimeDiag::PassesNeverRun`）。指定的遍都没有消费掉图时，接着运行默认遍。
 - 源码层的规则（`var`/`let`、`sync`）约束的是编译器怎样构造图；图一旦得到，这些规则不再约束后续的遍。标准库的优化遍以不改变程序结果为目标，这是对这些遍的质量要求，由测试保证。
-- 命令行上写某个模块的遍（如 `onnx::export`）时，编译器自动加载该模块。
+- 命令行上写某个模块的遍（如 `onnx::export_model`）时，编译器自动加载该模块。
 
 ## 4.8 高阶算子的顺序
 

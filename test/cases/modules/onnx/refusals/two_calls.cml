@@ -1,6 +1,6 @@
 /**
- * The parameter out of onnx::export names one model file; a program with two export_model calls is refused by
- * onnx::export, at the second call (line 14).
+ * The parameter out of onnx::export_model names one model file; a program with two export_model calls is refused by
+ * onnx::export_model, at the second call (line 14).
  */
 
 import { export_model } from onnx

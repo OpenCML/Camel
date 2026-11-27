@@ -2,7 +2,7 @@
 
 Each program of this folder is a pure `main` (no export request, no `import onnx`). It is
 
-  - exported by `camel p.cml std::macro std::opt onnx::export` (the out parameter of onnx::export),
+  - exported by `camel p.cml std::macro std::opt onnx::export_model` (the out parameter of onnx::export_model),
     the model checked by onnx.checker(full_check) when the onnx package is present and its
     inputs, initializers and outputs compared with what the declared types say;
   - run natively with the same values (`--arg name=file`, `-o dir`) under the default
@@ -34,7 +34,7 @@ TOL = 1e-5
 SCHEDULERS = [None, "std::fvm", "std::jit", "std::tf"]
 # The export consumes the graph, so the pipeline ends in `std::nop`: the model is written and the
 # program is not run, which is what this harness compares against the native run below.
-EXPORT = ["std::macro", "std::opt", "onnx::export", "std::nop"]
+EXPORT = ["std::macro", "std::opt", "onnx::export_model", "std::nop"]
 
 
 def camel(program: str, *args: str, env: dict | None = None) -> str:
@@ -98,9 +98,9 @@ def check(tmp: Path, label: str, program: str, values: dict, bound: list[str], w
     files = {name: save_tree(tmp, f"{label}_{name}", value) for name, value in values.items()}
     model = tmp / f"{label}.onnx"
     export_args = [a for name in bound for a in ("--arg", f"{name}={files[name]}")]
-    export = [f'onnx::export out="{model.as_posix()}"' if p == "onnx::export" else p for p in EXPORT]
+    export = [f'onnx::export_model out="{model.as_posix()}"' if p == "onnx::export_model" else p for p in EXPORT]
     out = camel(program, *export_args, *export)
-    if f"onnx::export: wrote {model.as_posix()}" not in out:
+    if f"onnx::export_model: wrote {model.as_posix()}" not in out:
         raise SystemExit(f"FAIL: {label}: no model written: {out}")
     try:
         import onnx

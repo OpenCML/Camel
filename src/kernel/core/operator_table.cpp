@@ -334,7 +334,7 @@ bool OperatorTable::mayBeRecomputed(OperId id) const {
     // expansion is a graph rewrite, and `std::macro` is the pass that performs it. Asking only
     // "pure && foldable" let a pipeline that named `std::opt` and not `std::macro` fold
     // `with_grad(loss)<m>` into the derived function value at compile time, so the macro operator
-    // was gone before `onnx::export` could say its `run std::macro` refusal
+    // was gone before `onnx::export_model` could say its `run std::macro` refusal
     // (`modules/onnx/passes/export.cpp#refuseUnexpandedMacros`). A macro operator stays outside
     // the foldable set even when it is declared pure, which is the answer `mayBeRecomputed` gives
     // for it, for the reason the table already states on `isMacro` (a call of it is what
