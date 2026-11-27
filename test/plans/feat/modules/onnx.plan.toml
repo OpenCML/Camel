@@ -105,6 +105,16 @@ assert(model.inputs.join() === 'input' && model.outputs.join() === 'output', `un
 timeout_ms = 10000
 
 [[tests]]
+name = "fold_keeps_save"
+desc = "The file-writing call sits downstream of a pure operator whose arguments are constants, in a function the lowering refuses (`weights` converts a [2, 3] constant to [3, 2]). A pass may not compute the translation ahead of time: folding the `onnx::model` call turned the refusal into an error value, `:op/tag_is_error` folded to true, the `->` chain took its error arm, and the effect in the other arm (writing the file) went with it -- `std::cxx::fold` reported a changed ambient resource set (`before env (read), fs (rmw), after env (read)`) instead. The call stays where the program writes it, so the refusal is the error value that reaches the exit."
+kind = "behavior"
+case = "../../../cases/modules/onnx/fold_keeps_save.cml"
+args = ["${case}", "std::macro", "std::cxx::fold", "std::nvm"]
+envs = ["ONNX_OUT=${test_tmp}/fold_keeps_save.onnx"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_stderr_contains = ["this conversion of a constant always fails"]
+[[tests]]
 name = "export_unsupported_op"
 desc = "An input-dependent operator without an ONNX lowering (a training loss) is reported by URI, at its source position: the refusal is the error value of the onnx::model call (`ExportUnsupported`, located at the unsupported call), which nothing handles, so the exit reports it as an unhandled error."
 kind = "behavior"

@@ -1,0 +1,24 @@
+// The file-writing call sits downstream of a translation whose function cannot be lowered:
+// the conversion in `weights` does not fit the shape its type declares. The refusal belongs to
+// the translation and is reported where the program writes the call (design principles 3.9), so
+// a pass may not compute the translation ahead of time -- folding it turned the refusal into an
+// error value, the `->` chain took its error arm, and the effect in the other arm (writing the
+// file) disappeared with it: `std::cxx::fold` then reported a changed ambient resource set
+// instead of leaving the export to refuse.
+import { model, save } from onnx
+import { get_env } from env
+import { reshape } from tensor
+
+func weights() => f32[...] {
+    return reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
+}
+
+func bad(x: f32[...]) => f32[...] {
+    let w = weights() as f32[3, 2]
+    return x @ w
+}
+
+func main() => void! sync {
+    let ex = reshape<[2, 3]>([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[])
+    model(bad, ex)->save<out: get_env('ONNX_OUT') ?? ''>
+}
