@@ -263,3 +263,18 @@ c) 差集非空 ⇒ **停下，报给协调者**，附三样：差集里的用�
 第 (c) 步的处置是"停下报协调者"，**不是"该批不入"**：一批如果正确地改变了语义，它的期望本来就该跟着改，
 写成"差集非空就不入"会把这类批永久挡在外面；正确做法是挡在推送前、由协调者判性质，
 然后**同批带上重钉一起进**。
+
+## 纯文档区间的放行，不依赖"前面恰好有一笔编过"
+
+`task-332` 用三组空跑钉过（`lane-backend-speed`，tip 为当时的 integration 尖端，先把该尖端的 `camel-built/<sha>` 记录**挪开**、保证区间里零记录）：
+
+- 纯文档合并（只加 `docs/**` 一个文件，`Lane-Reading: docs-only`）⇒ 钩子 `EXIT=0`、无输出，**不要求记录、不重编**；
+- 改 `src/compile/**`（构建输入）的合并 ⇒ `EXIT=1`，原文点名该文件并说"no commit from there to the tip was built"；
+- 文档 + 源码混合 ⇒ 同拒。
+
+因此 `docs/pitfalls`、`docs/pitfalls2` 那两次能过，不是"恰好 `6bd8b5e281` 有一份记录"，而是规则本来如此：钩子逐提交走第一父区间，**只有"没有记录且碰构建输入"的提交才拒**。
+
+两条前置要知道：
+
+1. 直推 integration 的单父提交会先被更早一道闸拒（"is a lane commit that went straight in … every arrival is a merge"）⇒ 这条判据只能在**合并提交**上测；
+2. "哪些路径算构建输入"只有一份清单（`scripts/common.js` 的 `BUILD_INFO_ROOTS` / `BUILD_INFO_ROOT_FILES`），钩子复用它 —— 不要新建第二份。
