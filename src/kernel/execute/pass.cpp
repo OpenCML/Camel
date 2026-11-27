@@ -181,20 +181,6 @@ void ensureCoreTagReaders() {
 }
 
 
-/// The implementation bound to the function `module::function`, whichever side of the core it
-/// belongs to. The name, documentation and parameters are the declaration's; this answers only
-/// which function implements it. The name is resolved to the operator at this boundary and the
-/// table below is asked by id (`findPassKernel`); a name the operator table does not know has no
-/// implementation, and this does not add one (`lookup`, not `intern`).
-std::optional<PassDescriptor> findImplementation(const std::string &path) {
-    ensureCoreTagReaders();
-    const auto id = camel::core::OperatorTable::instance().lookup(path);
-    if (!id.has_value() || *id == camel::core::kNoOper) {
-        return std::nullopt;
-    }
-    return findPassKernel(*id);
-}
-
 } // namespace
 
 // -----------------------------------------------------------------------------
@@ -336,12 +322,34 @@ void registerModulePass(const std::string &path, PassDescriptor descriptor) {
     // below holds one entry per operator, not one per spelling.
     const camel::core::OperId id = camel::core::OperatorTable::instance().intern(path);
     auto &registry               = passImplementations();
+    bool alreadyRegistered       = false;
     {
         std::lock_guard lock(registry.mutex);
         if (static_cast<size_t>(id) >= registry.kernels.size()) {
             registry.kernels.resize(static_cast<size_t>(id) + 1);
         }
-        registry.kernels[id] = std::move(descriptor);
+        // One operator, one kernel: the first registration is the pass's fact, and a second one is
+        // not a second fact. A pass may register from a module's load path (`registerExtractPass`
+        // in `src/stdlib/rewrite/module.cpp`), which runs once per module instance, so a module
+        // that loads twice re-states the kernel it already contributed; that is ignored rather
+        // than fatal, because aborting here would put a mine in the loader for a case that is
+        // only the same fact said twice.
+        alreadyRegistered = registry.kernels[id].has_value();
+        if (!alreadyRegistered) {
+            registry.kernels[id] = std::move(descriptor);
+        }
+    }
+    if (alreadyRegistered) {
+        // A debug reading of the ignored registration, so a kernel that really is contended is
+        // visible while the question is being asked. Release says nothing: the kernel that stands
+        // is the same one either way.
+#ifndef NDEBUG
+        std::fprintf(
+            stderr,
+            "camel: pass kernel registered twice: %s (the first registration stands)\n",
+            path.c_str());
+#endif
+        return;
     }
     if (readsTags) {
         // The pass is a reader of tag facts, and it says so where the operator is registered: one
@@ -372,11 +380,49 @@ namespace {
 /// The pass a written name resolves to: the core's table, whose one entry `std::opt` is the default
 /// pipeline's name -- a choice rather than a spelling of another pass -- so no sub-pass of the
 /// optimizer is reachable under an old name.
+///
+/// **An alias is one kernel fallback, not a name rewrite.** The declaration stays the written
+/// name's: `findDescriptor` tries the name as written first and reaches this table only when that
+/// name has no kernel of its own, so `std::prl` answers with its own declaration (its parameters
+/// and applicability are its own) and the alias supplies only the kernel. Folding this table into
+/// `resolvePassOperator` -- resolving first, declaration second -- was measured: 388 of 2841 fast
+/// tests went red, every `.prl` and `.jit` variant among them, because those spellings then stopped
+/// at their own inapplicable declaration instead of falling through.
 std::string resolveAlias(const std::string &name) {
     if (auto it = passAliases.find(name); it != passAliases.end()) {
         return it->second;
     }
     return name;
+}
+
+/// The operator a written path is, resolved here and nowhere else: the operator table answers what
+/// the name is. A name the table does not know is not interned -- asking whether a name is a pass
+/// must not make it one -- so a reader that needs the operator a name stands for, and a reader that
+/// only asks whether the name is a pass at all, ask the same question here.
+///
+/// The alias table is applied by `findDescriptor`, before it comes here: an alias is a *spelling*
+/// of a pass, and the declaration is still the one the written name's own module would give, so the
+/// fallback in `findDescriptor` is what re-enters this point with the target's spelling.
+std::optional<camel::core::OperId> resolvePassOperator(const std::string &written) {
+    const auto id = camel::core::OperatorTable::instance().lookup(written);
+    if (!id.has_value() || *id == camel::core::kNoOper) {
+        return std::nullopt;
+    }
+    return id;
+}
+
+/// The implementation bound to the function `module::function`, whichever side of the core it
+/// belongs to. The name, documentation and parameters are the declaration's; this answers only
+/// which function implements it. The name is resolved to the operator at this boundary
+/// (`resolvePassOperator`) and the table is asked by id (`findPassKernel`); a name the operator
+/// table does not know has no implementation, and this does not add one.
+std::optional<PassDescriptor> findImplementation(const std::string &path) {
+    ensureCoreTagReaders();
+    const auto id = resolvePassOperator(path);
+    if (!id.has_value()) {
+        return std::nullopt;
+    }
+    return findPassKernel(*id);
 }
 
 /// A pass a name resolves to: how to make it and the parameters its declaration gives. The
@@ -420,10 +466,11 @@ std::optional<FoundPass> findDescriptor(const context_ptr_t &ctx, const std::str
             return std::nullopt;
         }
         const std::string path = module + "::" + function;
-        // The name is resolved to the operator here, once: the registry below is asked by id, so a
-        // reader that already holds the id (a program calling the pass as a function) asks without
-        // spelling the name again.
-        const auto operatorId = camel::core::OperatorTable::instance().lookup(path);
+        // The name is resolved to the operator in one place (`resolvePassOperator`), so a spelling
+        // the alias table answers and a spelling the operator table answers arrive here as the same
+        // id: the registry is asked by id, and a reader that already holds the id (a program
+        // calling the pass as a function) asks without spelling the name again.
+        const auto operatorId = resolvePassOperator(path);
         const auto implementation =
             operatorId.has_value() ? findPassKernel(*operatorId) : std::nullopt;
         // The module's declaration file is read before the pass is looked for in it. A file that
