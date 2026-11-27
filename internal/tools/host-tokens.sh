@@ -52,6 +52,35 @@
 # pass, no stale registration to clean up -- the failure mode that needed two criteria to act on
 # (2026-11-24: `3312`, `47948`) cannot happen here.
 #
+# Who is served next is decided by an ordered wait queue, not by who polls first. A taker that finds the
+# tokens it wants free and nobody waiting ahead of it takes them at once, without registering (so a
+# token per test case stays cheap). Any other taker registers a ticket in "$TOKEN_DIR/queue" and keeps
+# a `flock` on its own ticket file while it waits: the kernel then says which tickets are alive, and a
+# ticket nobody holds a lock on belongs to a dead taker and is removed by whoever notices it. Ticket
+# names carry a sequence number drawn from a counter file under its own `flock`, and the ticket becomes
+# visible under that same lock, so the order of the names is the order of arrival.
+#
+# Only the head of the queue takes tokens. In `all` mode the head keeps what it has taken across passes
+# until it has its width (a reservation), which is what stops a stream of one-token takers from
+# starving a wide request; it cannot deadlock because a ticket that is not the head gives back
+# everything it holds, so at most one ticket holds a partial allocation. In `upto` mode the head takes
+# what is free (at least one) and goes. A waiter that is not the head blocks on the ticket directly
+# ahead of it, so the next in line wakes when the one before it leaves instead of on a poll.
+#
+# The queue is ordered by (effective class, sequence). The class says how much the run matters to
+# everyone else: `CAMEL_TOKEN_CLASS` is one of
+#
+#   funnel   what every lane waits on (the merge seat, a promotion)       nice 0
+#   build    a build for one lane                                         nice 0
+#   test     a plan run or a per-case take (the default)                  nice 10
+#   batch    work nobody is waiting for                                   nice 19
+#
+# Every `CAMEL_TOKEN_AGE_S` seconds a ticket has waited (default 300) moves its effective class one step
+# toward `funnel`, so nothing waits for ever behind a stream of more important arrivals. `run`,
+# `take-up-to` and the per-case `run-quiet` start the command under `nice` by class; that only lowers
+# the priority and needs no privilege. A run covered by `CAMEL_TOKENS_COVERED` is already inside the
+# priority its covering run chose, so it is not lowered a second time.
+#
 # Tokens are held on file descriptors that are inherited by the worker, so `run` is the safe form:
 #   host-tokens.sh run 8 -- cmake --build build -j 8
 # `take` exists for callers that must hold tokens across several commands in one shell; those callers
@@ -103,6 +132,27 @@ case "$POOL_SIZE" in
 esac
 [ "$POOL_SIZE" -ge 1 ] || die "CAMEL_TOKENS is $POOL_SIZE; a pool of fewer than one token runs nothing"
 
+# The class of this process. RANK orders the queue (lower is served first) and NICE_N is the CPU
+# priority its command runs under.
+CLASS_NAMES=(funnel build test batch)
+set_class() {
+    case "$1" in
+        funnel) CLASS_RANK=0; NICE_N=0 ;;
+        build)  CLASS_RANK=1; NICE_N=0 ;;
+        test)   CLASS_RANK=2; NICE_N=10 ;;
+        batch)  CLASS_RANK=3; NICE_N=19 ;;
+        *) die "CAMEL_TOKEN_CLASS is '$1', not one of funnel, build, test, batch" ;;
+    esac
+    TOKEN_CLASS="$1"
+}
+set_class "${CAMEL_TOKEN_CLASS:-test}"
+
+AGE_S="${CAMEL_TOKEN_AGE_S:-300}"
+case "$AGE_S" in
+    ''|*[!0-9]*) die "CAMEL_TOKEN_AGE_S is not a number of seconds: '$AGE_S'" ;;
+esac
+[ "$AGE_S" -ge 1 ] || die "CAMEL_TOKEN_AGE_S is $AGE_S; a ticket has to age by at least a second per step"
+
 token_path() { printf '%s/token-%02d.lock' "$TOKEN_DIR" "$1"; }
 record_path() { printf '%s/token-%02d.holder' "$TOKEN_DIR" "$1"; }
 
@@ -111,7 +161,7 @@ record_path() { printf '%s/token-%02d.holder' "$TOKEN_DIR" "$1"; }
 # `date`, `stat` or `wc` costs 30-70 ms. A reading that costs more than the thing it measures is not
 # worth keeping: measured at 110 ms a take before this, 1-2 ms after.
 prepare() {
-    [ -d "$TOKEN_DIR" ] || mkdir -p "$TOKEN_DIR" || die "cannot make $TOKEN_DIR"
+    [ -d "$TOKEN_DIR/queue" ] || mkdir -p "$TOKEN_DIR/queue" || die "cannot make $TOKEN_DIR"
     # A pool that was configured at 24 and is now asked for 32 gets the extra files; a smaller pool
     # keeps them on disk but never hands them out, so raising the size later does not start from a
     # directory that disagrees with itself.
@@ -211,6 +261,161 @@ report_take() {
     printf '%s %s %s\n' "$$" "${1:-0}" "${2:-0}" >> "$CAMEL_TOKEN_REPORT" 2>/dev/null || true
 }
 
+# --- the wait queue -------------------------------------------------------------------------------
+#
+# "$TOKEN_DIR/queue/" holds
+#   t-NNNNNNNNNN   one ticket per waiter: `<class> <width> <registered ms> <pid> <lane>`, with the
+#                  waiter holding an exclusive `flock` on the file for as long as it waits
+#   seq, seq.lock  the counter the ticket numbers come from, and the lock that serialises it
+#   .new-PID       a ticket that is being registered and has no number yet; nobody reads it
+#
+# A ticket nobody holds a lock on is dead: its owner exited or was killed, and the kernel released
+# the lock with it. Whoever meets such a ticket removes it, so a dead waiter never blocks the queue.
+
+# Order key of a ticket: its effective class, then its sequence number. The class has moved one step
+# toward `funnel` for every CAMEL_TOKEN_AGE_S seconds the ticket has waited. Reads NOW_MS, so the
+# caller refreshes it (`now_ms`) once per decision. Sets TK_KEY, TK_RANK, TK_EFF, TK_WANT, TK_PID, TK_LANE
+# and TK_T0. The sequence number is below 10^13, so the key sorts by class first.
+read_ticket() {
+    local name="$1" cls='' want='' t0='' pid='' lane='' r w eff
+    { read -r cls want t0 pid lane < "$TOKEN_DIR/queue/$name"; } 2> /dev/null || true
+    case "$cls" in funnel) r=0 ;; build) r=1 ;; batch) r=3 ;; *) r=2 ;; esac
+    case "$want" in ''|*[!0-9]*) want=1 ;; esac
+    case "$t0" in ''|*[!0-9]*) t0=$NOW_MS ;; esac
+    w=$((NOW_MS - t0))
+    [ "$w" -ge 0 ] || w=0
+    eff=$((r - w / (AGE_S * 1000)))
+    [ "$eff" -ge 0 ] || eff=0
+    TK_RANK=$r; TK_EFF=$eff; TK_WANT=$want; TK_T0=$t0; TK_PID=$pid; TK_LANE=$lane
+    TK_KEY=$((eff * 10000000000000 + 10#${name#t-}))
+}
+
+# Is anybody holding this ticket's lock? A shared test lock: the owner holds the ticket exclusively,
+# and another reader looking at the same file does not make it look held.
+ticket_alive() {
+    local f="$TOKEN_DIR/queue/$1"
+    [ -e "$f" ] || return 1
+    { exec 7< "$f"; } 2> /dev/null || return 1
+    if flock -n -s 7; then
+        exec 7<&-
+        return 1
+    fi
+    exec 7<&-
+    return 0
+}
+
+# find_pred KEY SELF: the live ticket that sorts directly before KEY, into PRED (return 0), or none
+# (return 1), which means the caller is the head of the queue. SELF is the caller's own ticket, which
+# is never its own predecessor. Dead tickets met on the way are removed. Reads only the ticket files
+# and tests liveness from the nearest ticket outwards, so a long queue costs one `flock` to answer.
+find_pred() {
+    local key="$1" self="$2" f name bi i
+    local -a names=() keys=()
+    for f in "$TOKEN_DIR/queue"/t-*; do
+        [ -e "$f" ] || continue
+        name="${f##*/}"
+        [ "$name" = "$self" ] && continue
+        read_ticket "$name"
+        [ "$TK_KEY" -lt "$key" ] || continue
+        names+=("$name"); keys+=("$TK_KEY")
+    done
+    PRED=''
+    while [ "${#names[@]}" -gt 0 ]; do
+        bi=''
+        for i in "${!names[@]}"; do
+            if [ -z "$bi" ] || [ "${keys[i]}" -gt "${keys[bi]}" ]; then bi=$i; fi
+        done
+        if ticket_alive "${names[bi]}"; then
+            PRED="${names[bi]}"
+            return 0
+        fi
+        rm -f "$TOKEN_DIR/queue/${names[bi]}"
+        unset 'names[bi]' 'keys[bi]'
+    done
+    return 1
+}
+
+# Put a ticket in the queue and hold its lock (fd 8) until `drop_ticket`. The ticket is created and
+# locked under a temporary name and given its number inside the counter's lock, so a ticket is never
+# visible before it is locked and never visible out of order. Sets MY_TICKET.
+register_ticket() {
+    local q="$TOKEN_DIR/queue" tmp f
+    tmp="$q/.new-$BASHPID"
+    # A registration that was killed half way leaves a temporary ticket nobody holds.
+    for f in "$q"/.new-*; do
+        [ -e "$f" ] && [ "$f" != "$tmp" ] || continue
+        { exec 7< "$f"; } 2> /dev/null || continue
+        if flock -n -s 7; then rm -f "$f"; fi
+        exec 7<&-
+    done
+    MY_TICKET=''
+    while [ -z "$MY_TICKET" ]; do
+        now_ms
+        exec 8> "$tmp"
+        flock -n 8
+        printf '%s %s %s %s %s\n' "$TOKEN_CLASS" "$1" "$NOW_MS" "$BASHPID" "$LANE" >&8
+        MY_TICKET=$(
+            exec 9> "$q/seq.lock"
+            flock 9
+            n=0
+            { read -r n < "$q/seq"; } 2> /dev/null || true
+            case "$n" in ''|*[!0-9]*) n=0 ;; esac
+            n=$((n + 1))
+            printf -v name 't-%010d' "$n"
+            if mv "$tmp" "$q/$name" 2> /dev/null; then
+                printf '%s\n' "$n" > "$q/seq"
+                printf '%s' "$name"
+            fi
+        )
+    done
+}
+
+# Leave the queue: the lock goes with the descriptor and the file with `rm`.
+drop_ticket() {
+    [ -z "${MY_TICKET:-}" ] || rm -f "$TOKEN_DIR/queue/$MY_TICKET"
+    exec 8>&-
+    MY_TICKET=''
+}
+
+# Block until a ticket's owner lets go of it, but at most a second: an aged ticket changes the order
+# without anybody leaving, so a waiter looks again at least that often. The one-second wait is a
+# `flock` child with the ticket's lock as its only inherited one, so a waiter that is killed does not
+# keep its own ticket alive through it.
+wait_on() {
+    { exec 7< "$TOKEN_DIR/queue/$1"; } 2> /dev/null || return 0
+    flock -s -w 1 7 8>&- || true
+    exec 7<&-
+}
+
+# The tickets in queue order, one line each, for `show`. Dead tickets are removed rather than listed.
+queue_list() {
+    local f name bi i n=0
+    local -a names=() keys=()
+    now_ms
+    for f in "$TOKEN_DIR/queue"/t-*; do
+        [ -e "$f" ] || continue
+        name="${f##*/}"
+        read_ticket "$name"
+        names+=("$name"); keys+=("$TK_KEY")
+    done
+    while [ "${#names[@]}" -gt 0 ]; do
+        bi=''
+        for i in "${!names[@]}"; do
+            if [ -z "$bi" ] || [ "${keys[i]}" -lt "${keys[bi]}" ]; then bi=$i; fi
+        done
+        name="${names[bi]}"
+        if ticket_alive "$name"; then
+            read_ticket "$name"
+            n=$((n + 1))
+            echo "  ticket $name class=${CLASS_NAMES[TK_RANK]} effective=${CLASS_NAMES[TK_EFF]} waited=$(((NOW_MS - TK_T0) / 1000))s want=$TK_WANT pid=$TK_PID lane=$TK_LANE"
+        else
+            rm -f "$TOKEN_DIR/queue/$name"
+        fi
+        unset 'names[bi]' 'keys[bi]'
+    done
+    [ "$n" -gt 0 ] || echo '  (empty)'
+}
+
 show() {
     prepare
     free=0
@@ -235,75 +440,133 @@ show() {
         fi
         i=$((i + 1))
     done
+    echo "queue: (served in this order)"
+    queue_list
     peak_of
     echo "free=$free held=$held peak=$PEAK_N"
+}
+
+# Lock free tokens, lowest index first, until ACQ_N reaches the count asked for. HELD_SET (` 3 7 `)
+# lists the tokens this process holds, so a later pass starts from what the earlier one kept.
+#
+# One pass is over the whole pool without blocking: waiting on the first token while the second
+# is free would make a pool of twenty-four run exactly one thing at a time.
+grab() {
+    local n fd f
+    n=1
+    while [ "$n" -le "$POOL_SIZE" ] && [ "$ACQ_N" -lt "$1" ]; do
+        case "$HELD_SET" in *" $n "*) n=$((n + 1)); continue ;; esac
+        # fds 20+ are this script's token hold, by token index. They are inherited by the worker,
+        # so a token lives exactly as long as the process tree that took it. A fixed descriptor
+        # number on purpose: bash's `{fd}` form can carry close-on-exec, and a token that vanishes
+        # when the worker is exec'd is a token the worker never had.
+        fd=$((20 + n))
+        printf -v f '%s/token-%02d.lock' "$TOKEN_DIR" "$n"
+        eval "exec $fd>\"$f\""
+        if flock -n "$fd"; then
+            ACQ_N=$((ACQ_N + 1))
+            HELD_SET="$HELD_SET$n "
+        else
+            eval "exec $fd>&-"
+        fi
+        n=$((n + 1))
+    done
+}
+
+# Give back every token this process holds.
+release_held() {
+    local n
+    for n in $HELD_SET; do eval "exec $((20 + n))>&-"; done
+    HELD_SET=' '
+    ACQ_N=0
 }
 
 # The one routine that takes tokens: `take`, `run` and `take-up-to` all come through here, so the
 # flock, the holder record and the report are written in one place.
 #
-#   acquire WANT all    exactly WANT tokens, or keep trying
+#   acquire WANT all    exactly WANT tokens, or keep waiting
 #   acquire WANT upto   as many as are free now, at least one, at most WANT
 #
 # Sets ACQ_N (how many are held) and ACQ_MS (how long it took).
 #
-# A taker that cannot get what it asked for **holds nothing while it waits**. Two callers that each
-# want more than half of the pool, each holding what they had so far and waiting for the rest, wait on
-# each other until the wait runs out; so a short pass gives every token back, sleeps a random while
-# (the jitter is what lets one of two symmetric takers win the next pass), and starts over. A caller
-# that can use less than it asked for says so with `upto` and never waits for a full width.
-#
-# One pass is over the whole pool without blocking: waiting on the first token while the second is
-# free would make a pool of twenty-four run exactly one thing at a time.
+# A taker with nobody waiting ahead of it that finds what it wants free takes it at once and never
+# touches the queue. Otherwise it registers a ticket and waits its turn (see the queue above): only
+# the head takes, and in `all` mode the head keeps what it has taken until it has its width. A ticket
+# that is not the head holds no token. Two callers that each want more than half of the pool, each
+# holding part of it and waiting for the rest, would wait on each other until the wait runs out; here
+# the one that is not the head gives its part back, so the head always completes. A caller that can use
+# less than it asked for says so with `upto` and never waits for a full width.
 acquire() {
-    local want="$1" mode="$2" n fd t0 tms held attempts=0
+    local want="$1" mode="$2" t0 tms attempts=0 served=0 behind stamp n
     now_ms; t0=$NOW_MS
-    while :; do
-        ACQ_N=0
-        held=' '
-        n=1
-        while [ "$n" -le "$POOL_SIZE" ] && [ "$ACQ_N" -lt "$want" ]; do
-            # fds 20+ are this script's token hold, by token index. They are inherited by the worker,
-            # so a token lives exactly as long as the process tree that took it. A fixed descriptor
-            # number on purpose: bash's `{fd}` form can carry close-on-exec, and a token that vanishes
-            # when the worker is exec'd is a token the worker never had.
-            fd=$((20 + n))
-            eval "exec $fd>\"$(token_path "$n")\""
-            if flock -n "$fd"; then
-                ACQ_N=$((ACQ_N + 1))
-                held="$held$n "
-            else
-                eval "exec $fd>&-"
-            fi
-            n=$((n + 1))
-        done
+    HELD_SET=' '
+    ACQ_N=0
+    MY_TICKET=''
+    # Fast path: no live ticket sorts before a taker of this class that arrives now.
+    if ! find_pred "$((CLASS_RANK * 10000000000000 + 9999999999999))" ''; then
+        grab "$want"
         if [ "$ACQ_N" -ge "$want" ] || { [ "$mode" = upto ] && [ "$ACQ_N" -ge 1 ]; }; then
-            break
+            served=1
+        else
+            release_held
         fi
-        # Not enough: give back what this pass took before waiting.
-        for n in $held; do eval "exec $((20 + n))>&-"; done
-        now_ms; tms=$(( NOW_MS - t0 ))
+    fi
+    while [ "$served" = 0 ]; do
+        if [ -z "$MY_TICKET" ] || [ ! -e "$TOKEN_DIR/queue/$MY_TICKET" ]; then
+            register_ticket "$want"
+        fi
+        now_ms
+        read_ticket "$MY_TICKET"
+        if find_pred "$TK_KEY" "$MY_TICKET"; then
+            release_held
+            behind="$PRED"
+        else
+            grab "$want"
+            if [ "$ACQ_N" -ge "$want" ] || { [ "$mode" = upto ] && [ "$ACQ_N" -ge 1 ]; }; then
+                break
+            fi
+            behind=''
+        fi
+        now_ms; tms=$((NOW_MS - t0))
         # Out of time is not out of tokens, and it is not a red reading either: the caller ran
         # nothing, and that has to be its own answer (6), not "your choice was wrong" (2).
         if [ "$tms" -ge $((WAIT_S * 1000)) ]; then
-            die_wait "no $want token(s) of $POOL_SIZE within ${WAIT_S} s ($((tms / 1000)) s waited, lane=$LANE): nothing was measured, so this exits 6"
+            release_held
+            drop_ticket
+            die_wait "no $want token(s) of $POOL_SIZE within ${WAIT_S} s ($((tms / 1000)) s waited, lane=$LANE, class=$TOKEN_CLASS): nothing was measured, so this exits 6"
         fi
         # The wait is not silent: a run that queues without saying who it waits for looks exactly
         # like a run that hung, and a silent queue has cost a whole measurement.
         if [ $((attempts % 30)) -eq 0 ]; then
-            echo "host-tokens: waiting for $want token(s) of $POOL_SIZE (lane=$LANE, holding none, waited $((tms / 1000))s)"
+            echo "host-tokens: waiting for $want token(s) of $POOL_SIZE (lane=$LANE, class=$TOKEN_CLASS, holding $ACQ_N, waited $((tms / 1000))s)"
             show | sed 's/^/  /'
         fi
         attempts=$((attempts + 1))
-        sleep "0.$((RANDOM % 900 + 100))"
+        if [ -n "$behind" ]; then
+            wait_on "$behind"
+        else
+            sleep "0.$((RANDOM % 150 + 100))" 8>&-
+        fi
     done
-    for n in $held; do
-        printf '%s %s %s %s
-' "$$" "$LANE" "$WHO" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$(record_path "$n")"
+    drop_ticket
+    stamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    for n in $HELD_SET; do
+        printf '%s %s %s %s\n' "$$" "$LANE" "$WHO" "$stamp" > "$(record_path "$n")"
     done
     now_ms; ACQ_MS=$(( NOW_MS - t0 ))
     record_peak
     report_take "$ACQ_MS" "$ACQ_N"
+}
+
+# Start a command at the CPU priority of this process's class. Lowering the priority needs no
+# privilege and a nice value is inherited by everything the command starts. Under a covering run the
+# whole tree is already at the priority that run chose, and lowering it again would stack the two.
+run_niced() {
+    if [ "$NICE_N" -gt 0 ] && [ "${CAMEL_TOKENS_COVERED:-0}" != 1 ]; then
+        nice -n "$NICE_N" "$@"
+    else
+        "$@"
+    fi
 }
 
 take() {
@@ -355,7 +618,7 @@ take_up_to() {
     unset CAMEL_TAKE_LABEL
     export CAMEL_TOKENS_HELD="$ACQ_N"
     export CMAKE_BUILD_PARALLEL_LEVEL="$ACQ_N"
-    "$@"
+    run_niced "$@"
 }
 
 # --- evidence for the self-test -------------------------------------------------------------------
@@ -394,6 +657,7 @@ st_summary() {
 st_worker() {
     local log="$1" name="$2" want="$3" taker="$4" gate="$5" i=0
     WAIT_S="${ST_WAIT:-120}"
+    set_class "${ST_CLASS:-test}"
     if [ "$taker" = old ]; then
         # A taker that waited out keeps what it holds until its twin has waited out too, so the twin
         # cannot finish on the tokens the first one gave up.
@@ -439,6 +703,45 @@ take_old() {
     return 0
 }
 
+# st_stream LOG STOP: a continuous stream of one-token takers: take one, log it, hold it a moment,
+# give it back, and again, until STOP exists.
+st_stream() {
+    local log="$1" stop="$2"
+    WAIT_S="${ST_WAIT:-120}"
+    set_class test
+    while [ ! -e "$stop" ]; do
+        CAMEL_TOKEN_QUIET=1 take 1 > /dev/null 2>&1 || { st_log "$log" "fail stream"; return 3; }
+        st_log "$log" "start stream 1 0"
+        sleep 0.15
+        release_held
+    done
+}
+
+# st_pool N: the pool the next check runs on, for this process and for the scripts it starts, empty of
+# tickets. The pool files of a larger size are made on the spot.
+st_pool() {
+    POOL_SIZE="$1"
+    export CAMEL_TOKENS="$1"
+    rm -rf "$TOKEN_DIR/queue"
+    prepare
+}
+
+# st_wait_tickets N: wait until N tickets are queued; the limit says they never were.
+st_wait_tickets() {
+    local i=0 k f
+    while [ "$i" -lt 300 ]; do
+        k=0
+        for f in "$TOKEN_DIR/queue"/t-*; do [ -e "$f" ] && k=$((k + 1)); done
+        [ "$k" -ge "$1" ] && return 0
+        i=$((i + 1))
+        sleep 0.1
+    done
+    return 1
+}
+
+# st_order LOG: the workers in the order they started, one line.
+st_order() { awk '$1 == "start" { printf "%s ", $2 }' "$1"; }
+
 # settle PATTERN: poll `show` into OUT until it contains PATTERN. The limit says the pool never got
 # there; the caller's check then reports what it did see.
 settle() {
@@ -481,6 +784,11 @@ self_test() {
     # run (as a case is), CAMEL_TOKENS_COVERED=1 would make every take below take nothing and every
     # check below read an empty pool.
     unset CAMEL_TOKENS_COVERED CAMEL_TOKENS_HELD CAMEL_TAKE_LABEL
+    # Nor does the class or the aging step it inherited: the order checks below set their own.
+    unset CAMEL_TOKEN_CLASS CAMEL_TOKEN_AGE_S
+    set_class test
+    AGE_S=300
+    local checks=17
 
     # 1. three tokens exist and none is held
     out=$(show)
@@ -642,12 +950,14 @@ self_test() {
     # Each takes two of three and holds them; taking one token at a time and waiting for the second
     # would leave each holding one and waiting on the other. The verdict is the log: both started and
     # finished, never two open at once (two and two do not fit in three), each saw exactly its own two
-    # held, and the pool's held count never passed the pool.
+    # held, and the pool's held count never passed the pool. (The count a worker sees may include
+    # the tokens the other one is reserving while it waits to be the one that runs, so it is bounded
+    # by the pool and not compared with the worker's own width.)
     log=$(mktemp)
     ST_WAIT=120 two_takers_log "$log" 2 new
     eval "$(st_summary "$log")"
     peak_of
-    if [ "$starts" -eq 2 ] && [ "$ends" -eq 2 ] && [ "$fails" -eq 0 ] && [ "$maxopen" -eq 1 ]         && [ "$heldwrong" -eq 0 ] && [ "$maxheld" -le "$POOL_SIZE" ] && [ "$PEAK_N" -le "$POOL_SIZE" ]; then
+    if [ "$starts" -eq 2 ] && [ "$ends" -eq 2 ] && [ "$fails" -eq 0 ] && [ "$maxopen" -eq 1 ]         && [ "$maxheld" -le "$POOL_SIZE" ] && [ "$PEAK_N" -le "$POOL_SIZE" ]; then
         echo 'ok    two takers that each want two of three both finish, one after the other'
     else
         echo "FAIL  two takers of two on a pool of three: $(st_summary "$log"), peak $PEAK_N"
@@ -670,8 +980,160 @@ self_test() {
     fi
     rm -f "$log" "$log.lock" "$log".barrier.*
 
+    # The checks from here judge the queue. Each reads what the workers wrote (the order they
+    # started in, whether they finished) and never how long anything took; waiting happens only
+    # where a check needs a ticket to have aged, and it says so.
+
+    # 15. a wide request finishes while a continuous stream of one-token takers runs. Ten streams on
+    # a pool of twelve keep it nearly full; a request for eight that gave back everything on every
+    # failed pass would be starved by them, so what the log must show is that it started and ended.
+    st_pool 12
+    log=$(mktemp); : > "$log"; : > "$log.s"
+    stop="$root/stop-wide"; rm -f "$stop"
+    spids=''
+    for i in 1 2 3 4 5 6 7 8 9 10; do ( ST_WAIT=120 st_stream "$log.s" "$stop" ) & spids="$spids $!"; done
+    i=0
+    while [ "$(st_starts "$log.s")" -lt 10 ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
+    ( ST_WAIT=60 st_worker "$log" w8 8 new 0 ) &
+    wide=$!
+    wait "$wide" || true
+    : > "$stop"
+    for p in $spids; do wait "$p" || true; done
+    eval "$(st_summary "$log")"
+    if [ "$starts" -eq 1 ] && [ "$ends" -eq 1 ] && [ "$fails" -eq 0 ]; then
+        echo 'ok    a request for eight finishes while a stream of one-token takers runs'
+    else
+        echo "FAIL  a request for eight against a stream of one-token takers: $(st_summary "$log")"; bad=$((bad + 1))
+    fi
+    checks=$((checks + 1))
+    rm -f "$log" "$log.lock" "$log.s" "$log.s.lock" "$stop"
+
+    # 16. a funnel waiter that arrives after three test waiters is served before them, and the test
+    # waiters keep their own order. Each wants the whole pool, so they are served one at a time and
+    # the order of the start lines is the order of service.
+    st_pool 2
+    log=$(mktemp); : > "$log"
+    ( take 2 > /dev/null; exec sleep 60 ) &
+    holder=$!
+    settle 'free=0 held=2'
+    pids=''
+    j=0
+    for k in t1 t2 t3; do
+        ( ST_CLASS=test ST_WAIT=60 st_worker "$log" "$k" 2 new 0 ) &
+        pids="$pids $!"
+        j=$((j + 1)); st_wait_tickets "$j"
+    done
+    ( ST_CLASS=funnel ST_WAIT=60 st_worker "$log" F 2 new 0 ) &
+    pids="$pids $!"
+    st_wait_tickets 4
+    kill -9 "$holder" 2> /dev/null
+    wait "$holder" 2> /dev/null
+    for p in $pids; do wait "$p" || true; done
+    eval "$(st_summary "$log")"
+    order=$(st_order "$log")
+    if [ "$order" = 'F t1 t2 t3 ' ] && [ "$ends" -eq 4 ] && [ "$fails" -eq 0 ]; then
+        echo 'ok    a funnel waiter that arrived last is served before three test waiters'
+    else
+        echo "FAIL  a funnel waiter behind three test waiters: order '$order' (needs 'F t1 t2 t3 '), $(st_summary "$log")"; bad=$((bad + 1))
+    fi
+    checks=$((checks + 1))
+    rm -f "$log" "$log.lock"
+
+    # 17. a ticket whose holder was killed does not block the queue. The first waiter is a process of
+    # its own so that it can be killed; the second is behind it and must be served once it is gone.
+    st_pool 2
+    log=$(mktemp); : > "$log"
+    ( take 2 > /dev/null; exec sleep 60 ) &
+    holder=$!
+    settle 'free=0 held=2'
+    "$0" run 2 -- true > /dev/null 2>&1 &
+    victim=$!
+    st_wait_tickets 1
+    ( ST_WAIT=60 st_worker "$log" B 2 new 0 ) &
+    behind=$!
+    st_wait_tickets 2
+    kill -9 "$victim" 2> /dev/null
+    wait "$victim" 2> /dev/null
+    kill -9 "$holder" 2> /dev/null
+    wait "$holder" 2> /dev/null
+    wait "$behind" || true
+    left=0
+    for f in "$TOKEN_DIR/queue"/t-*; do [ -e "$f" ] && left=$((left + 1)); done
+    order=$(st_order "$log")
+    if [ "$order" = 'B ' ] && [ "$left" -eq 0 ]; then
+        echo 'ok    a waiter that was killed in the queue is passed over and its ticket is removed'
+    else
+        echo "FAIL  a killed waiter in the queue: order '$order' (needs 'B '), $left ticket(s) left"; bad=$((bad + 1))
+    fi
+    checks=$((checks + 1))
+    rm -f "$log" "$log.lock"
+
+    # 18. a batch waiter is served in the end: after it has waited long enough (the aging step is one
+    # second here, and the check waits four) it sorts ahead of test waiters that arrived later, which
+    # it would sort behind for ever without aging. The wait is what the check is about; the verdict
+    # is still the order the workers started in.
+    st_pool 1
+    AGE_S=1
+    log=$(mktemp); : > "$log"
+    ( take 1 > /dev/null; exec sleep 60 ) &
+    holder=$!
+    settle 'free=0 held=1'
+    ( ST_CLASS=batch ST_WAIT=60 st_worker "$log" B 1 new 0 ) &
+    pids="$!"
+    st_wait_tickets 1
+    sleep 4
+    ( ST_CLASS=test ST_WAIT=60 st_worker "$log" T1 1 new 0 ) &
+    pids="$pids $!"
+    st_wait_tickets 2
+    ( ST_CLASS=test ST_WAIT=60 st_worker "$log" T2 1 new 0 ) &
+    pids="$pids $!"
+    st_wait_tickets 3
+    kill -9 "$holder" 2> /dev/null
+    wait "$holder" 2> /dev/null
+    for p in $pids; do wait "$p" || true; done
+    AGE_S=300
+    order=$(st_order "$log")
+    if [ "$order" = 'B T1 T2 ' ]; then
+        echo 'ok    a batch waiter that has aged is served ahead of test waiters that arrived after it'
+    else
+        echo "FAIL  an aged batch waiter: order '$order' (needs 'B T1 T2 ')"; bad=$((bad + 1))
+    fi
+    checks=$((checks + 1))
+    rm -f "$log" "$log.lock"
+
+    # 19. two requests for fourteen of twenty-four tokens both finish, one after the other: neither
+    # can be satisfied while the other holds its share, so a pair that each kept part of it would
+    # wait on each other.
+    st_pool 24
+    log=$(mktemp)
+    ST_WAIT=120 two_takers_log "$log" 14 new
+    eval "$(st_summary "$log")"
+    if [ "$starts" -eq 2 ] && [ "$ends" -eq 2 ] && [ "$fails" -eq 0 ] && [ "$maxopen" -eq 1 ]; then
+        echo 'ok    two requests for fourteen of twenty-four tokens both finish'
+    else
+        echo "FAIL  two requests for fourteen of twenty-four: $(st_summary "$log")"; bad=$((bad + 1))
+    fi
+    checks=$((checks + 1))
+    rm -f "$log" "$log.lock"
+
+    # 20. the fast path: with nobody waiting a take is served at once and never registers. A
+    # registration draws a number from the counter, so the counter file not existing afterwards is
+    # the evidence; a leftover ticket that nobody holds counts as nobody waiting and is removed.
+    st_pool 3
+    q="$TOKEN_DIR/queue"
+    printf 'test 1 0 1 gone\n' > "$q/t-0000000099"
+    rm -f "$q/seq"
+    ( CAMEL_TOKEN_QUIET=1 take 1 > /dev/null 2>&1 )
+    rc=$?
+    if [ "$rc" -eq 0 ] && [ ! -e "$q/seq" ] && [ ! -e "$q/t-0000000099" ]; then
+        echo 'ok    with nobody waiting a take is served at once, without a ticket'
+    else
+        echo "FAIL  the fast path: exit $rc, counter present: $([ -e "$q/seq" ] && echo yes || echo no), dead ticket present: $([ -e "$q/t-0000000099" ] && echo yes || echo no)"; bad=$((bad + 1))
+    fi
+    checks=$((checks + 1))
+
     rm -rf "$root"
-    if [ "$bad" -eq 0 ]; then echo 'selftest: 16 checks, 0 failed'; return 0; fi
+    if [ "$bad" -eq 0 ]; then echo "selftest: $checks checks, 0 failed"; return 0; fi
     echo "selftest: $bad failed"; return 1
 }
 
@@ -693,7 +1155,7 @@ case "$cmd" in
         [ "${1:-}" = '--' ] && shift
         [ "$#" -ge 1 ] || die 'run needs a command after --'
         take "$n" >/dev/null
-        "$@"
+        run_niced "$@"
         code=$?
         exit "$code"
         ;;
@@ -701,7 +1163,10 @@ case "$cmd" in
         [ "${1:-}" = '--' ] && shift
         [ "$#" -ge 1 ] || die 'run-quiet needs a command after --'
         CAMEL_TOKEN_QUIET=1 take 1 >/dev/null
+        # The per-case path pays the extra `exec` only when its class asks for a lower priority.
+        if [ "$NICE_N" -gt 0 ] && [ "${CAMEL_TOKENS_COVERED:-0}" != 1 ]; then exec nice -n "$NICE_N" "$@"; fi
         exec "$@"
-        ;;    self-test) self_test ;;
+        ;;
+    self-test) self_test ;;
     *) die "unknown command '$cmd' (take, take-up-to, run, run-quiet, show, self-test)" ;;
 esac
