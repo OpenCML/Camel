@@ -8,6 +8,7 @@
 #include "export.h"
 
 #include "../../tensor/interop.h"
+#include "../capability.h"
 #include "../emitter.h"
 #include "../exporter.h"
 
@@ -717,10 +718,24 @@ void exportEntry(
         throw Refusal{
             camel::source::kInvalidOriginId,
             std::format(
-                "the program contains no export_model<out: path>(fn, example) call, so "
-                "onnx::export_model translates 'main' itself, and the model file is not named: "
-                "give "
-                "it as the parameter out, onnx::export_model out=\"model.onnx\"")};
+                "the model file is not named: give it as the parameter out, "
+                "onnx::export_model out=\"model.onnx\"")};
+    }
+    // The target is the pass's own parameter: it is checked here, where the pass starts, and it
+    // has nothing to do with whether the program holds an export request: the request machinery
+    // is gone, so this check must not live in it.
+    if (!options.target.empty() && options.target != "none" &&
+        CapabilityTable::forTarget(options.target) == nullptr) {
+        std::string known;
+        for (const std::string &target : CapabilityTable::targets()) {
+            known += (known.empty() ? "" : ", ") + target;
+        }
+        throw Refusal{
+            camel::source::kInvalidOriginId,
+            std::format(
+                "unknown export target '{}' (known: {}, or 'none')",
+                options.target,
+                known)};
     }
     for (auto *g : camel::runtime::collectReachableGraphs(*program, root)) {
         if (g != nullptr) {
@@ -739,10 +754,11 @@ void exportEntry(
         }
         // The program makes no export request, so what is translated is `main` as a whole:
         // say so, a driver program is refused here for what it does besides computing.
-        message += " (the program contains no onnx.export_model call, so onnx::export_model "
-                   "translates the computation of 'main' itself: its parameters are the "
-                   "model's inputs, its result the outputs; a program that does more than "
-                   "compute exports one of its functions with onnx.export_model instead)";
+        // What is translated is the program the command line handed the pass: say so, a driver
+        // program is refused here for what it does besides computing.
+        message += " (the program is translated as a whole: its parameters are the model's "
+                   "inputs, its result the outputs; a program that does more than compute "
+                   "exports one of its functions with onnx.export_model instead)";
         throw Refusal{e.origin(), std::move(message)};
     }
     try {
@@ -764,38 +780,15 @@ OnnxExportPass::apply(const camel::runtime::Program *program, std::ostream &os) 
             options.trace     = trace_;
             options.dump      = dump_;
             options.prepStats = prepStats_;
+            options.target    = target_;
             return options;
         };
-        // Every request is translated before any file is written: a refusal leaves no model.
-        std::vector<Request> requests = collectRequests(*context_, graph, out_);
-        for (Request &request : requests) {
-            request.options = asked(std::move(request.options));
-        }
-        if (requests.empty()) {
-            exportEntry(*context_, program, os, out_, asked(ExportOptions{}));
-            return program;
-        }
-        if (requests.size() > 1 && !out_.empty()) {
-            // Reported at the second call: the first one is what the file name stands for.
-            throw Refusal{
-                requests[1].origin,
-                std::format(
-                    "the parameter out names one model file but the entry graph contains {} "
-                    "onnx.export_model calls",
-                    requests.size())};
-        }
-        std::vector<Model> models;
-        for (const Request &request : requests) {
-            models.push_back(translate(*context_, request));
-        }
-        for (size_t i = 0; i < requests.size(); ++i) {
-            try {
-                writeModelFile(models[i], camel::utils::pathFromUtf8(requests[i].path));
-            } catch (const std::runtime_error &e) {
-                throw Refusal{requests[i].origin, e.what()};
-            }
-            os << std::format("onnx::export_model: wrote {}\n", requests[i].path);
-        }
+        // The body of the stage form: translate what the command line handed the pass (its `f`)
+        // with the same translation `model` uses, write it to `out`, and hand `f` on unchanged
+        // There is no request to look for in the program: the program is
+        // the input, the way it is for every other pass.
+        exportEntry(*context_, program, os, out_, asked(ExportOptions{}));
+        return program;
     } catch (const Refusal &refusal) {
         // Every refusal is located: at the node it names, else at the export_model call it
         // concerns (set where it is raised), else at the entry function.
@@ -826,7 +819,8 @@ void registerOnnxPasses() {
             args.getString("out"),
             args.getBool("trace"),
             args.getBool("dump"),
-            args.getBool("prep_stats"));
+            args.getBool("prep_stats"),
+            args.getString("target"));
     };
     registerModulePass(kPassName, std::move(descriptor));
 }
