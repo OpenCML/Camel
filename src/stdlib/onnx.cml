@@ -67,23 +67,27 @@ export func save::<F>(m: Model<F>) => void!
 with <dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'>
 export func model::<F, E>(fn: F, example: E) => Model<F>! when is_function::<F>()
 
-/// Runs a model on the arguments its function takes, given the way `model` took their example:
-/// the one argument of a one-parameter function, or a tuple with one entry per parameter. Running a
-/// model means the translated function applied to those arguments -- the ONNX runtime is only how it
-/// is computed, so what the call reads and writes is what that function reads and writes. `model`
-/// is a `with` parameter because it decides which model, not what is computed: a call writes
-/// `(x, y)->run<model: m>`.
+/// Runs a model on the arguments its function takes: one argument for a one-parameter function, one
+/// per parameter otherwise, in the order the function declares them. Running a model means the
+/// translated function applied to those arguments -- the ONNX runtime is only how it is computed, so
+/// what the call reads and writes is what that function reads and writes. The model is a `with`
+/// parameter because it decides which model, not what is computed: a call writes `x->run<m>`, or
+/// `run<m>(x, y)` for a model of two parameters.
 ///
-/// The result type is the function's own (`ResultOf<F>!`). `A` stands for the argument list: a
-/// declaration cannot write a rest parameter with a type, so the declaration names one parameter and
-/// the kernel reads the arguments as the function's parameter list.
+/// The result type is the function's own (`ResultOf<F>!`), so what comes back has the type the
+/// function answers with. The arguments are a rest parameter, which a declaration cannot type with
+/// the function's parameter list (`...ParamsOf<F>` is a type expression, not a rest type), so the
+/// kernel checks the arguments against the inputs the model records and reports an argument that does
+/// not fit the model as a fault naming the argument, what was expected and what arrived. A `when`
+/// that made the mismatch a compile error would need an assignability predicate over parameter packs,
+/// which the language does not have yet (`is_same` compares types for identity, not for fits).
 /// @effect the effect of the model's function
 /// @fails error value `ExportUnsupported` when the runtime the model targets is unavailable, or its session cannot be loaded or run
 /// @example let m = model(func (x: float) { x * 2.0 }, 2.0)
 /// @example let y = 3.0->run<model: m>
 #op('onnx:run')
 with <model: Model<F>>
-export func run::<F, A>(args: A) => ResultOf<F>! when is_function::<F>()
+export func run::<F, ...A>(...xs: ...A) => ResultOf<F>!
 
 // -----------------------------------------------------------------------------
 // Passes: functions the pipeline applies to the program
