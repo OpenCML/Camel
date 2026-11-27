@@ -148,7 +148,7 @@ verify_script = """
 assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[0].name)
 assert(input.diagnostics[0].code === '0x031001C0', input.diagnostics[0].code)
-assert(input.diagnostics[0].line === 17, input.diagnostics[0].line)
+assert(input.diagnostics[0].line === 21, input.diagnostics[0].line)
 assert(input.diagnostics[0].column === 21, input.diagnostics[0].column)
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -328,8 +328,8 @@ for (const d of input.diagnostics) {
     assert(d.name === 'SemanticDiag::NeverArgumentCall', JSON.stringify(d))
     assert(d.code === '0x031001C0', JSON.stringify(d))
 }
-assert(input.diagnostics[0].line === 17 && input.diagnostics[0].column === 35, JSON.stringify(input.diagnostics[0]))
-assert(input.diagnostics[1].line === 18 && input.diagnostics[1].column === 41, JSON.stringify(input.diagnostics[1]))
+assert(input.diagnostics[0].line === 19 && input.diagnostics[0].column === 35, JSON.stringify(input.diagnostics[0]))
+assert(input.diagnostics[1].line === 19 && input.diagnostics[1].column === 41, JSON.stringify(input.diagnostics[1]))
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
