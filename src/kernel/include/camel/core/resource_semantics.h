@@ -442,7 +442,14 @@ bool declaresOutside(const ResourceSpec &spec);
 /// What a node touches is stated once, by `conservativeResources` below. Reaching it is a walk, and
 /// there are two of them: a frozen graph is walked by `runtime::footprintOf`, a body still under
 /// construction by `Builder::footprintOf`. The walks differ in the representation they read, not in
-/// the rule they apply.
+/// the rule they apply, and both accumulate only through this file's readings.
+///
+/// The second walk is not a leftover to be merged away: half of what it asks is not a question
+/// about a graph at all. A body under construction knows what each node is being built as
+/// (the builder's `funcTarget` and `operTarget`) before a frozen graph holds an operator or a
+/// callee there; it writes its answer back onto the body rather than reading one; and it names the
+/// body it is building by a `GraphId` rather than by a reference to it. None of those three is
+/// graph content, so none of them belongs on the view a reader holds.
 bool writesForTheRegion(const ResourceSignature &signature);
 
 /// The ambient resources the language gives every program (design principles 3.3): `stdout`,
