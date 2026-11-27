@@ -16,6 +16,11 @@
 #include "transpose/signature.h"
 #include "transpose/walk.h"
 
+// Where the two readings of a reverse loop's round count are stated side by side
+// (`ReverseRoundCount`, `reverseFirstRound`, `buildReverseCondRegion`); a loop's transpose is the
+// second writer of that count and states it in the same words.
+#include "../../autodiff/pullback.h"
+
 #include "camel/core/derivative.h"
 #include "camel/core/forward.h"
 #include "camel/core/loop_kind.h"
@@ -2745,11 +2750,25 @@ bool buildTransposeMember(
                     return false;
                 }
                 const gc_node_ref_t oldBodyResult = function->region(bodyRegionOld)->result;
-                // How many states the loop already carried: the body's ports are the element
-                // followed by one per state, and the loop's value is the tuple of last states. When
-                // there is one, its cotangent is a float; when there are more, it is a tuple and
-                // the cotangent arrives slot by slot from the component reads.
-                const size_t stateCount = regionPorts.size() - 1;
+                // How many states the loop already carried. When there is one, its cotangent is a
+                // float; when there are more, it is a tuple and the cotangent arrives slot by slot
+                // from the component reads.
+                const bool iterates = camel::core::loopHasIterable(function->loopKindOf(ref));
+                // The round a loop the front end built is a machine of its own: the stream it pulls
+                // from, the flag that says that stream is over, and then the states the program
+                // wrote, one port each (`src/compile/src/gir/builder_control.cpp`,
+                // `buildStreamLoop`: `machineTypes{stream, Type::Bool()}`, then the states).
+                // Neither machine value is a state a rule can ask a cotangent of -- no rule
+                // differentiates a stream or a flag -- so neither is carried by the reverse loop.
+                // A loop that iterates a sequence carries the element first and its states after
+                // it, and has no machine of its own.
+                const size_t stateCount = regionPorts.size() - (iterates ? 1 : 2);
+                if (regionPorts.size() > 0 && regionPorts.size() < (iterates ? 2u : 3u)) {
+                    refuse(TransposeRefusalCause::State);
+                    os << " node=" << ref << " origin=" << regionOrigin
+                       << " why=the-loop-carries-no-state\n";
+                    return false;
+                }
                 // The state's initial values are the loop's norm inputs after the range; the
                 // escapes are compared with them below, so they are read once here.
                 const auto oldNorm = function->normInputsOf(ref);
@@ -2765,7 +2784,6 @@ bool buildTransposeMember(
                 // reads its tape the same way. The element is not a value the two loops
                 // share: it is a function of the round number, which is what makes the pairing
                 // right rather than merely reversed.
-                const bool iterates = camel::core::loopHasIterable(function->loopKindOf(ref));
                 // Where the round takes its element from: the sequence itself (an array) or the two
                 // bounds of an interval, from which the round takes `a + round`
                 // (`LoopIterableForm`, include/camel/core/loop_kind.h). Both are read outside the
@@ -2828,6 +2846,292 @@ bool buildTransposeMember(
                         backwardsRange,
                         std::span<const gc_node_ref_t>(steps.data(), steps.size()));
                 }
+                // ---- how many rounds the loop runs -----------------------------------------
+                // A loop the front end built is the machine's: one pull per round, and the round
+                // after the last is the one whose pull answers null. How many rounds there were is
+                // therefore known only after the control ran, and a transpose has no tape to read
+                // -- a loop that came through `split` iterates one, which is the `iterates` form
+                // above and whose count is that array's length. So the control is run again, in a
+                // loop of its own: pull the same stream, count the pulls. `ReverseRoundCount` is
+                // where the two readings of that number stand side by side
+                // (`autodiff/pullback.h`): the pullback reads the residuals it recorded
+                // (`Source::TapeLength`), and this is the recomputation (`Source::Recomputed`).
+                const auto transaction   = rt::GraphTransaction::borrow(draft);
+                gc_node_ref_t firstRound = rt::kInvalidNodeRef;
+                if (!iterates) {
+                    // What the count depends on is what the condition reads. The counting loop
+                    // re-runs the pull and nothing else, so a condition that reads any other value
+                    // of the loop's state decides its rounds on values this recomputation does not
+                    // hold: recomputing those rounds means replaying the body, which this version
+                    // does not do. Such a loop is refused by name rather than answered with a count
+                    // that is not its own. A condition that reads only its own control -- the flag
+                    // the pull sets -- is exactly the control the loop above re-runs, and its
+                    // rounds are the pulls.
+                    uint32_t condRegionOld = 0;
+                    for (uint32_t r = 1; r < function->regionCount(); ++r) {
+                        const rt::GCRegion *part = function->region(r);
+                        if (part != nullptr && part->owner == ref &&
+                            part->kind == rt::GCRegionKind::LoopCond) {
+                            condRegionOld = r;
+                            break;
+                        }
+                    }
+                    if (condRegionOld != 0) {
+                        const auto condPorts = function->regionPorts(condRegionOld);
+                        bool readsAState     = false;
+                        for (const gc_node_ref_t inside : walkOrder) {
+                            if (function->nodeRegion(inside) != condRegionOld) {
+                                continue;
+                            }
+                            const auto norm = function->normInputsOf(inside);
+                            const auto with = function->withInputsOf(inside);
+                            for (size_t at = 0; at < condPorts.size() && !readsAState; ++at) {
+                                if (at == 1) {
+                                    continue;
+                                }
+                                const gc_node_ref_t port = condPorts[at];
+                                readsAState =
+                                    std::find(norm.begin(), norm.end(), port) != norm.end() ||
+                                    std::find(with.begin(), with.end(), port) != with.end();
+                            }
+                            if (readsAState) {
+                                break;
+                            }
+                        }
+                        if (readsAState) {
+                            refuse(TransposeRefusalCause::State);
+                            os << " node=" << ref << " origin=" << regionOrigin
+                               << " why=this-version-does-not-yet-recompute-the-rounds-of-a-loop-"
+                                  "whose-condition-reads-a-state\n";
+                            return false;
+                        }
+                    }
+                    const gc_node_ref_t streamValue =
+                        oldNorm.empty() ? rt::kInvalidNodeRef : forward(oldNorm.front());
+                    if (streamValue == rt::kInvalidNodeRef) {
+                        refuse(TransposeRefusalCause::Range);
+                        os << " node=" << ref << '\n';
+                        return false;
+                    }
+                    // The pull is the control's own call and it stands in the round, so the type it
+                    // answers with -- and the body that says what that call *is* -- are read from
+                    // the loop's body rather than spelled again here from a stream signature: this
+                    // is the same control, not a control like it. A call node that carries the
+                    // right type and no body of the control's answers a value of that type and
+                    // nothing more, so a pull built that way never answers null: it is a graph that
+                    // type-checks and does not iterate. The body has to come from the source call.
+                    Type *pullType           = nullptr;
+                    gc_node_ref_t sourcePull = rt::kInvalidNodeRef;
+                    for (const gc_node_ref_t candidate : walkOrder) {
+                        const camel::runtime::GCNode *const node = function->node(candidate);
+                        if (node == nullptr || function->nodeRegion(candidate) != bodyRegionOld ||
+                            node->kind != camel::runtime::GCNodeKind::Call) {
+                            continue;
+                        }
+                        pullType   = const_cast<Type *>(node->dataType());
+                        sourcePull = candidate;
+                        break;
+                    }
+                    // The pull answers an optional pair (`(T, S)?`): null says the stream is
+                    // over, and a pair says what the round read and what is left to read.
+                    const std::optional<size_t> pullArity =
+                        pullType != nullptr ? camel::core::type::tree::arity(pullType)
+                                            : std::nullopt;
+                    Type *const pairType =
+                        pullType != nullptr && pullArity.has_value() && *pullArity == 1
+                            ? camel::core::type::tree::childType(pullType, 0)
+                            : nullptr;
+                    const std::optional<size_t> pairArity =
+                        pairType != nullptr ? camel::core::type::tree::arity(pairType)
+                                            : std::nullopt;
+                    if (!pairArity.has_value() || *pairArity != 2) {
+                        refuse(TransposeRefusalCause::State);
+                        os << " node=" << ref << " origin=" << regionOrigin
+                           << " why=this-version-counts-the-rounds-of-a-loop-by-pulling-its-"
+                              "control\n";
+                        return false;
+                    }
+                    Type *const streamStateType =
+                        const_cast<Type *>(function->node(regionPorts.front())->dataType());
+                    const uint32_t countCondRegion = draft.addRegion(rt::GCRegionKind::LoopCond, 0);
+                    const uint32_t countBodyRegion = draft.addRegion(rt::GCRegionKind::LoopBody, 0);
+                    const gc_node_ref_t notOver    = draft.materializeStaticValue(
+                        camel::core::rtdata::toSlot<bool>(false),
+                        Type::Bool(),
+                        rt::kGCNodeFlagConstant);
+                    // The condition: one more round while the stream is not over. The flag is the
+                    // counting loop's own, so the test is `over == false` and no rule is asked for
+                    // a cotangent of it.
+                    std::vector<gc_node_ref_t> countPorts;
+                    draft.setInsertRegion(countCondRegion);
+                    for (Type *const type : {streamStateType, Type::Bool(), Type::Int64()}) {
+                        countPorts.push_back(
+                            draft.addPortNode(type, draft.allocateRuntimeSlot(type)));
+                    }
+                    draft.setRegionPorts(countCondRegion, countPorts);
+                    const std::array<gc_node_ref_t, 2> stillRunning{countPorts[1], notOver};
+                    const gc_node_ref_t condition =
+                        draft.addOperNode(Type::Bool(), nullptr, ":op/eq_b");
+                    draft.setNormInputs(
+                        condition,
+                        std::span<const gc_node_ref_t>(stillRunning.data(), stillRunning.size()));
+                    draft.setRegionResult(countCondRegion, condition);
+                    // The round is the control's own judgement, not an arithmetic step. The
+                    // pull answers an optional pair, so a round whose pull answered null has no
+                    // rest of the stream, and the forward loop keeps its stream and sets its flag
+                    // on exactly that round (`builder_control.cpp`, the two arms of
+                    // `buildStreamLoop`). So the round here is that branch -- over: keep the
+                    // stream; not over: take the rest out of the pair -- and either way it counts.
+                    // That is why this loop pulls once more than it has elements: the round that
+                    // reads null is a round, and the count is what the reverse pass starts from
+                    // once that one is taken off.
+                    std::vector<gc_node_ref_t> countBodyPorts;
+                    draft.setInsertRegion(countBodyRegion);
+                    for (Type *const type : {streamStateType, Type::Bool(), Type::Int64()}) {
+                        countBodyPorts.push_back(
+                            draft.addPortNode(type, draft.allocateRuntimeSlot(type)));
+                    }
+                    draft.setRegionPorts(countBodyRegion, countBodyPorts);
+                    const std::vector<Type *> machineTypes{
+                        streamStateType,
+                        Type::Bool(),
+                        Type::Int64()};
+                    Type *const countMachineType =
+                        camel::core::type::TupleType::create(machineTypes);
+                    // A round of the control reads the stream it was handed and nothing else, so
+                    // a source pull that is called with values is a control this walk cannot hand
+                    // over, and the count would be of another loop. Anything else is copied with
+                    // the body: the call's own kind and permissions are the control's, not this
+                    // version's to invent.
+                    const auto sourcePullArgs = function->normInputsOf(sourcePull);
+                    const auto *const sourcePullBody =
+                        function->nodeBodyAs<camel::runtime::GCCallBody>(sourcePull);
+                    if (sourcePullBody == nullptr || !sourcePullArgs.empty()) {
+                        refuse(TransposeRefusalCause::State);
+                        os << " node=" << ref << " origin=" << regionOrigin
+                           << " args=" << sourcePullArgs.size()
+                           << " why=this-version-counts-the-rounds-of-a-loop-by-pulling-a-control-"
+                              "that-is-called-with-values\n";
+                        return false;
+                    }
+                    const gc_node_ref_t pull            = draft.addCallNode(pullType);
+                    camel::runtime::GCCallBody pullBody = *sourcePullBody;
+                    std::vector<std::byte> pullBytes(sizeof(pullBody));
+                    std::memcpy(pullBytes.data(), &pullBody, sizeof(pullBody));
+                    const camel::runtime::DraftNodeHeader *const pullHeader = draft.header(pull);
+                    camel::runtime::DraftNodeInit pullInit;
+                    pullInit.dataIndex    = pullHeader->dataIndex;
+                    pullInit.dataType     = pullHeader->dataType;
+                    pullInit.kind         = pullHeader->kind;
+                    pullInit.runtimeFlags = pullHeader->runtimeFlags;
+                    pullInit.origin       = pullHeader->origin;
+                    pullInit.permissions  = pullHeader->permissions;
+                    pullInit.attrs        = pullHeader->attrs;
+                    pullInit.region       = pullHeader->region;
+                    pullInit.name         = pullHeader->name;
+                    pullInit.payload      = std::span<const std::byte>(pullBytes);
+                    pullInit.withInputs   = std::span<const gc_node_ref_t>(&countBodyPorts[0], 1);
+                    draft.rewriteNode(pull, pullInit);
+                    const gc_node_ref_t over =
+                        draft.addOperNode(Type::Bool(), nullptr, ":op/tag_is_null");
+                    draft.setNormInputs(over, std::span<const gc_node_ref_t>(&pull, 1));
+                    const std::array<gc_node_ref_t, 2> oneMorePull{
+                        countBodyPorts[2],
+                        intConstantNode(walkCtx, 1)};
+                    const gc_node_ref_t nextCount =
+                        draft.addOperNode(Type::Int64(), nullptr, ":op/add_l");
+                    draft.setNormInputs(
+                        nextCount,
+                        std::span<const gc_node_ref_t>(oneMorePull.data(), oneMorePull.size()));
+                    // The join and the branch name each other, so the join is made first without a
+                    // branch and its payload is written once the branch and its arms exist -- the
+                    // same order the transposed branch itself is built in, above in this file.
+                    const gc_node_ref_t countJoin = draft.addJoinNode(
+                        countMachineType,
+                        rt::kInvalidNodeRef,
+                        static_cast<rt::gc_cnt_t>(2));
+                    const gc_node_ref_t countBrch =
+                        draft.addBrchNode(Type::Int64(), countJoin, static_cast<rt::gc_cnt_t>(2));
+                    draft.setNormInputs(countBrch, std::span<const gc_node_ref_t>(&over, 1));
+                    // The round the stream is over: nothing more to read, so the stream stays as it
+                    // is and the flag says the stream is finished.
+                    const uint32_t overArm =
+                        draft.addRegion(rt::GCRegionKind::Arm, countBodyRegion, countBrch, 0);
+                    draft.setInsertRegion(overArm);
+                    const gc_node_ref_t keptStream =
+                        tupleOf({countBodyPorts[0], notOver, nextCount}, machineTypes).first;
+                    draft.setRegionResult(overArm, keptStream);
+                    // The round it is not: the pair holds the element -- which this loop has no use
+                    // for, since counting needs no values -- and the rest of the stream, which the
+                    // next round pulls from.
+                    const uint32_t movingArm =
+                        draft.addRegion(rt::GCRegionKind::Arm, countBodyRegion, countBrch, 1);
+                    draft.setInsertRegion(movingArm);
+                    const gc_node_ref_t answered =
+                        draft.addOperNode(pairType, nullptr, ":op/tag_unwrap");
+                    draft.setNormInputs(answered, std::span<const gc_node_ref_t>(&pull, 1));
+                    const gc_node_ref_t restOfStream = draft.addAccsNode(streamStateType, 1);
+                    draft.setNormInputs(restOfStream, std::span<const gc_node_ref_t>(&answered, 1));
+                    const gc_node_ref_t movedOn =
+                        tupleOf({restOfStream, notOver, nextCount}, machineTypes).first;
+                    draft.setRegionResult(movingArm, movedOn);
+                    draft.setInsertRegion(0);
+                    camel::runtime::GCJoinBody countJoinBody{};
+                    countJoinBody.brch     = countBrch;
+                    countJoinBody.armCount = static_cast<rt::gc_cnt_t>(2);
+                    std::vector<std::byte> countJoinBytes(sizeof(countJoinBody));
+                    std::memcpy(countJoinBytes.data(), &countJoinBody, sizeof(countJoinBody));
+                    const camel::runtime::DraftNodeHeader *const countJoinHeader =
+                        draft.header(countJoin);
+                    camel::runtime::DraftNodeInit countJoinInit;
+                    countJoinInit.dataIndex    = countJoinHeader->dataIndex;
+                    countJoinInit.dataType     = countJoinHeader->dataType;
+                    countJoinInit.kind         = countJoinHeader->kind;
+                    countJoinInit.runtimeFlags = countJoinHeader->runtimeFlags;
+                    countJoinInit.origin       = countJoinHeader->origin;
+                    countJoinInit.permissions  = countJoinHeader->permissions;
+                    countJoinInit.attrs        = countJoinHeader->attrs;
+                    countJoinInit.region       = countJoinHeader->region;
+                    countJoinInit.name         = countJoinHeader->name;
+                    countJoinInit.payload      = std::span<const std::byte>(countJoinBytes);
+                    countJoinInit.normInputs   = std::span<const gc_node_ref_t>(&countBrch, 1);
+                    const std::array<gc_node_ref_t, 2> armAnswers{keptStream, movedOn};
+                    countJoinInit.withInputs = armAnswers;
+                    draft.rewriteNode(countJoin, countJoinInit);
+                    draft.setRegionResult(countBodyRegion, countJoin);
+                    const gc_node_ref_t countLoop = draft.addLoopNode(
+                        rt::GCLoopBody{.kind = camel::core::LoopKind::While, .collectionCount = 0},
+                        countMachineType);
+                    const std::array<gc_node_ref_t, 3> countNorm{
+                        streamValue,
+                        notOver,
+                        intConstantNode(walkCtx, 0)};
+                    draft.setNormInputs(countLoop, std::span<const gc_node_ref_t>(countNorm));
+                    const gc_node_ref_t countRound =
+                        draft.addPortNode(Type::Int64(), draft.allocateRuntimeSlot(Type::Int64()));
+                    const std::array<gc_node_ref_t, 3> countWith{countJoin, condition, countRound};
+                    draft.setWithInputs(countLoop, std::span<const gc_node_ref_t>(countWith));
+                    draft.setRegionOwner(countCondRegion, countLoop, 0);
+                    draft.setRegionOwner(countBodyRegion, countLoop, 1);
+                    // The rounds the forward loop ran: the pulls minus the one that answered null.
+                    // A loop that ran no round pulls once, so this is zero and its reverse loop
+                    // runs no round either.
+                    const gc_node_ref_t counted = draft.addAccsNode(Type::Int64(), 2);
+                    draft.setNormInputs(counted, std::span<const gc_node_ref_t>(&countLoop, 1));
+                    const std::array<gc_node_ref_t, 2> withoutNull{
+                        counted,
+                        intConstantNode(walkCtx, 1)};
+                    const gc_node_ref_t rounds =
+                        draft.addOperNode(Type::Int64(), nullptr, ":op/sub_l");
+                    draft.setNormInputs(
+                        rounds,
+                        std::span<const gc_node_ref_t>(withoutNull.data(), withoutNull.size()));
+                    firstRound = camel::autodiff::reverseFirstRound(
+                        *transaction,
+                        camel::autodiff::ReverseRoundCount{
+                            .source = camel::autodiff::ReverseRoundCount::Source::Recomputed,
+                            .value  = rounds});
+                }
                 const uint32_t newRegion = draft.addRegion(rt::GCRegionKind::LoopBody, 0);
                 draft.setInsertRegion(newRegion);
                 // The body takes the round number first and the states after it; each state becomes
@@ -2835,11 +3139,14 @@ bool buildTransposeMember(
                 // value. The number is not differentiated (it comes from the range), so it keeps
                 // its type and goes unused by the rules.
                 std::vector<gc_node_ref_t> newPorts;
-                Type *const elementType =
-                    iterates ? Type::Int64() : function->node(regionPorts.front())->dataType();
-                const gc_node_ref_t elementPort =
-                    draft.addPortNode(elementType, draft.allocateRuntimeSlot(elementType));
-                newPorts.push_back(elementPort);
+                // The body's first port is the round number in both forms: the index the reverse
+                // loop counts down from. A loop that iterates a sequence reads its element at that
+                // number; a loop the front end built has no element to read, and the number is the
+                // whole of what the body gets from outside its states.
+                Type *const roundType = Type::Int64();
+                const gc_node_ref_t roundPort =
+                    draft.addPortNode(roundType, draft.allocateRuntimeSlot(roundType));
+                newPorts.push_back(roundPort);
                 // The round's element, read at the round's own number: `xs[round]` for an array and
                 // `a + round` for an interval. Both stand inside the body region, so the number
                 // they read is this round's. A rule that needs the round's own state still refuses
@@ -2847,7 +3154,7 @@ bool buildTransposeMember(
                 if (iterates) {
                     const gc_node_ref_t elementOfRound = [&]() -> gc_node_ref_t {
                         if (intervalForm) {
-                            const std::array<gc_node_ref_t, 2> at{intervalLower, elementPort};
+                            const std::array<gc_node_ref_t, 2> at{intervalLower, roundPort};
                             const gc_node_ref_t sum =
                                 draft.addOperNode(Type::Int64(), nullptr, ":op/add_l");
                             draft.setNormInputs(
@@ -2855,7 +3162,7 @@ bool buildTransposeMember(
                                 std::span<const gc_node_ref_t>(at.data(), at.size()));
                             return sum;
                         }
-                        const std::array<gc_node_ref_t, 2> at{sequence, elementPort};
+                        const std::array<gc_node_ref_t, 2> at{sequence, roundPort};
                         const gc_node_ref_t read = draft.addOperNode(
                             function->node(regionPorts.front())->dataType(),
                             nullptr,
@@ -2866,8 +3173,6 @@ bool buildTransposeMember(
                         return read;
                     }();
                     forwardOf[regionPorts.front()] = elementOfRound;
-                } else {
-                    forwardOf[regionPorts.front()] = elementPort;
                 }
                 // A state's cotangent port lives in the state's own tangent space: a loop that
                 // carries a `float[]` state pulls back an array, and a port typed `float` would
@@ -2887,7 +3192,7 @@ bool buildTransposeMember(
                 stateCotangentTypes.reserve(stateCount);
                 carriedStates.reserve(stateCount);
                 for (size_t i = 0; i < stateCount; ++i) {
-                    const size_t portIndex = 1 + i;
+                    const size_t portIndex = (iterates ? 1 : 2) + i;
                     // A state port this loop does not have is a count that disagrees with the
                     // region's ports -- the walk's own defect, not the program's -- so it refuses
                     // rather than reading a space off nothing.
@@ -3080,7 +3385,9 @@ bool buildTransposeMember(
                         }
                     }
                 }
-                std::vector<gc_node_ref_t> statePorts(regionPorts.begin() + 1, regionPorts.end());
+                std::vector<gc_node_ref_t> statePorts(
+                    regionPorts.begin() + (iterates ? 1 : 2),
+                    regionPorts.end());
                 // The seeds can stand in more than one region: a round's states are answered by
                 // the arms of a branch, and an arm is a region of its own, so the member a state
                 // takes its cotangent from is a node of the arm's region. The sweep that walks a
@@ -3149,7 +3456,7 @@ bool buildTransposeMember(
                 // also a value the body may have read -- an escape can land on one of them.
                 std::vector<gc_node_ref_t> stateInitials;
                 for (size_t i = 0; i < stateCount; ++i) {
-                    const size_t at = 1 + i;
+                    const size_t at = (iterates ? 1 : 2) + i;
                     stateInitials.push_back(
                         at < oldNorm.size() ? oldNorm[at] : rt::kInvalidNodeRef);
                 }
@@ -3258,8 +3565,8 @@ bool buildTransposeMember(
                     // zeros for an array.
                     const gc_node_ref_t part = i < back.size() ? back[i] : rt::kInvalidNodeRef;
                     regionParts.push_back(
-                        part == rt::kInvalidNodeRef && 1 + i < regionPorts.size()
-                            ? zeroOf(regionPorts[1 + i])
+                        part == rt::kInvalidNodeRef && (iterates ? 1 : 2) + i < regionPorts.size()
+                            ? zeroOf(regionPorts[(iterates ? 1 : 2) + i])
                             : part);
                     componentTypes.push_back(stateCotangentTypes[i]);
                 }
@@ -3286,6 +3593,21 @@ bool buildTransposeMember(
                     regionParts.push_back(accumulate(accType, accPort, entry.second.cotangent));
                     componentTypes.push_back(accType);
                 }
+                // The reverse loop counts its rounds in its own state, first, because that is the
+                // state its condition tests (`buildReverseCondRegion`): one more round while it is
+                // not negative. A loop that iterates a sequence already carries the round number as
+                // the element the sequence hands it, so it takes none of its own.
+                const size_t roundComponent = iterates ? 0 : 1;
+                if (!iterates) {
+                    const std::array<gc_node_ref_t, 2> step{roundPort, intConstantNode(walkCtx, 1)};
+                    const gc_node_ref_t previous =
+                        draft.addOperNode(Type::Int64(), nullptr, ":op/sub_l");
+                    draft.setNormInputs(
+                        previous,
+                        std::span<const gc_node_ref_t>(step.data(), step.size()));
+                    regionParts.insert(regionParts.begin(), previous);
+                    componentTypes.insert(componentTypes.begin(), Type::Int64());
+                }
                 gc_node_ref_t regionResult = regionParts.front();
                 Type *loopType             = componentTypes.front();
                 if (regionParts.size() > 1) {
@@ -3309,6 +3631,26 @@ bool buildTransposeMember(
                     }(),
                     loopType);
                 draft.setRegionOwner(newRegion, loopNode, function->region(bodyRegionOld)->index);
+                // The reverse loop states its own condition (`buildReverseCondRegion`, shared with
+                // the pullback): one more round while the round index -- the first of its states --
+                // is not negative. A loop that iterates a sequence asks nothing: its form carries
+                // no condition, and its rounds are the elements the sequence handed it.
+                uint32_t condRegion = 0;
+                if (!iterates) {
+                    condRegion = draft.addRegion(rt::GCRegionKind::LoopCond, 0);
+                    // The condition reads the loop's own states, in the order the loop passes them:
+                    // the round first (`regionParts` was opened with `round - 1`), then one value
+                    // per component. So its ports are exactly the types of those states -- the
+                    // round is already the first of them, and is not added again here.
+                    std::vector<Type *> reverseStateTypes(
+                        componentTypes.begin(),
+                        componentTypes.end());
+                    camel::autodiff::buildReverseCondRegion(
+                        *transaction,
+                        condRegion,
+                        reverseStateTypes);
+                    draft.setRegionOwner(condRegion, loopNode, 0);
+                }
                 draft.setNodeOrigin(
                     loopNode,
                     static_cast<uint32_t>(function->region(bodyRegionOld)->origin));
@@ -3319,6 +3661,10 @@ bool buildTransposeMember(
                 // round number instead, so it is not a norm input of this loop at all.
                 if (iterates) {
                     loopNorm.push_back(backwardsRange);
+                } else {
+                    // Where the reverse pass starts: the last round the forward loop ran, counted
+                    // again by the loop above (`rounds - 1`, said once in `reverseFirstRound`).
+                    loopNorm.push_back(firstRound);
                 }
                 // One seed per state: the cotangent the loop's value carried for that state. With
                 // one state that is the whole cotangent of the loop's value; with several it is the
@@ -3360,7 +3706,7 @@ bool buildTransposeMember(
                     // is a component of the loop's value like any other, so its zero is the zero of
                     // that component's own cotangent space (`componentTypes`, which the answer's
                     // components were typed from).
-                    const size_t componentAt = carriedCount + i;
+                    const size_t componentAt = roundComponent + carriedCount + i;
                     Type *const componentType =
                         componentAt < componentTypes.size() ? componentTypes[componentAt] : nullptr;
                     gc_node_ref_t componentZero =
@@ -3373,12 +3719,24 @@ bool buildTransposeMember(
                 draft.setNormInputs(loopNode, std::span<const gc_node_ref_t>(loopNorm));
                 // The With inputs of a loop are the results of its parts and its round: the round
                 // is a value of its own, and the body's state port is what the previous round left.
-                const gc_node_ref_t roundValue = draft.materializeStaticValue(
-                    camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(0),
-                    Type::Int64(),
-                    rt::kGCNodeFlagConstant);
-                const std::array<gc_node_ref_t, 2> loopWith{regionResult, roundValue};
-                draft.setWithInputs(loopNode, std::span<const gc_node_ref_t>(loopWith));
+                // A loop with a condition part lists it between the two (`loop.cpp`,
+                // `LoopView::bodyResult` / `condResult` / `roundPort`).
+                if (condRegion == 0) {
+                    const gc_node_ref_t roundValue = draft.materializeStaticValue(
+                        camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(0),
+                        Type::Int64(),
+                        rt::kGCNodeFlagConstant);
+                    const std::array<gc_node_ref_t, 2> loopWith{regionResult, roundValue};
+                    draft.setWithInputs(loopNode, std::span<const gc_node_ref_t>(loopWith));
+                } else {
+                    const gc_node_ref_t roundSlot =
+                        draft.addPortNode(Type::Int64(), draft.allocateRuntimeSlot(Type::Int64()));
+                    const std::array<gc_node_ref_t, 3> loopWith{
+                        regionResult,
+                        draft.region(condRegion).result,
+                        roundSlot};
+                    draft.setWithInputs(loopNode, std::span<const gc_node_ref_t>(loopWith));
+                }
                 if (carries || carriedCount > 1 || componentTypes.size() > 1) {
                     // The loop's value is one cotangent per state followed by one sum per escaped
                     // value, so each component goes where its own value's cotangent goes: a state's
@@ -3400,12 +3758,12 @@ bool buildTransposeMember(
                         }
                         addCotangent(
                             stateInitials[i],
-                            component(static_cast<uint32_t>(stateComponent[i])));
+                            component(static_cast<uint32_t>(roundComponent + stateComponent[i])));
                     }
                     for (size_t i = 0; i < caught.size(); ++i) {
                         addCotangent(
                             caught[i].first,
-                            component(static_cast<uint32_t>(carriedCount + i)));
+                            component(static_cast<uint32_t>(roundComponent + carriedCount + i)));
                     }
                 } else {
                     // One carried component and nothing escaped: the loop's value is that state's
