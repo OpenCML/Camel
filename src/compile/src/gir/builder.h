@@ -2134,17 +2134,6 @@ class Builder {
     /// resolution, which is where they are consumed.
     camel::core::type::type_vec_t explicitTypesOf(node_handle_t target) const;
 
-    /// The entry `resolveGroupedCall` selects for the call at `target` with these arguments, or
-    /// nullptr when that resolution has no single answer — the same conditions the call itself is
-    /// refused under, so a caller reading a `with` parameter learns nothing this call would not
-    /// already say. The explicit type arguments are only read here: the call's own resolution
-    /// consumes them, and this question is asked before it.
-    FunctionType *selectOverloadFor(
-        node_handle_t target, const std::vector<Argument> &withInputs,
-        const std::vector<Argument> &normInputs,
-        const camel::core::type::type_vec_t &withInputTypes,
-        const camel::core::type::type_vec_t &normInputTypes);
-
     std::optional<oper_idx_ptr_t> resolveGroupedCall(
         const oper_group_ptr_t &ops, const camel::core::type::type_vec_t &explicitTypes,
         Type *expectedResult, const camel::core::type::type_vec_t &withTypes,

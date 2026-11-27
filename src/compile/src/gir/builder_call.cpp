@@ -95,32 +95,6 @@ Builder::CallResolutionInputs Builder::takeCallResolutionInputs(
     return inputs;
 }
 
-FunctionType *Builder::selectOverloadFor(
-    node_handle_t target, const std::vector<Argument> &withInputs,
-    const std::vector<Argument> &normInputs, const type_vec_t &withInputTypes,
-    const type_vec_t &normInputTypes) {
-    const auto &selected = nodeGraphOf(target)->drefTarget(target);
-    if (!std::holds_alternative<oper_group_ptr_t>(selected)) {
-        return nullptr;
-    }
-    const oper_group_ptr_t &ops = std::get<oper_group_ptr_t>(selected);
-    std::vector<std::pair<std::string, std::string>> unmet;
-    std::vector<std::string> ambiguous;
-    auto chosen = resolveGroupedCall(
-        ops,
-        explicitTypesOf(target),
-        expectedValueType_,
-        withInputTypes,
-        normInputTypes,
-        callStaticsFor(withInputs, normInputs),
-        unmet,
-        &ambiguous,
-        &withInputs);
-    if (!chosen.has_value() || *chosen == nullptr) {
-        return nullptr;
-    }
-    return (*chosen)->funcType();
-}
 
 node_handle_t
 Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::AssignmentForm> store) {
@@ -697,24 +671,100 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
         // over a `Range` is that case: the range entry declares `with <f: (item: int) => void>`,
         // and the signature the arguments got is the array entry's `with <f: (item: T) => void>`,
         // whose `T` a `Range` says nothing about, so the lambda's parameter had no type to take.
-        // The ordinary arguments are typed by now, so the entry they select is known: ask the
-        // resolution the call itself goes through for it (`selectOverloadFor`) and read that
-        // entry's `with` parameter at this position. A set the resolution cannot decide selects
-        // nothing, and nothing is what this position then gets (design principles 5.9).
+        // The ordinary arguments are typed by now, so the entries they fit are known: read this
+        // position's `with` parameter from each of them and keep it as the one reading when they
+        // agree. A set whose fitting entries disagree selects nothing, and nothing is what this
+        // position then gets (design principles 5.9). The group's resolution cannot answer this
+        // here: for a name the built-in layer also declares (`foreach` over a `Range`), the entry
+        // that fits is one of those declarations, and the group does not hold it.
         const auto withParameterOfSelectedEntry = [&](size_t index) -> Type * {
             if (!nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
                 return nullptr;
             }
-            FunctionType *entry = selectOverloadFor(
-                targetNode,
-                withInputs,
-                normInputs,
-                withInputTypes,
-                normInputTypes);
-            if (entry == nullptr || entry->withTypesCount() <= index) {
-                return nullptr;
+            // The entries of the set this call is resolved against: the rules of the name's
+            // operator group and the functions the built-in layer declares under the same
+            // spelling, which `operatorOverloads_` keeps as one set for this name
+            // (`builtinLayerNamed`). `foreach` over a `Range` is the prelude's function beside the
+            // array's rule, and the group alone does not hold it.
+            std::vector<FunctionType *> entries;
+            const auto takeResolver = [&](const oper_group_ptr_t &group) {
+                if (group == nullptr) {
+                    return;
+                }
+                for (const auto &[uri, resolver] : group->resolvers()) {
+                    if (resolver == nullptr) {
+                        continue;
+                    }
+                    FunctionType *fixed = resolver->fixedSignature();
+                    if (fixed == nullptr) {
+                        fixed = resolver->declaredSignature();
+                    }
+                    if (fixed == nullptr) {
+                        fixed = resolver->graftedSignature();
+                    }
+                    if (fixed != nullptr) {
+                        entries.push_back(fixed);
+                    }
+                }
+            };
+            if (const auto set = operatorOverloads_.find(targetNode);
+                set != operatorOverloads_.end()) {
+                takeResolver(set->second.ops);
+                for (const auto &graph : set->second.graphs) {
+                    if (graph != nullptr && graph->funcType() != nullptr) {
+                        entries.push_back(graph->funcType());
+                    }
+                }
+                for (const auto &tmpl : set->second.templates) {
+                    if (tmpl != nullptr && tmpl->funcType != nullptr) {
+                        entries.push_back(tmpl->funcType);
+                    }
+                }
+            } else {
+                const auto &selected = nodeGraphOf(targetNode)->drefTarget(targetNode);
+                if (!std::holds_alternative<oper_group_ptr_t>(selected)) {
+                    return nullptr;
+                }
+                takeResolver(std::get<oper_group_ptr_t>(selected));
             }
-            return entry->withTypeAt(index);
+            Type *found = nullptr;
+            for (FunctionType *fixed : entries) {
+                if (fixed == nullptr || fixed->hasRest() || fixed->hasWithRest()) {
+                    continue;
+                }
+                if (fixed->normTypesCount() != normInputTypes.size() ||
+                    fixed->withTypesCount() <= index) {
+                    continue;
+                }
+                bool fits = true;
+                for (size_t at = 0; at < normInputTypes.size() && fits; ++at) {
+                    Type *parameter = fixed->normTypeAt(at);
+                    fits            = parameter != nullptr && normInputTypes[at] != nullptr &&
+                                      parameter->assignableFrom(normInputTypes[at]);
+                }
+                if (!fits) {
+                    continue;
+                }
+                Type *candidate = fixed->withTypeAt(index);
+                // The parameter is usable as a position when the types it is built from are known
+                // (`usableExpected`): a function type whose parameters are written and whose
+                // result is still a variable is one of those, because the lambda's body is what
+                // decides the result (`completeLambdaSignature`). `map::<U>(r: Range)` declares
+                // exactly that, `with <f: (item: int) => U>`; refusing it left the position open
+                // for a name whose own entry types the parameter.
+                if (candidate == nullptr ||
+                    !usableExpected(substituteTypeVars(candidate, bindings))) {
+                    // A parameter the entry still leaves open says nothing this position can be
+                    // built with; the signature's own reading is the one that stands.
+                    continue;
+                }
+                candidate = substituteTypeVars(candidate, bindings);
+                if (found != nullptr && !found->equals(candidate)) {
+                    return nullptr; // the entries the call fits disagree: nothing to give
+                }
+                found = candidate;
+            }
+            return found;
         };
         // A value that is not a function (the initial value of a reduction, a shape literal)
         // can be built before the function is: its own type binds the variables the signature
