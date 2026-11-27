@@ -1,0 +1,50 @@
+{
+  "kind": "promotion",
+  "promotion": 66,
+  "tip": "2b00e682f7acb52e648720765deb0f7c1218ce14",
+  "measured_tip": "2b00e682f7acb52e648720765deb0f7c1218ce14",
+  "pushed_develop_sha": "2b00e682f7acb52e648720765deb0f7c1218ce14",
+  "note": "the layer was measured at 2b00e682f7 and develop advances to that same tip: the reading and the pushed commit are one; the tip moved three merges further while the layer ran, and those arrivals are covered by the next layer, not this one",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout; load 1m 60.09 at the start of the run, 39.31 after it",
+  "binary_built": "2026-11-28T05:28:37+08:00",
+  "readings": {
+    "total": 9867,
+    "pass": 9658,
+    "fail": 148,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 2,
+    "load_before": "1m 60.09, 5m 46.22, 15m 38.87",
+    "load_after": "1m 39.31, 5m 38.41, 15m 38.95",
+    "load_warning": "1m load 39.31 > 8 -- readings taken now are not comparable to quiet-host readings"
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-26-reds.tsv (the twenty-sixth promotion, 149 names)",
+    "method": "the two red sets compared by case name: a name the previous table had red and this reading does not is counted as turned green; a name this reading has and the previous table did not is counted as new",
+    "still_red": 148,
+    "turned_green": 1,
+    "turned_green_names": [
+      "frontend.ast_record"
+    ],
+    "new_reds": 0,
+    "new_reds_names": [],
+    "arithmetic": "149 names before: 1 turned green, 0 vanished, 0 appeared, 148 remain red; 148 = this reading red case names",
+    "notes": [
+      "no new red: the four foreach_lambda names the sixty-fifth promotion carried are green, and fault_deep.prl_off passed in this layer on its own, so the known-flaky allowance was not needed",
+      "the load warning is recorded as read; the decision that a promotion does not wait on load is D-1128-36"
+    ]
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-66-reds.tsv",
+  "red_table_rows": 148,
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-66-reds.tsv",
+  "new_red_names": [],
+  "pushed_as": "develop, fast-forwarded from a6ff436b95 to 2b00e682f7 (the tip the layer was measured at)",
+  "develop_before": "a6ff436b95a66b8436279c782fd13046947b378b",
+  "develop_after": "2b00e682f7acb52e648720765deb0f7c1218ce14",
+  "commits_brought_in": 174,
+  "commits_touching_src": 39
+}
