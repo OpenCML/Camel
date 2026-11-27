@@ -269,7 +269,7 @@ def environment() -> dict:
 
 def run(program: Path, passes: list[str], args: list[str] | None = None,
         cpu_time: bool = False) -> dict:
-    command = [camel_exe(), "-t", "1", "--spaces block_mb=", "8192", str(program), *passes]
+    command = [camel_exe(), "-t", "1", "--spaces", "block_mb=8192", str(program), *passes]
     command += args if args is not None else ["--arg", "bench=false", "--arg", "init_dir=",
                                               "--arg", "final_dir="]
     if cpu_time:
