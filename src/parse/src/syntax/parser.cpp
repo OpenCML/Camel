@@ -1250,17 +1250,18 @@ void ParserImpl::parseTypeDeclRest(size_t m) {
     close(m, NK::TypeDecl);
 }
 
-/// resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered' | 'readonly')?
+/// resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents
+///   | ('unordered' | 'idempotent' | 'overwriting' | 'readonly' | 'observed')*)?
 ///
 /// A resource declaration (design effects plan 3.1, design principles 3.3): `resource fs` names
 /// an ambient resource of the module, `resource io = [console, fs]` a group of resources and other
-/// groups, and `resource net unordered` says the accesses of a call may be reordered (step 8
-/// gives that meaning). `resource graph readonly` says the resource is only ever read, so it
-/// conflicts with no access and orders none (design principles 9.12: reading a graph is an effect,
-/// and nothing writes the graph it reads); what `uses var` on such a resource means is the
-/// semantic layer's business. One modifier stands after the name, not a list of them.
-/// `resource`, `unordered` and `readonly` are contextual: they are not reserved words, and a
-/// declaration starts with `resource` only when a name follows it.
+/// groups, and the words after a single name are the modifiers of the resource -- `unordered`,
+/// `idempotent`, `overwriting`, `readonly`, `observed` -- which say which equalities an access to
+/// it satisfies (design principles 3.3, "资源修饰词说明写满足哪些等式"). They are written in any
+/// order and may be combined; a combination that cannot hold of one resource is reported by the
+/// semantic layer at the declaration, not here, so the parser accepts the words and nothing more.
+/// `resource` and the five words are contextual: they are not reserved words, and a declaration
+/// starts with `resource` only when a name follows it.
 void ParserImpl::parseResourceDecl() {
     const size_t m = mark();
     eat(TK::KwExport);
@@ -1271,10 +1272,15 @@ void ParserImpl::parseResourceDecl() {
         // `=`: `parseBracketedIdents` asks for the bracket and reports it when it is not there,
         // rather than taking whatever token stands there.
         parseBracketedIdents(TK::RBracket, NK::BracketIdents);
-    } else if (atWord(0, "unordered")) {
-        bump();
-    } else if (atWord(0, "readonly")) {
-        bump();
+    } else {
+        for (;;) {
+            if (atWord(0, "unordered") || atWord(0, "idempotent") || atWord(0, "overwriting") ||
+                atWord(0, "readonly") || atWord(0, "observed")) {
+                bump();
+                continue;
+            }
+            break;
+        }
     }
     close(m, NK::ResourceDecl);
 }

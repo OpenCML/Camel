@@ -1,0 +1,13 @@
+// A resource cannot be both `unordered` and `overwriting` (design principles 3.3, the combinations
+// the resource effect system refuses): `unordered` says two writes to it may be swapped, and
+// `overwriting` says that of two writes only the later one is left. Both together force the two
+// writes to be equal, whatever values the program writes, so the declaration promises something no
+// resource can keep. The declaration is refused where it is written
+// (UnorderedOverwritingResource).
+
+resource cell_v unordered overwriting
+
+func main() => int {
+    println(42)
+    return 0
+}

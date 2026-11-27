@@ -92,8 +92,11 @@ The other way round, `func` and `type` among the position names are reserved wor
 | Type and pattern positions | `error` | in a `case` pattern of a `match`: the error taken out of a failed `T!`, written as the two words `error e` |
 | Type and pattern positions | `fields` | in the head of a `static for` or a `static loop`: the `fields` after `in` (a type follows, and it walks names, types and tags) |
 | Type and pattern positions | `indices` | in the same head: the `indices` after `in` (a value follows, and it walks the positions of its elements) |
-| Type and pattern positions | `unordered` | in a resource declaration, after the name: `unordered` (`resource net unordered`: the effects on it keep no written order) |
+| Type and pattern positions | `unordered` | in a resource declaration, after the name: `unordered` (`resource net unordered`: a write commutes with another write, and a read still keeps its order against a write) |
+| Type and pattern positions | `idempotent` | in a resource declaration, after the name: `idempotent` (`resource cache idempotent`: the same write made twice equals once) |
+| Type and pattern positions | `overwriting` | in a resource declaration, after the name: `overwriting` (`resource sink overwriting`: a later write overwrites an earlier one) |
 | Type and pattern positions | `readonly` | in a resource declaration, after the name: `readonly` (`resource graph readonly`: it is only ever read, so it conflicts with no access and orders none; `uses var` on it is a type error) |
+| Type and pattern positions | `observed` | in a resource declaration, after the name: `observed` (`resource trace observed`: writes only, and in the semantics nothing at all -- it is not in the resource set of a function and orders nothing, yet a pass may neither drop nor merge it and the program cannot read it) |
 | Tag position names | `field` | after the `on` of a tag declaration: the tag holds for a struct field |
 | Tag position names | `nodes` | after the `on` of a tag declaration: the tag holds for the nodes written lexically in a region |
 | Tag position names | `param` | after the `on` of a tag declaration: the tag holds for a function parameter |

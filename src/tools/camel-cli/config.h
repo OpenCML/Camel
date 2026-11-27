@@ -35,7 +35,7 @@ extern std::string format;
 extern std::string color;
 /// --max-errors <n>: compile errors reported before the compiler gives up (0: no limit).
 extern int maxErrors;
-/// -N / --max-warning <n>: warnings shown (the rest are counted, not printed).
+/// --max-warnings <n>: warnings shown (the rest are counted, not printed).
 extern int maxWarnings;
 /// The -W... arguments in command-line order, without the leading "-W".
 extern std::vector<std::string> warningSpecs;
@@ -77,9 +77,9 @@ extern int maxThreads;
 extern size_t maxRecursionDepth;
 extern size_t maxMacroDepth;
 extern size_t maxMacroRounds; // --max-macro-rounds
-/// --block-limit <megabytes>: the limit of the data-block space, "" when absent.
+/// --spaces block_mb=<megabytes>: the limit of the data-block space, "" when absent.
 extern std::string blockLimitOpt;
-/// --graph-gc-mb <megabytes>: the floor of the graph-space collection, "" when absent.
+/// --gc graph_mb=<megabytes>: the floor of the graph-space collection, "" when absent.
 extern std::string graphGcMbOpt;
 /// --native-stack-guard <on|off>: the checks of the native stack; "" (on) when absent.
 extern std::string nativeStackGuardOpt;
@@ -95,7 +95,6 @@ namespace Check {
 extern bool lexical;               // Whether to check lexical errors
 extern bool syntaxOnly;            // Whether to check syntax only
 extern bool ignoreDefiFile;        // Whether to ignore the definition file
-extern std::string outputFormat;   // Output format (default to JSON)
 extern std::string configFilePath; // Configuration file path
 } // namespace Check
 

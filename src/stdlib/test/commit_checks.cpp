@@ -1639,8 +1639,8 @@ ValueRetypeTwiceTestPass::apply(const camel::runtime::Program *program, std::ost
         return program;
     }
     sem::ResourceSignature second = first;
-    second.ambient.push_back(sem::ResourceSignature::AmbientUse{
-        .name = "retype_twice", .mode = sem::AccessMode::Write, .unordered = false});
+    second.ambient.push_back(
+        sem::ResourceSignature::AmbientUse{.name = "retype_twice", .mode = sem::AccessMode::Write});
     const bool differs = !(first == second);
 
     RuntimeGraphDraftSession session(context_, program);

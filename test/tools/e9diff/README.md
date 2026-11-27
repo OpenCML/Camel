@@ -66,7 +66,7 @@ Pipelines (`p00`..`p10`): no pass; `std::macro`; `std::macro` plus the first k o
 `devirtualize specialize inline fold cse algebra dce order`, each as its own `std::cxx::<name>`
 pass (one round of `simplifyGraph`, `order` last); and `std::macro std::opt` (the integrated
 fixpoint). Back ends: `std::nvm`, `std::fvm`, `std::jit`, `std::prl`, each under `--gc
-generational` and `--gc mark-sweep`, plus `std::cpp` (translated by `camel ... std::cpp`, built by
+generational` and `--gc kind=mark-sweep`, plus `std::cpp` (translated by `camel ... std::cpp`, built by
 the C++ compiler through `test/tools/cppexec/run.py`, run with no collector).
 
 | Outcome | Class | Why |

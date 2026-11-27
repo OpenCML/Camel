@@ -573,8 +573,11 @@ NodeResources Resolver::oper(const GCGraph &graph, gc_node_ref_t ref) const {
         r.declared = fromValue.declared;
     }
     for (const sem::ResourceAccess &access : spec.accesses) {
-        NodeAccess a{.resource = access.resource, .mode = access.mode, .region = access.region};
-        a.unordered = access.unordered;
+        NodeAccess a{
+            .resource  = access.resource,
+            .mode      = access.mode,
+            .region    = access.region,
+            .modifiers = access.modifiers};
         switch (access.binding.kind) {
         case sem::ResourceBinding::Kind::Norm:
             a.value =
@@ -644,7 +647,7 @@ NodeResources Resolver::fromFunctionOperand(
                 NodeAccess{
                     .resource  = {.cls = ResourceClass::Ambient, .name = use.name},
                     .mode      = use.mode,
-                    .unordered = use.unordered,
+                    .modifiers = use.modifiers,
                 });
         }
         for (ResourceClass cls : signature.anyOf) {
@@ -773,7 +776,7 @@ NodeResources Resolver::fromSignature(
             NodeAccess{
                 .resource  = {.cls = ResourceClass::Ambient, .name = use.name},
                 .mode      = use.mode,
-                .unordered = use.unordered,
+                .modifiers = use.modifiers,
             });
     }
     for (ResourceClass cls : signature.anyOf) {
@@ -845,7 +848,7 @@ NodeResources Resolver::fromSignature(
                         NodeAccess{
                             .resource  = {.cls = ResourceClass::Ambient, .name = use.name},
                             .mode      = use.mode,
-                            .unordered = use.unordered,
+                            .modifiers = use.modifiers,
                         });
                 }
                 for (ResourceClass cls : captured.anyOf) {
@@ -1389,13 +1392,13 @@ sem::ResourceSignature signatureOfFootprint(const GraphFootprint &footprint, siz
                 });
             if (same == signature.ambient.end()) {
                 sem::ResourceSignature::AmbientUse use{
-                    .name = access.resource.name,
-                    .mode = access.mode};
-                use.unordered = access.unordered;
+                    .name      = access.resource.name,
+                    .mode      = access.mode,
+                    .modifiers = access.modifiers};
                 signature.ambient.push_back(use);
             } else {
                 same->mode      = sem::uniteAccess(same->mode, access.mode);
-                same->unordered = same->unordered || access.unordered;
+                same->modifiers = sem::uniteModifiers(same->modifiers, access.modifiers);
             }
             continue;
         }
@@ -1756,7 +1759,7 @@ widened(const sem::ResourceSignature &declared, const sem::ResourceSignature &bo
             wider.ambient.push_back(use);
         } else {
             same->mode      = sem::uniteAccess(same->mode, use.mode);
-            same->unordered = same->unordered || use.unordered;
+            same->modifiers = sem::uniteModifiers(same->modifiers, use.modifiers);
         }
     }
     std::sort(wider.ambient.begin(), wider.ambient.end(), [](const auto &a, const auto &b) {
@@ -2202,8 +2205,14 @@ void forEachUnorderedPair(
                         if (!conflict) {
                             continue;
                         }
-                        if (table.of(first).accesses[conflict.accessA].unordered ||
-                            table.of(second).accesses[conflict.accessB].unordered) {
+                        // Whether the two may be ordered either way is the resource declaration's
+                        // answer, asked once (`sem::commute`): `unordered` lets a write swap with a
+                        // write, and a read is ordered against a write whatever the resource
+                        // grants.
+                        const NodeAccess &accessA = table.of(first).accesses[conflict.accessA];
+                        const NodeAccess &accessB = table.of(second).accesses[conflict.accessB];
+                        if (sem::commute(accessA.modifiers, accessA.mode, accessB.mode) &&
+                            sem::commute(accessB.modifiers, accessB.mode, accessA.mode)) {
                             continue; // the declaration promises the order does not matter
                         }
                         if (orderedBefore(graph, x.stands, y.stands) ||

@@ -1030,12 +1030,45 @@ node_ptr_t Builder::visitResourceDecl(const AST::node_ptr_t &ast) {
     ENTER("ResourceDecl");
     const auto decl = ast->loadAs<AST::ResourceDeclLoad>();
     camel::core::module::Module::ResourceDecl resource;
-    resource.unordered = decl->unordered();
-    resource.readonly  = decl->readonly();
+    resource.modifiers.unordered   = decl->unordered();
+    resource.modifiers.idempotent  = decl->idempotent();
+    resource.modifiers.overwriting = decl->overwriting();
+    resource.modifiers.readonly    = decl->readonly();
+    resource.modifiers.observed    = decl->observed();
     for (const Reference &member : decl->members()) {
         resource.members.push_back(member);
     }
     const std::string name = decl->ref().toString();
+    // A combination of words no resource can hold is refused where it is written (design principles
+    // 3.3: the combinations the resource effect system refuses). The check is `conflictOf`'s, the
+    // same one every reader of a record goes through; this is the one place a program is told about
+    // it.
+    switch (sem::conflictOf(resource.modifiers)) {
+    case sem::ResourceModifierConflict::None:
+        break;
+    case sem::ResourceModifierConflict::UnorderedOverwriting: {
+        diags_->of(SemanticDiag::UnorderedOverwritingResource)
+            .at(ast->load()->tokenRange())
+            .commit(name);
+        throw BuildAbortException();
+    }
+    case sem::ResourceModifierConflict::ReadonlyWritten: {
+        const auto words =
+            sem::conflictWords(resource.modifiers, sem::ResourceModifierConflict::ReadonlyWritten);
+        diags_->of(SemanticDiag::ReadonlyWriteModifier)
+            .at(ast->load()->tokenRange())
+            .commit(name, words.second);
+        throw BuildAbortException();
+    }
+    case sem::ResourceModifierConflict::ObservedReadonly: {
+        const auto words =
+            sem::conflictWords(resource.modifiers, sem::ResourceModifierConflict::ObservedReadonly);
+        diags_->of(SemanticDiag::ObservedReadonlyResource)
+            .at(ast->load()->tokenRange())
+            .commit(name);
+        throw BuildAbortException();
+    }
+    }
     if (module_->resource(decl->ref()) != nullptr) {
         // One name, one resource (design principles 10.2: a name is declared once in a scope).
         diags_->of(SemanticDiag::Redeclaration).at(ast->load()->tokenRange()).commit(name);
@@ -1103,11 +1136,10 @@ bool Builder::resolveAmbientResource(
                             // A `resource` declaration is state outside the program; a module's
                             // `var` is a cell only the program observes (design principles 3.3).
                             .external = !decl->variable,
-                            // `resource net unordered`: the effects on it keep no written order.
-                            .unordered = decl->unordered,
-                            // `resource graph readonly`: no clause may write it (design principles
-                            // 9.12, 15.5), which resourceSignatureOf refuses.
-                            .readonly = decl->readonly});
+                            // The words the declaration wrote: how the effects on the resource may
+                            // be ordered follows from them, and a clause may write a `readonly`
+                            // resource never (design principles 9.12, 15.5).
+                            .modifiers = decl->modifiers});
                     return true;
                 }
                 for (const Reference &member : decl->members) {
@@ -1342,7 +1374,7 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
                     .commit(sem::resourceDisplayName(entry.key), clause->geneCode());
                 throw BuildAbortException();
             }
-            if (entry.readonly && use.write) {
+            if (entry.modifiers.readonly && use.write) {
                 // A read-only resource is only ever read (design principles 9.12, 15.5): the graph
                 // a function is and the spelling of a name are values nothing that runs writes, so
                 // no clause can declare a write of one. The refusal names the resource and the
@@ -1362,14 +1394,14 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
                 known->mode = sem::uniteAccess(
                     known->mode,
                     use.write ? sem::AccessMode::ReadModifyWrite : sem::AccessMode::Read);
-                known->unordered = known->unordered || entry.unordered;
+                known->modifiers = sem::uniteModifiers(known->modifiers, entry.modifiers);
                 continue;
             }
             ambientUses.push_back(
                 sem::ResourceSignature::AmbientUse{
                     .name = entry.key,
                     .mode = use.write ? sem::AccessMode::ReadModifyWrite : sem::AccessMode::Read,
-                    .unordered = entry.unordered});
+                    .modifiers = entry.modifiers});
         }
     }
     std::sort(signature.params.begin(), signature.params.end(), [](const auto &a, const auto &b) {

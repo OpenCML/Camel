@@ -855,7 +855,7 @@ function emitDoc(entries, tests, root, pins) {
         out.push(
             entry.fix === 'edit'
                 ? 'A machine-applicable edit is attached where the report knows the text to write: ' +
-                      '`data.fixes` of `--error-format json` carries the range and the replacement.'
+                      '`data.fixes` of `--diag-format json` carries the range and the replacement.'
                 : `None: ${entry.fix.slice('none:'.length).trim()}`
         )
         out.push('')

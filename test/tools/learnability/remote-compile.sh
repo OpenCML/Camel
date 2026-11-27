@@ -40,7 +40,7 @@ for f in *.cml; do
 # would be taken from the wrong field. The trailing newline is added to the value, and the
 # comparison trims it, so the compiler's bytes are still what is judged.
     echo "@@@TASK $id"
-    "$CAMEL_BIN" "$f" --output-format json > "$id.stdout" 2> "$id.stderr"
+    "$CAMEL_BIN" "$f" --diag-format json > "$id.stdout" 2> "$id.stderr"
     code=$?
     echo "@@@EXIT"
     echo "$code"

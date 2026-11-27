@@ -127,3 +127,85 @@ test/cases/consistency/faults/mod_zero_in_function.cml
 
 > 一句话：**这 531 条里一半以上是"记录没跟上改写"，不是"程序坏了"**；真正需要动代码的，最大一处是
 > `src/stdlib/prelude.cml:1229` 的 `range_from`，其次是一批逐用例的编译期判断。
+## 附：第 3 类（84 条“用例自带校验脚本 exit 1”）的分类读数
+
+取数：`D:\Temp\t122\fail\**` 里已落盘的 `meta.json.failures[]`（脚本自己那一句就在 `verification output:` 段，不用翻日志）。
+
+**84 条是怎么来的**：531 里带 `verification` 记录 100 条、脚本退出非 0 共 88 条；88 减 4 条首行为
+`expected diagnostic RuntimeDiag::…`（属“诊断位置过期”）后得 84，落 26 个计划 —— 与该页第 3 类的 `84 / 26` 对上。
+
+| 类 | 条数 | 判据 |
+|---|---|---|
+| A 断言值不同 | **84** | 84/84 都是脚本自身 assert 抛出的“期望 vs 实际”不符 |
+| B 脚本自己崩 | 0 | 88 条里 `TypeError/SyntaxError/ReferenceError/…` 一次未出现 |
+| C 缺输入或路径 | 0 | `ENOENT/Cannot find module/no such file` 0 次 |
+| D 超时或被杀 | 0 | `timed_out=False`、`signal=null`（runner 的 `meta` 与 `verification` 两处都查过） |
+| E 其他 | 0 | 84/84 都带得出一句脚本消息 |
+
+**A 的三种形状**：位置漂移 G2 30 条/9 计划 · 程序不再跑得起来 G1 10 条/3 计划 · 输出文本/值/计数 G3 44 条/17 计划。
+
+**按“程序到底跑起来没有”再切一刀（这一刀决定处置）**：
+- **46 条** stderr 有 `[Error]` ⇒ 程序根本没跑到输出，是**第 2 类（编译期拒绝）的下游**，与第 2 类一起消失，不单开车道；
+- **37 条** 程序正常跑完、只是脚本期望不符 ⇒ **记录过期，但过期的不在计划字段里**，在计划 inline `verify` 的 JS 文本（外加 3 个用例自带的 `.mjs`）；
+- **1 条** 退出 1、stderr 空、stdout 是一整张 GIR ⇒ 单独记。
+
+**处置**：不单开修复车道；G2 那 21 条（程序跑得起来、只差位置）与“位置重录”同一批（同一次 run 取位置），
+单列子项“计划 inline verify 脚本的期望文本”；其余 16 条 G3 之后逐条判。
+
+**口径补一处**：`test/tools/writing-freedom.mjs`、`have-native-jit.mjs` 这类**计划级脚本**在 531 里有 10 条
+（如 `compile.chain` 4 条），失败时首行同样是 `expected exit 0, got exit 1` 但 `verification` 字段为空 ⇒
+按“脚本 exit 1”口径会被漏掉。故这一类实际为 **84 + 10 = 94**；本页表仍按“失败首行”口径记 531，不重算。
+**那 10 条（`verification` 字段全空，按“脚本 exit 1”口径一条都抓不到；8 个 `.mjs` + 2 个 `.py`）**：
+```
+compile.chain/sync.pure_call_is_arranged_freely                      writing-freedom.mjs
+compile.chain/sync.pure_call_has_no_edge_to_the_statement_beside_it   writing-freedom.mjs
+compile.chain/sync.effect_call_stays_on_the_chain                     writing-freedom.mjs
+compile.chain/sync.faulting_call_stays_on_the_chain                   writing-freedom.mjs
+compile.region_roots/region_roots.writing_freedom_of_two_writes        writing-freedom.mjs
+modules.stdlib_registry/registry.no_env_switches                       check-env-switches.mjs
+opt.second_pass/second_pass.perf_fib_smoke                             opt-cost/second_pass.mjs
+opt.progen/progen_seed_4                                               progen/progen.py
+trans.cpp/agree_with_fvm                                               cppexec/run.py
+trans.source_spelling/every_generator_writes_source_the_parser_reads   spelling/check.py
+```
+（`registry.no_env_switches` 这一条已在别处修好 —— `4c38e91fa5` 把块追踪改成 pass 参数并合进 integration；它留在这张名单里是因为**当时**的首行就是它。）
+
+**单独记的那 1 条**：`compile.higher_order_clause/node_role_reads_the_fact` —— stdout 是一整张 `digraph GraphIR`（5499 字节）、
+stderr 空、退出 1，脚本在 `<anonymous>:3:5` 断言 “camel exited 1” ⇒ **跑了、也画出了图，但退出码是 1**，
+既不是“期望 vs 实际文本不符”，也不是“没跑起来”，等第 2 类修完复测时单独看。
+
+## 附二：第 2 类（“用例不再能编译”）按诊断口径是 130，不是 103
+
+第 2 类那个 **103** 是按**失败首行的文本形态**数的。换一个可复算的口径，同一个落下目录给出 **130**：
+
+```
+口径：`meta.json.diagnostics[0].name` 以 `SemanticDiag::` 开头 **且** `diagnostics[0].path == meta.case_path`
+      （拒的正是用例自己的文件），不另筛 exit code 与 stdout 长度
+读数：130 行 · 67 个不同用例文件 · 33 个诊断名
+对照：第一条诊断是 `RuntimeDiag::*` 的 342 行、一条诊断都没有的 59 行、以 `SyntaxDiag`/`LexicalDiag` 开头的 0 行
+试过的其它口径：121（stderr 文本前缀）/ 118（exit 1 且 stdout 空）/ 78（首行 `expected exit 0, got exit 1`）/
+                 67（用例文件去重）/ 38（负向测试）/ 14（首行 `verification exited 1`）—— 无一等于 103
+```
+两个数**不冲突**：差别在“首行的形态”与“第一条诊断”不是同一件事（有些条目首行是 `expected diagnostic …`
+但第一条诊断仍是 `SemanticDiag`，前者被归到别的类）。本节不改上面那张表（它的口径是首行形态、总和 531），只补口径说明。
+
+**口径更正（同一次复核里发现的）**：`meta.json` 的 `diagnostics[]` **只存结构化字段**
+（`path` / `line` / `column` / `name` / `code`，全 472 份带诊断的 meta.json 里**没有一份**有 `message` 字段）
+⇒ 想按“诊断正文”数任何一组都是 0 行，那是**字段形状**造成的，不是没有这一类。
+读诊断正文要去 `output.txt` / `stderr.txt`。下表这一类因此改写成“**失败输出里**出现 `Range`”，实测 67 行。
+
+**根因簇（130 里的 67 行 = 51.5%）**：该用例的**失败输出**里出现 `Range` ——
+`docs/design-principles.cn.md:415` 裁定“范围是值，不是数组”，`a..b` 的值是 `Range`；
+而同一段“现状（2026-11-23）”自己写着“按期望类型转 `int[]`”这条路**还没落地**；
+`f32` 的候选都带 `when is_compact_array`，`Range` 无一命中。
+归属：`internal/backlog.md` **`D-1123-41`**（拆 a/b/c 三条，整条 blocked 在 `C-1123-61` 占着同一处名字解析代码）。
+历史读数：`778e8488a2` 曾把 `f32(range(6))` 改写成 `f32((0..6))`，当时可编译 —— 这批是**迁移尾巴**，不是用例写错。
+
+**三组（合计 130）**：迁移 14 行 / 14 文件（名字与标记过期，编译器拒得对）· 缺陷 82 行 / 26 文件 ·
+其它 34 行 / 27 文件（用例仍被正确拒绝，是期望的行/列/名字/告警条数移位）。
+其中 82 行里 **67 行属 `D-1123-41`**，此时新开“修 Range 转换”的车道会与那两条抢同一处代码；
+剩下 **15 行**（loop 状态类型 6、空数组元素类型 5、分支/match 返回类型 2、声明类型 1、非 Range 的 `NoMatchingFunction` 1）
+**先派“判定”不派“修复”**：先问“设计是不是有意变严”，再决定改用例还是补实现。
+
+**与第 3 类的交叉**：第 3 类里 84 条“脚本 exit 1”的**46 条**，其 `stderr` 有 `[Error]` —— 它们正是本类（编译期拒绝）的下游，
+本类修好时一起消失，不另开车道。

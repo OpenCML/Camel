@@ -60,10 +60,10 @@ timeout_ms = 60000
 
 [[tests]]
 name = "loops.collect.oom"
-desc = "A tape that outgrows `--gc-heap-limit-mb` is a memory exhaustion at the loop: the diagnostic names the source loop, whichever executor collects."
+desc = "A tape that outgrows `--gc heap_limit_mb=` is a memory exhaustion at the loop: the diagnostic names the source loop, whichever executor collects."
 kind = "behavior"
 case = "../../../cases/loops/collection_oom.cml"
-args = ["--gc-heap-limit-mb", "16", "${case}", "test::loop_collect_summary", "${backend}"]
+args = ["--gc heap_limit_mb=", "16", "${case}", "test::loop_collect_summary", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 expect_exit = 1
 expect_stderr_contains = ["RuntimeDiag::MemoryExhausted", "collection_oom.cml:4:13"]

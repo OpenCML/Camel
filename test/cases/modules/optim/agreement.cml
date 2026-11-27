@@ -19,6 +19,11 @@
  * Two comparisons hold the properties of the module itself: `adamw` with a zero decay is `adam`,
  * and `adamw` follows the trajectory of `adam` on a parameter tree independently decayed before
  * every step (`tree_map`), which is what "decoupled" means.
+ *
+ * The inputs name the range's conversion (`to_array`): handing an interval to a call whose parameter
+ * is an integer array relies on an expected-type conversion the language describes but does not
+ * implement yet, and `to_array` is today's one conversion from a range to the integers it names
+ * (`test/cases/modules/tensor/take_ops.cml` builds its inputs the same way).
  */
 
 import { with_grad } from autodiff

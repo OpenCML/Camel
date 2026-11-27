@@ -2534,7 +2534,7 @@ skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 desc = "std::cxx::inline std::jit compiles a function that passes its var parameter on (200000-deep tail recursion) as frameless code, and a function that reads the variable as framed code: :var/get is a generic operator, called through a helper."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_jit.cml"
-args = ["--gc-check", "poison", "--gc", "mark-sweep", "-vv", "${case}", "std::cxx::inline", "std::jit"]
+args = ["--gc-check", "poison", "--gc", "kind=mark-sweep", "-vv", "${case}", "std::cxx::inline", "std::jit"]
 # Which kind of code a graph becomes depends on the collector: the test names the default one.
 sweep = false
 expect_exit = 0

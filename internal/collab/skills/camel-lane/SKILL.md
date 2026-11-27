@@ -109,6 +109,9 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
   （`camel-remote.ps1:2892`）；普通槽位的等待是**硬编码** `flock -w 1800`（`:2578`），
   所以你看到的那句 `no slot on this checkout within 1800 s` 和这个参数**无关** —— 传 300 还是 5400 都一样等 1800 秒再 `exit 4`。
   ⇒ **不要靠“把等待放长”来抢槽**；排一次、等它出结果或 `exit 4`，别用短等待反复重试。
+· **一条车道同一时刻只许一条 run，且不许“排不上就后台自动重试”**（2026-11-27 一条车道排不上后，自动重试那条
+  也进了后台、只传了 2 KB 就停，等于替全队多占一把锁；当时十棵树同时在跑、`[load]` 68–88、一次 transfer
+  花掉 **1802.8 s**）。⇒ 排不上就回来写「未取到（排队）+ 当时的 `[load]`」，把命令与日志路径备好，等下一轮再排。
   ⇒ 要把这个等待也变成可配的，属元层（`internal/tools`），由决策者那边改，我们不碰。
 · 读数要带 provenance（`tip`、binary 的构建时刻、`tree`、`tier`、`jobs`）与 `[TREE] clean`。
   没有 `[load]` 行的读数（本机跑的）**只能当名字集用**，不能当时间基线。
@@ -124,6 +127,7 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
   ⇒ **读到 `[SUMMARY]` / `RUN_EXIT` / `[TREE]` 就当读数到手，立刻按你记录的 PID `taskkill /T /F` 收掉整棵进程树**，锁随之释放；不要等它、也不要为了绕锁去抢别人的树。
 · **要换一把宿主 tree lock，就换 checkout 路径**：锁是按 checkout 路径的 cksum 建的。合法的换法只有“另开一棵树”（`-Detach <sha>` 造测量树，或 `git worktree add --detach`）并跑完删掉；**不要动别人的树，也不要去动别人的锁**。
 · **新开的树没有钩子**：`git worktree add` 不会装 `.husky/_`，而 `npx husky` 需要那棵树里有 `node_modules`。缺钩子时 git **不报错**（`core.hooksPath` 指向不存在的目录 ⇒ 每一次 push 的所有钩子静默跳过）。要么用 `new-worktree.ps1` 建（它把这件事做成一步），要么从主检出复制 **husky 自己的 `_` 目录**（不是手写），再用 `-VerifyOnly` 读到检查器自己的输出才算有守卫。
+· **新开的树还缺 `internal/tools/camel-gate.local.json`**（git-ignored 的本地闸门配置）：2026-11-27 一条车道换到新树后，第一次起跑直接报错退出，把本地配置从原树复制过去才跑起来。`new-worktree.ps1` 不管这个文件（它不入库，所以也不该入库）。换树时先 `Test-Path <新树>\internal\tools\camel-gate.local.json`，缺就从原树复制（同机、只读来源）。
 · **`-Check` 这一步现在是坏的**：出现 `[camel-remote] --- check <name>: node   ---`（脚本路径为空）之后 `node`
   会等 stdin 永久挂住，40 分钟后才 `exit 124`。见到这一行**不要等**：记下它、结束自己那个作业，改按
   `[SUMMARY]` / `RUN_EXIT` / `[TREE]` 取数，并在交回里写一行「该检查未取到、工具态」。
@@ -137,6 +141,10 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
   $p.Id | Set-Content 'D:\Temp\<lane>-<plan>.pid'
   ```
   开工先 `Get-Content $log -Tail 40`；**PID 还活着就不起第二条**；PID 死了且 log 里没有 `[SUMMARY]`，才按同一形状再起一次。
+· **批量改文本只用 `edit` 的 `replace_all`，不要用 `Set-Content` / `-NoNewline` 之类的整文件重写**
+  （2026-11-27 一条车道用它做批量替换，把一个 234 行的用例折成 1 行；靠 `git checkout --` 从提交恢复才没损失，
+  最终 diff 与预期一致，但这是一次量具事故）。整文件重写会把你没打算改的换行、BOM、编码一起改掉，
+  而 diff 只看内容，看不出来。
 · **判断一条 run 还在不在跑，只看日志，不看父进程。** 用 `Start-Process` 有意脱离父进程时，**父进程一定是死的**
   —— 「父进程已死」于是把每一条正常的落盘 run 都判成崩溃遗留。2026-11-27 协调者按这条错判，`taskkill /T /F`
   杀掉了别条车道一条正在排队的 run（已记为客户/协调者侧缺陷）；**同一晚稍后他又照同一条错判做了一次**
@@ -354,3 +362,20 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
   录后 `git status --porcelain` 只许出现你点名的那几份；多出来的 `git checkout HEAD -- <file>` 还原。
 ```
 **读数里出现密钥先隐去**：任何 `sk-` 开头的值、`-e KEY=…`、`--token`、`api_key`、密码，贴 `ps`/命令行/环境变量原文时一律先遮成 `sk-[已隐去]` / `KEY=[已隐去]` 再报。**一次没遮，等于把密钥写进通道日志与仓库历史**；进程参数在同机任何用户 `ps` 都看得到，它本来就已经泄露过一遍。
+· **判一条“新红要不要修”之前，先看它在 `origin/integration` 尖端还在不在。**一条 `git grep` 就够：表里的红对应 `065bfb1690`，活可能早已由别的车道做完并合进 integration。**表没错、活已有人干完** ≠ 看旧表；**“它在自己基上还红、在尖端已绿”= 已被别人做掉**，两者不一致就别开工。
+· **`camel-remote` 打了 `0 changed file(s)` / `measuring: the commit alone (no tracked change)` ⇒ 它测的是已提交的树，不是工作树。**改完立刻起跑（实测 3 秒内）测到的是旧内容。规程：**在拷贝上改完 → 提交 → 再跑**；看 `[provenance] tip` 是不是刚提交的 sha，不是就作废重跑。
+· **`job_kill` 只收本地包装进程；远端 `/tmp/camel-remote-<tree>-<jobid>-<stamp>/run.sh` 会继续跑，并一直持着 checkout 的 flock。**下次 run 报 `exit 4 no slot on this checkout within 1800 s` ⇒ 那是"没读到"，不是红。收尾要按**远端 run 目录名**找 PID 一并收，不只看本地 job 状态。
+· **`-SlotWaitSeconds` 只影响时间敏感分支（`camel-remote.ps1:2892` 一带）；普通槽位是硬编码 `flock -w 1800`（`:2578`）。**传个大数不会延长等待，实际仍是 1800 s 后 `exit 4`。排不上槽位时：① 换 `-Path`（新 checkout = 换锁换 token）② 确认锁已空后用同一棵树另起 lane 名（宿主 token 按 lane 名分）。**`[load]` 高于 75 就别起**，白等一轮就是 1800 s。
+· **`pre-push` 只接受“在 integration 上逐条 `--no-ff` 合车道”这一种到达方式**：把 `origin/integration` 合进自己的合并批次再推会被拒（原文：`redo it with scripts/merge-batch.mjs, or git checkout -B tmp origin/integration; git merge --no-ff <lane>.`）。远端前进了，唯一办法是 `reset --hard` + 逐条重做；重做加重新编译约 6–20 s（撞上 header 重建才几百秒）。**协调者推文档会让合并位的批次作废，所以推送要按“窗口”来：合并位说“起批”之前/之后各推一次，别在它起批中途推。**
+· **`camel-remote` 的锁与令牌按“远程目录名”取**（`$Path = Resolve-Path`、`$name = Split-Path -Leaf $Path`、`tree_key = cksum($HOME/camel-work/$name)`）⇒ **“换 `-Path` 换锁”只在 leaf 名真的不同时成立**；junction、相对路径、尾斜杠都会被 `Resolve-Path` 折叠回同一棵。要换锁必须有一棵真 checkout、leaf 名不同、且含要测的那个提交。**但先别急着换树**：上一跑的锁会随它的 `RUN_EXIT` 释放，同一棵树再起一次往往直接取到（实测多次）。
+· **一条“期望四条全错”的红，可能是第三类：用例脚手架踩在还没落地的特性上。**判法：把用例里**与这条断言无关的脚手架**换成一个能过的写法（临时副本，仓库文件不动）再跑一次 —— 若钉住的四样（诊断名/位置/类型/签名）随后**一个不差地出现**，说明期望是对的、只是被前面那一行挡住了。这时修的是脚手架那一行，**期望值一个字都不改**。⇒ 这类红既不是缺陷、也不是记录过期；派工时先问“它前面有没有一行依赖未落地特性”。
+· **`-E short`（以及默认的短格式）诊断行带文件名与列**：`(case)…/x.cml:4:16: [Error]: …` ⇒ 看到计划里只有 `.cml:4:` 这种钉子时，那是**钉子写得弱**（钉不到文件、钉不到列，换另一个 `.cml:4:` 一样能过），**不是 normalizer 抹的**。判这一类问题前先直跑一次看原始行，别先怪归一化。**`exit 4` 的第一反应也不是换树：先查锁是不是自己的旧 run**（按 `/tmp/camel-remote-<tree>-<jobid>-<stamp>` 找 PID）。
+· **判“基上缺不缺它”，`grep` 只答“代码在不在”，还要问“这条路在本次程序里会不会被执行”。**例：`exportOperatorOverloads` 基上就有，但它只为“本次构建的模块”跑，对 `.cmo` 载入的模块永远不跑 ⇒ **存在 ≠ 会走**。把“最接近做完”翻成“没通”的，常常就是这一步。
+· **派“验证某分支能不能合”之前，先查记录里有没有已经判过它**：`git grep <分支名或那笔 sha>` + 看 `internal/questions/` 与 `internal/backlog.md`。今晚两次漏过这一层：一次是判“要不要做”的活其实早已由另一笔提交做完（`CAMEL_MM_BLOCK_TRACE`），一次是判“能不能合”的活其实早就写在问题页里“不进合并队列”。**判据若在记录里已经定了，读数再多也改不了判词 —— 先查记录，再排 run。**
+· **诊断顺序：两股流合流后 = 发射顺序（编译期诊断先写、执行期故障后写），不是源码位置顺序。**判一条"索引钉错"的红，别只看"哪句更像规范"：在 `test/plans/**` 里找**同族且两类诊断共存**的绿用例——若它钉的是"语义在前"，那就是现行规矩，红的那条是记录没跟上合流；只有"一条诊断"的绿用例（如 `length === 1`）不涉及共存，**不能当证据**。
+· **`exit 4` 的第一件事：看树锁的持有者是不是自己某次"本地已拿到 `[SUMMARY]`、远端还活着"的 run。**例：`/tmp/camel-remote-<tree>-<jobid>-<stamp>/run.sh`（形如 `bash run.sh → timeout → node` 卡住 40 分钟）仍占着树锁与一个 token ⇒ 按 PID 整棵收掉，锁立刻空、排队的 run 当场开工。**不是换树、不是加 `-SlotWaitSeconds`。**只动 scratch 名字里带自己树名的那棵。
+· **`[INFO] test scratch kept: …/tmp/test/run-<id>` 不是失败产物的位置**：那个目录只有空目录骨架（0 个文件）。真正的 per-case 产物在 **`test/results/log/<run id>/fail/<plan>/<test>/`**（`meta.json` + `output.txt` + `stderr.txt` + `stdout.txt`，部分另有 `verify_*`）。要把某一轮的失败产物取回来做逐条对照，按 **run id** 去 `test/results/log/` 取，别去 scratch。
+· **在 PowerShell 里改文件用绝对路径**：`[System.IO.File]::ReadAllText("x.md")` 里的相对路径按**进程当前目录**解析，不是按 `cd` 之后的目录解析 —— 在文档工作树里 `cd` 后仍会读到主检出。本会话因此把一处改动错写进负责人的主检出（已 `git restore` 还原）。规则：读写的每个路径都写绝对路径；改完用 `git status` 在**目标树**里核一遍只有预期文件。
+· **日志只写文件、事后再 grep，不在管道里截断**：`... | Select-Object -First N` 会让 PowerShell 提前结束上游，把 `camel-remote` 中途掐断、**没有 `[SUMMARY]`**，这轮读数就作废。要短看输出，先落盘再检索。
+· **“回退到 base”要看这份用例是被拒绝的、还是要被执行的**：负例（`parse/**` 那类词法/语法拒绝）回退到 base 是修记录；**会被执行的用例**（`compile/**` 里要跑起来的）回退到 base 等于把旧写法配新内核 —— 会成批红。迁移类的活，可执行用例要按新写法重改，只有真正调用某个导入符号的文件才补 import（注释/字符串里的同名文字不算）。
+· **批在飞的时候不推文档**：合并位起批时会报“起批，远端钉在 X”。从那一刻到“批完”之间，`origin/integration` 只能由合并位写；此时从文档工作树推一格会让它的合并提交变成 non-fast-forward。**协调者的文档提交要等“批完”之后再推**，或先问一句批是否在飞。

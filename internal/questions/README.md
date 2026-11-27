@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：18 页
+## 现在在等作者：28 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -22,9 +22,19 @@
 | [`2026-11-25-what-a-compiler-written-conversion-does-when-the-pair-is-not-safe`](2026-11-25-what-a-compiler-written-conversion-does-when-the-pair-is-not-safe.cn.md) | 编译器自动插的转换遇到非 Safe 配对，应该是什么：编译期拒绝、运行时 fault、不插这个转换，还是别的 |
 | [`2026-11-26-a-block-name-need-not-sort-its-statements`](2026-11-26-a-block-name-need-not-sort-its-statements.cn.md) | 块的名字不必先给语句定序 |
 | [`2026-11-26-oper-uri-readings`](2026-11-26-oper-uri-readings.cn.md) | 算子「按编号认」还差两件事，缺哪一件由你定 |
+| [`2026-11-27-does-a-call-on-a-copy-count-as-the-same-instance`](2026-11-27-does-a-call-on-a-copy-count-as-the-same-instance.cn.md) | 一个值的副本上的调用，再被特化一次，算不算“同一个实例”？ |
 | [`2026-11-27-does-a-pure-function-see-its-reads`](2026-11-27-does-a-pure-function-see-its-reads.cn.md) | 一个 `pure` 函数读资源，算不算“没有写”？两处口径需要作者裁 |
+| [`2026-11-27-does-a-range-enter-a-type-variable-as-an-array`](2026-11-27-does-a-range-enter-a-type-variable-as-an-array.cn.md) | 一个范围能进入**类型变量**并绑成数组吗？ |
+| [`2026-11-27-does-a-type-table-belong-to-a-context`](2026-11-27-does-a-type-table-belong-to-a-context.cn.md) | 类型表归谁：一个程序一份，还是进程一份？ |
+| [`2026-11-27-does-an-edit-blocks-root-need-a-module`](2026-11-27-does-an-edit-blocks-root-need-a-module.cn.md) | 一个 `edit`/`view` 块的根，要不要一个模块（它的组与模板从哪来） |
 | [`2026-11-27-fsh-dev-remote-script-line`](2026-11-27-fsh-dev-remote-script-line.cn.md) | 元层一行：`fsh-dev` 的 `camel-remote.ps1:2999` 让整批无法合入 |
+| [`2026-11-27-how-does-a-handle-type-name-become-visible-in-a-block`](2026-11-27-how-does-a-handle-type-name-become-visible-in-a-block.cn.md) | 块体里写 `Node` 这样的句柄类型名，要谁把它带进作用域 |
+| [`2026-11-27-is-a-rewrite-transaction-per-graph-or-per-program`](2026-11-27-is-a-rewrite-transaction-per-graph-or-per-program.cn.md) | 重写事务的作用域：一张图，还是整个程序 |
 | [`2026-11-27-is-a-top-level-var-a-compile-error`](2026-11-27-is-a-top-level-var-a-compile-error.cn.md) | 模块顶层的 `var` 是编译错误，还是模块的资源？ |
+| [`2026-11-27-may-a-value-specialization-specialize-a-copy`](2026-11-27-may-a-value-specialization-specialize-a-copy.cn.md) | 值特化能不能专门化一张副本（“副本的副本”） |
+| [`2026-11-27-should-a-forwarded-element-function-still-be-reported`](2026-11-27-should-a-forwarded-element-function-still-be-reported.cn.md) | 库里的包装转发元素函数之后，原地写的那个函数体还该不该报“丢弃了值” |
+| [`2026-11-27-should-a-module-renames-graph-identity-be-one-digest`](2026-11-27-should-a-module-renames-graph-identity-be-one-digest.cn.md) | 模块改名的“图身份”，该不该钉成整张图的摘要 |
+| [`2026-11-27-should-opt-say-that-it-skipped-an-optimization`](2026-11-27-should-opt-say-that-it-skipped-an-optimization.cn.md) | 经 `std::opt` 跑的程序“少优化了一次”，要不要告诉它 |
 | [`2026-11-27-where-a-block-root-handle-comes-from`](2026-11-27-where-a-block-root-handle-comes-from.cn.md) | 块根那个句柄，编译器从哪拿它的类型与算子 |
 | [`2026-11-27-where-a-blocks-root-gets-the-module-that-declares-its-operator`](2026-11-27-where-a-blocks-root-gets-the-module-that-declares-its-operator.cn.md) | 块的根从哪里拿到「声明它那个算子的模块」 |
 

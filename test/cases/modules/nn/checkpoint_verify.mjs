@@ -158,7 +158,7 @@ try {
         assert.deepEqual(fs.readdirSync(replaceDir).sort(), ['a.txt', 'manifest.json'], `${pass}: old leaves survived the replacement`)
     }
     // The checks are words, not environment: they go before the case, with the collector.
-    const stress = ['--gc-check', 'verify=both', '--gc-stress', 'safepoint=1,kind=minor', '--gc', 'generational']
+    const stress = ['--gc-check', 'verify=both', '--gc-stress', 'safepoint=1,kind=minor', '--gc', 'kind=generational']
     for (const pass of ['std::nvm', 'std::fvm', 'std::jit']) {
         assert.equal(invoke('checkpoint_roundtrip.cml', pass, 1, path.join(root, 'nvm'), {}, 0, stress).stdout, original)
     }

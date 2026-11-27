@@ -18,7 +18,7 @@
  *
  * Red when: the load accepts a value the CLI refuses; the message stops naming the file and line or
  * the legal values; the run turns the plan error into a `[FAIL]`; or a legal compound value
- * (`alloc=3,safepoint=1,kind=major`, `poison,verify=both`, `--gc mark-sweep`) or a pass parameter
+ * (`alloc=3,safepoint=1,kind=major`, `poison,verify=both`, `--gc kind=mark-sweep`) or a pass parameter
  * (`std::opt safe_fp=true`) is refused -- a check that only knows a whitelist would refuse those,
  * and that would be worse than no check.
  *
@@ -129,8 +129,8 @@ const goodShapes = [
     ['--gc-stress', 'alloc=3,safepoint=1,kind=major', '--gc-check', 'verify=both'],
     ['--gc-check', 'poison,verify=both'],
     ['--gc-check', 'moves=1'],
-    ['--gc', 'mark-sweep'],
-    ['--gc', 'generational'],
+    ['--gc', 'kind=mark-sweep'],
+    ['--gc', 'kind=generational'],
     ['--gc', 'gen'],
     ['--gc-check', 'poison'],
 ]

@@ -76,12 +76,13 @@ operandAccess(ResourceClass cls, uint8_t operand, AccessMode mode, std::string n
     };
 }
 
-ResourceAccess ambientAccess(std::string name, AccessMode mode) {
+ResourceAccess ambientAccess(std::string name, AccessMode mode, ResourceModifiers modifiers) {
     return ResourceAccess{
-        .resource = Resource{.cls = ResourceClass::Ambient, .name = std::move(name)},
-        .binding  = ResourceBinding{.kind = ResourceBinding::Kind::Ambient},
-        .region   = ResourceRegion{},
-        .mode     = mode,
+        .resource  = Resource{.cls = ResourceClass::Ambient, .name = std::move(name)},
+        .binding   = ResourceBinding{.kind = ResourceBinding::Kind::Ambient},
+        .region    = ResourceRegion{},
+        .mode      = mode,
+        .modifiers = std::move(modifiers),
     };
 }
 
@@ -89,10 +90,11 @@ ResourceSpec externalAmbient(std::string name, AccessMode mode) {
     return ResourceSpec{.accesses = {ambientAccess(std::move(name), mode)}, .externalEffect = true};
 }
 
-ResourceSpec externalUnorderedAmbient(std::string name, AccessMode mode) {
-    ResourceAccess access = ambientAccess(std::move(name), mode);
-    access.unordered      = true;
-    return ResourceSpec{.accesses = {std::move(access)}, .externalEffect = true};
+ResourceSpec
+externalAmbient(std::string name, AccessMode mode, const ResourceModifiers &modifiers) {
+    return ResourceSpec{
+        .accesses       = {ambientAccess(std::move(name), mode, modifiers)},
+        .externalEffect = true};
 }
 
 ResourceAccess globalAccess(AccessMode mode) {
@@ -267,6 +269,108 @@ AccessMode uniteAccess(AccessMode left, AccessMode right) {
     return left == right ? left : AccessMode::ReadModifyWrite;
 }
 
+ResourceModifierConflict conflictOf(const ResourceModifiers &modifiers) {
+    // The page's "组合" list, in the order it states them. The words are read from the record, not
+    // from a spelling, so an entry that states the same record cannot be refused where the other is
+    // accepted.
+    if (modifiers.unordered && modifiers.overwriting) {
+        return ResourceModifierConflict::UnorderedOverwriting;
+    }
+    if (modifiers.readonly &&
+        (modifiers.unordered || modifiers.idempotent || modifiers.overwriting)) {
+        return ResourceModifierConflict::ReadonlyWritten;
+    }
+    if (modifiers.observed && modifiers.readonly) {
+        return ResourceModifierConflict::ObservedReadonly;
+    }
+    return ResourceModifierConflict::None;
+}
+
+ResourceModifierConflictWords
+conflictWords(const ResourceModifiers &modifiers, ResourceModifierConflict conflict) {
+    switch (conflict) {
+    case ResourceModifierConflict::None:
+        return {};
+    case ResourceModifierConflict::UnorderedOverwriting:
+        return {"unordered", "overwriting"};
+    case ResourceModifierConflict::ReadonlyWritten:
+        // The write word the statement actually wrote, so the report names what the author sees.
+        if (modifiers.unordered) {
+            return {"readonly", "unordered"};
+        }
+        if (modifiers.idempotent) {
+            return {"readonly", "idempotent"};
+        }
+        return {"readonly", "overwriting"};
+    case ResourceModifierConflict::ObservedReadonly:
+        return {"observed", "readonly"};
+    }
+    return {};
+}
+
+std::string toString(const ResourceModifiers &modifiers) {
+    // One canonical order: unordered, idempotent, overwriting, readonly, observed. Two entries that
+    // state the same record print the same text, which is what the agreement check compares.
+    std::string out;
+    const auto add = [&out](bool set, std::string_view word) {
+        if (set) {
+            out += " ";
+            out += word;
+        }
+    };
+    add(modifiers.unordered, "unordered");
+    add(modifiers.idempotent, "idempotent");
+    add(modifiers.overwriting, "overwriting");
+    add(modifiers.readonly, "readonly");
+    add(modifiers.observed, "observed");
+    return out;
+}
+
+ResourceModifiers uniteModifiers(const ResourceModifiers &left, const ResourceModifiers &right) {
+    // A word holds if either statement says it: a use united with another use of the same resource
+    // cannot lose what one of them promised.
+    ResourceModifiers united;
+    united.unordered   = left.unordered || right.unordered;
+    united.idempotent  = left.idempotent || right.idempotent;
+    united.overwriting = left.overwriting || right.overwriting;
+    united.readonly    = left.readonly || right.readonly;
+    united.observed    = left.observed || right.observed;
+    return united;
+}
+
+ResourceEqualities equalitiesOf(const ResourceModifiers &modifiers, AccessMode mode) {
+    ResourceEqualities equalities;
+    // A read is a dependency (design principles 3.3): its value may go unused, two identical reads
+    // with no write between them are one, and reads may be ordered either way. It never erases --
+    // reading a resource changes nothing, but a program that reads a value it uses is not
+    // "nothing".
+    if (!writes(mode)) {
+        equalities.discard = true;
+        equalities.copy    = true;
+        equalities.commute = true;
+        return equalities;
+    }
+    // A write is an effect: by default it satisfies none of the four, and each word of the
+    // declaration grants one. `observed` is the exception that erases the access in the semantics
+    // (the implementation keeps the node: that is the other layer, design effects README).
+    equalities.erase   = modifiers.observed;
+    equalities.discard = modifiers.observed;
+    equalities.copy    = modifiers.idempotent || modifiers.overwriting;
+    equalities.commute = modifiers.unordered;
+    return equalities;
+}
+
+bool commute(const ResourceModifiers &modifiers, AccessMode left, AccessMode right) {
+    // The pair question, read from the per-access answers: a read never commutes with a write (a
+    // read must see the writes before it, whatever the resource grants), and two accesses of one
+    // kind commute when each of them may be ordered either way. Nothing is decided here that
+    // `equalitiesOf` did not decide.
+    if (writes(left) != writes(right)) {
+        return false;
+    }
+    return equalitiesOf(modifiers, left).commute && equalitiesOf(modifiers, right).commute;
+}
+
 std::string toString(const ResourceAccess &access) {
     std::string out =
         std::format("{} {}", accessModeName(access.mode), resourceClassName(access.resource.cls));
@@ -405,10 +509,10 @@ ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
                     ResourceSignature::AmbientUse{
                         .name      = access.resource.name,
                         .mode      = access.mode,
-                        .unordered = access.unordered});
+                        .modifiers = access.modifiers});
             } else {
                 found->mode      = uniteAccess(found->mode, access.mode);
-                found->unordered = found->unordered || access.unordered;
+                found->modifiers = uniteModifiers(found->modifiers, access.modifiers);
             }
             break;
         }

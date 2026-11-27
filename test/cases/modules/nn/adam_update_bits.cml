@@ -8,6 +8,11 @@
  * that text exactly.
  *
  * The model has both kinds of trainable leaf: two tensors and a float.
+ *
+ * The inputs name the range's conversion (`to_array`): handing an interval to a call whose parameter
+ * is an integer array relies on an expected-type conversion the language describes but does not
+ * implement yet, and `to_array` is today's one conversion from a range to the integers it names
+ * (`test/cases/modules/tensor/take_ops.cml` builds its inputs the same way).
  */
 
 import { adam, adam_state } from nn

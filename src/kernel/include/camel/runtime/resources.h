@@ -76,11 +76,12 @@ struct NodeAccess {
     /// undeclared operator's operand of unknown origin, an element of a loop's array, a call
     /// through a value).
     bool anyValue = false;
-    /// The declaration of the operator names this resource `unordered` (design principles 3.3), so
-    /// how two accesses to it are written keeps no order and the declaring library promises the
-    /// order does not matter. Carried here because the order check reads a node's accesses and not
-    /// the operator's spec, and the promise is the operator's.
-    bool unordered = false;
+    /// What the resource's declaration says about it (design principles 3.3, the resource effect
+    /// system): the words a `resource` declaration wrote, empty for a resource no declaration
+    /// names. Carried here because the order check reads a node's accesses and not the operator's
+    /// spec, and the promise is the resource's; whether two accesses commute is `sem::commute`'s
+    /// answer, never a flag read here.
+    sem::ResourceModifiers modifiers;
 
     bool operator==(const NodeAccess &) const = default;
 };

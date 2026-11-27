@@ -221,6 +221,12 @@ class DebugCore final : public camel::execute::ExecutionObserver {
         bool evaluated = true;
         std::string note; // shown instead of a value when not evaluated
         ValueView view;
+        /// The name is a `var`: the declaration is shown as the writer wrote it (`var T`), whatever
+        /// form the graph gave it. A `var` built as a value has no cell (design principles 3.5), so
+        /// the value's own type is the cell's value type and the `var` of the declaration is the
+        /// only place the shape is still written down (Builder::recordDeclaration reports the
+        /// declaration as the variable it is for exactly this).
+        bool variable = false;
     };
 
     /// A value expression resolved in a frame: the name it starts from, and the value the member
@@ -286,7 +292,7 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     std::vector<Variable> inlinedOf(const Chain &chain);
     std::vector<Variable> nodesOf(const Chain &chain);
     std::optional<Variable>
-    nodeVariable(ShadowFrame &frame, const NodeInfo &node, std::string name);
+    nodeVariable(ShadowFrame &frame, const NodeInfo &node, std::string name, bool variable = false);
     json variablesJson(std::vector<Variable> variables, uint64_t frame);
     json variableJson(const Variable &variable, uint64_t frame);
     json scopesJson(uint64_t frameId);

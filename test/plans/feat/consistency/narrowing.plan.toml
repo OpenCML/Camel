@@ -108,25 +108,25 @@ name = "narrowing.outside_arm"
 desc = "After the `if` the name is a `T?` again."
 kind = "negative"
 case = "../../../cases/consistency/narrowing/outside_arm.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "outside_arm.cml:4:"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "outside_arm.cml:4:16:"]
 
 [[tests]]
 name = "narrowing.two_nullables"
 desc = "Two `T?` values are not compared with each other."
 kind = "negative"
 case = "../../../cases/consistency/narrowing/compare_two_nullables.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "compare_two_nullables.cml:5:"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "compare_two_nullables.cml:5:18:"]
 
 [[tests]]
 name = "narrowing.plain_with_null"
 desc = "A value that cannot be null may be compared with `null` (design principles 3.8): a name or any other value, either order; the result is fixed and each test is warned about (NullTestNeverNull)."
 kind = "behavior"
 case = "../../../cases/consistency/narrowing/compare_plain_with_null.cml"
-args = ["-E", "short", "${case}", "${backend}"]
+args = ["--diag-format", "short", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
@@ -145,7 +145,7 @@ name = "narrowing.after_narrowing"
 desc = "In the arm where `x` is narrowed, `??` and a `match` with `case null` on `x` are allowed (KnownNotNull), also in a nested arm, and testing `x` against null again gives a fixed result (NullTestNeverNull); design principles 3.8. Alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/consistency/narrowing/after_narrowing.cml"
-args = ["-E", "short", "${case}", "${backend}"]
+args = ["--diag-format", "short", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
@@ -154,8 +154,8 @@ verify_script = """
 const lines = input.stderr.split('\n').filter((l) => l.includes('[Warn]'))
 const at = (where, name) => lines.some((l) => l.includes(where) && l.includes(name))
 assert(lines.length === 5, 'five warnings: ' + input.stderr)
-assert(at(':7:19:', 'KnownNotNull') && at(':8:17:', 'KnownNotNull') && at(':11:31:', 'KnownNotNull'), input.stderr)
-assert(at(':9:22:', 'NullTestNeverNull') && at(':10:25:', 'NullTestNeverNull'), input.stderr)
+assert(at(':7:19:', 'KnownNotNull') && at(':8:17:', 'KnownNotNull') && at(':14:31:', 'KnownNotNull'), input.stderr)
+assert(at(':12:22:', 'NullTestNeverNull') && at(':13:25:', 'NullTestNeverNull'), input.stderr)
 assert(lines.some((l) => l.includes("the null case of 'match' is never taken")), input.stderr)
 """
 
@@ -164,9 +164,9 @@ name = "narrowing.shadowed_not_narrowed"
 desc = "A lambda parameter that shadows a narrowed name is not the narrowed name: `case null` over the plain `int` it is stays the plain match's own type error and is not reopened into a `T?` the way the narrowed name is. (`??` no longer tells the two apart: over a value that cannot be null it is allowed with the same warning either way.) Design principles 3.8."
 kind = "negative"
 case = "../../../cases/consistency/narrowing/shadowed_not_narrowed.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::MatchCaseTypeMismatch", "shadowed_not_narrowed.cml:6:"]
+expect_output_contains = ["SemanticDiag::MatchCaseTypeMismatch", "shadowed_not_narrowed.cml:6:18:"]
 expect_output_not_contains = ["KnownNotNull"]
 
 [[tests]]
@@ -174,6 +174,6 @@ name = "narrowing.functions"
 desc = "Two function values cannot be compared."
 kind = "negative"
 case = "../../../cases/consistency/narrowing/compare_functions.cml"
-args = ["-E", "short", "${case}"]
+args = ["--diag-format", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "compare_functions.cml:12:"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "compare_functions.cml:12:18:"]
