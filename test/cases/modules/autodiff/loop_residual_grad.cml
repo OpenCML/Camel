@@ -1,0 +1,99 @@
+/**
+ * The gradient of a loop that collects one value per round, against finite differences.
+ *
+ * The forward loop is the CC main case's: a loss summed over rounds the data and the budget decide
+ * (the same six rows ask for two rounds under a budget of 0.5 and six under 100), with the loss of
+ * every round collected into an array -- the residual the reverse loop reads (design principles
+ * 9.9). `w` is the model's `with` parameter, so `with_grad` differentiates with respect to it.
+ *
+ * Every value here is f64 and the loss is a sum of squares of linear functions of `w`, exactly
+ * quadratic, so a central difference with h = 1e-4 has no truncation term: what is left is
+ * roundoff, about eps*|loss|/h = 2e-12, and this program exits 0 only when the largest relative
+ * difference stays under 1e-9 -- a tolerance five orders tighter than an f32 epsilon would allow.
+ * Run by the plan with `std::nvm` (grad built at run time) and with `std::macro std::nvm` (grad
+ * expanded at compile time).
+ */
+import { with_grad } from autodiff
+import { reshape, slice, sum } from tensor
+
+type P = { w: float[4] }
+
+/// Row `j` of the data: a slice with bounds that depend on the counter, then the row's shape.
+func rowAt(xs: float[6, 4], j: int) => float[4] {
+    return reshape<[4]>(slice(xs, 0, j, j + 1))
+}
+
+/// Target `j` of the data, as the scalar it is.
+func targetAt(ts: float[6], j: int) => float {
+    return sum(slice(ts, 0, j, j + 1))
+}
+
+/// One round's loss: the model's prediction at a row, against its target.
+func lossAt(w: float[4], x: float[4], t: float) => float {
+    let err = sum(w * x) - t
+    return err * err
+}
+
+/// The forward loop: the loss of every round collected, the total summed, the budget deciding how
+/// many rounds run.
+func forward(w: float[4], xs: float[6, 4], ts: float[6], budget: float[1]) => (float[], int, float) {
+    return loop acc = [] as float[], j = 0 as int, total = 0.0 while j < 6 && total < budget[0] do {
+        let l = lossAt(w, rowAt(xs, j), targetAt(ts, j))
+        (acc->append<l>, j + 1, total + l)
+    }
+}
+
+with <m: P>
+func loss(xs: float[6, 4], ts: float[6], budget: float[1]) => float {
+    let (residuals, rounds, total) = forward(m.w, xs, ts, budget)
+    return total
+}
+
+/// The loss at a given weight, for the finite differences below.
+func lossWith(w: float[4], xs: float[6, 4], ts: float[6], budget: float[1]) => float {
+    return loss<m: { w: w }>(xs, ts, budget)
+}
+
+/// The weight vector with coordinate `k` moved by `delta`.
+func perturbed(w: float[4], k: int, delta: float) => float[4] {
+    let (moved, counter) = loop acc = [] as float[], i = 0 as int while i < 4 do {
+        let v = if i == k then w[i] + delta else w[i]
+        (acc->append<v>, i + 1)
+    }
+    return moved as float[4]
+}
+
+/// The magnitude of a value.
+func mag(x: float) => float {
+    return if x < 0.0 then 0.0 - x else x
+}
+
+func main() => int sync {
+    let w = [0.5, -1.0, 2.0, 0.25] as float[4]
+    let xs = [[1.0, 2.0, 3.0, 4.0], [2.0, 0.0, -1.0, 1.0], [0.5, 0.5, 0.5, 0.5], [-1.0, 1.0, -1.0, 1.0], [3.0, 3.0, 3.0, 3.0], [0.0, 0.0, 0.0, 0.0]] as float[6, 4]
+    let ts = [5.0, 0.0, 1.0, -3.0, 5.0, 0.0] as float[6]
+    let budget = [100.0] as float[1]
+    let m = { w: w }
+    let (l, g) = with_grad(loss)<m>(xs, ts, budget)
+    let (shortResiduals, shortRounds, shortTotal) = forward(w, xs, ts, [0.5] as float[1])
+    let (longResiduals, longRounds, longTotal) = forward(w, xs, ts, budget)
+    println('rounds budget=0.5 {} budget=100 {} totals {} {}'->format<shortRounds, longRounds, shortTotal, longTotal>)
+    println('residuals budget=0.5 {} budget=100 {}'->format<shortResiduals, longResiduals>)
+    println('loss {}'->format<l>)
+    println('grad {}'->format<g.w>)
+    let h = 0.0001
+    let (fd, fdCounter) = loop acc = [] as float[], j = 0 as int while j < 4 do {
+        let d = (lossWith(perturbed(w, j, h), xs, ts, budget) - lossWith(perturbed(w, j, 0.0 - h), xs, ts, budget)) / (2.0 * h)
+        (acc->append<d>, j + 1)
+    }
+    println('finite {}'->format<fd>)
+    let (worst, worstCounter) = loop acc = 0.0, j = 0 as int while j < 4 do {
+        let scale = if mag(g.w[j]) > 1.0 then mag(g.w[j]) else 1.0
+        let e = mag(g.w[j] - fd[j]) / scale
+        (if e > acc then e else acc, j + 1)
+    }
+    println('worst {}'->format<worst>)
+    let stepped = [w[0] - 0.1 * g.w[0], w[1] - 0.1 * g.w[1], w[2] - 0.1 * g.w[2], w[3] - 0.1 * g.w[3]] as float[4]
+    println('stepped {}'->format<stepped>)
+    return if worst <= 0.000000001 then 0 else 1
+}
