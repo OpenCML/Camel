@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * The optimization passes of the standard library written in Camel: `opt::fold`, `opt::cse`,
+ * The optimization passes of the standard library written in Camel: `opt::fold`, `opt::cse`, `opt::inline`,
  * `opt::dce`, `opt::algebra` and `opt::saturate`. A pass is a function from a function to a function of the same type,
  * `(f: F) => F!`, so it applies to one function, `loss->opt::fold->opt::cse`, and the pipeline
  * names it by its module: `camel prog.cml opt::fold std::nvm`. They are the meaning of the C++
- * passes of the same names, `std::cxx::fold`, `std::cxx::cse` and `std::cxx::dce` (the names those
+ * passes of the same names, `std::cxx::fold`, `std::cxx::cse`, `std::cxx::inline` and `std::cxx::dce` (the names those
  * passes had before they were separated from this module, `std::opt::fold` and the rest, are gone
  * with the separation: they are not aliases, and a pipeline that writes one is refused), which run
  * by default; neither set is deleted before the two have been compared
@@ -29,7 +29,7 @@
  */
 
 import { flatten, all, any } from array
-import { Node, Graph, NodeKind, Region, RegionKind, graphs_of, graphs, nodes, inputs, with_inputs, value_users, kind, op, op_name, may_be_recomputed, may_fault, may_be_rearranged, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, region_kind, region_parent, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
+import { Node, Graph, NodeKind, Region, RegionKind, graphs_of, graphs, nodes, inputs, with_inputs, value_users, kind, op, op_name, callee, may_be_recomputed, may_fault, may_be_rearranged, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, region_kind, region_parent, permissions, tags, constant, open, replace, erase, eval, commit, abort, inline_call } from graph
 import { saturate as saturate_rules } from rewrite
 import { algebra as algebra_laws, distribution, simplify } from rules
 import { is_function } from types
@@ -386,4 +386,112 @@ export func algebra::<F>(f: F) => F! when is_function::<F>() {
 with <rounds: int = 6, strict: bool = false>
 export func saturate::<F>(f: F) => F! when is_function::<F>() {
     return f->saturate_rules<concat(algebra_laws, distribution), rounds: rounds, strict: strict>
+}
+
+// ---- inlining ----
+
+// The selection rules of `std::cxx::inline`, as far as the graph module's reads reach them
+// (InlineRewriteConfig, src/stdlib/std/cxx/opt/include/camel/passes/opt/config.h). The C++ engine
+// reads four things this module has no read for, and this pass does without them:
+//
+//   unaligned 1. the call graph's components: which functions recurse, which reach a recursion;
+//   unaligned 2. whether a call is the head of a branch arm (`isDraftBranchArmHead`);
+//   unaligned 3. the inline history: whether a call lies in a copy inlined from its own callee;
+//   unaligned 4. how many direct calls each graph has, which the duplication budget is about.
+//
+// So the rules below are the ones that can be read: a callee is small, the copy fits the caller and
+// what is left of the budget, and a call of the graph being edited is left alone (a recursion; the
+// operator refuses it). Where the C++ engine would also inline a non-small callee called once, or a
+// callee that returns a closure, this pass keeps the call. The program means the same; it is only
+// less inlined, and the difference is listed here rather than approximated.
+
+// What a copy of `g` carries into its caller: every node but the constants and the parameters,
+// which the caller already has. This is what one expansion costs the growth budget (the C++ engine's
+// `inlinedNodeCount`).
+func copy_cost(g: Graph) => int {
+    return len(nodes(g)->filter<func (n: Node) => bool {
+        let k = kind(n)
+        return k != NodeKind::Data && k != NodeKind::Port
+    }>)
+}
+
+// How small a callee is: its operators, its calls and its structural nodes (the C++ engine's
+// `inlinedComputeNodeCount`). The C++ counts the nodes of one `??` lowering once; here every node
+// counts for itself.
+func compute_size(g: Graph) => int {
+    return len(nodes(g)->filter<func (n: Node) => bool {
+        let k = kind(n)
+        return k == NodeKind::Oper || k == NodeKind::Call || k == NodeKind::Func || k == NodeKind::Brch || k == NodeKind::Join || k == NodeKind::Loop
+    }>)
+}
+
+func cost_of_call(n: Node) => int {
+    return match callee(n) {
+        case null => 0
+        case c => copy_cost(c)
+    }
+}
+
+// Whether the pass expands this call: its callee is a graph of its own (not the graph being edited),
+// that graph is small (`smallSubgraphMaxComputeNodes`, 8), and the copy fits the caller's cap
+// (`maxOwnerNodes`, 4096) and what is left of the budget.
+func expandable(g: Graph, n: Node, remaining: int) => bool {
+    return match callee(n) {
+        case null => false
+        case c => c != g && compute_size(c) <= 8 && copy_cost(c) <= remaining && len(nodes(g)) + copy_cost(c) <= 4096
+    }
+}
+
+func calls_of(g: Graph) => Node[] {
+    return nodes(g)->filter<func (n: Node) => bool {
+        callee(n) != null
+    }>
+}
+
+func do_expand(g: Graph, n: Node, rest: Node[], remaining: int) => int sync {
+    let cost = cost_of_call(n)
+    let _ = inline_call(n)
+    return expand_calls(g, rest, remaining - cost)
+}
+
+func expand_one(g: Graph, n: Node, rest: Node[], remaining: int) => int sync {
+    return if expandable(g, n, remaining) then do_expand(g, n, rest, remaining) else expand_calls(g, rest, remaining)
+}
+
+// One graph's round: each call the rules select is expanded, paying for its copy out of `remaining`;
+// the answer is what is left. A call whose copy does not fit is left as written, and the calls after
+// it may still be expanded: the pool is spent call by call, as the C++ engine spends one
+// `growthSpent` across its round, not one pool for each call.
+func expand_calls(g: Graph, calls: Node[], remaining: int) => int sync {
+    return if len(calls) == 0 then remaining else expand_one(g, calls[0], drop(calls, n: 1), remaining)
+}
+
+func expand_graph(g: Graph, rest: Graph[], remaining: int) => int sync {
+    return expand_graphs(rest, expand_calls(g, calls_of(g), remaining))
+}
+
+func expand_graphs(gs: Graph[], remaining: int) => int sync {
+    return if len(gs) == 0 then remaining else expand_graph(gs[0], drop(gs, n: 1), remaining)
+}
+
+// Commits a round that expanded something, and abandons one that expanded nothing: the program the
+// round started from is then the answer.
+func inline_rounds::<F>(f: F, remaining: int) => F! when is_function::<F>() sync {
+    let d = open(f)
+    let left = expand_graphs(graphs(d), remaining)
+    return if left < remaining then committed(d)->inline_rounds(left) else abandoned(d, f)
+}
+
+/// Calls are expanded at their call sites (`inline_call`), round after round, until a round expands
+/// nothing: the body stands where the call stood, its parameters bound to the call's arguments and
+/// its captures carried in by the function value. The selection rules are `std::cxx::inline`'s as far
+/// as this module can read them (see the four unaligned items above).
+/// @fails fault `InvalidArgument` when a selected call is one `inline_call` refuses
+/// @example (func (x: int) { x + 1 )->inline
+with </// Nodes a run may copy: one pool for the whole run, each expansion paying for the nodes its copy
+/// carries (`copy_cost`) -- the way `std::cxx::inline` spends one `growthSpent` (its default 4096);
+/// 0 expands nothing at all.
+growth_budget: int = 4096>
+export func inline::<F>(f: F) => F! when is_function::<F>() {
+    return inline_rounds(f, growth_budget)
 }
