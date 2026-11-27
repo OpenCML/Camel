@@ -371,12 +371,12 @@ LiftedShape liftedShapeOf(Type *type) {
     if (type == nullptr) {
         return shape;
     }
-    const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(type);
-    if (space.hasSpace()) {
-        if (space.space == nullptr) {
-            return shape;
-        }
-        shape.type = TupleType::create(std::vector<Type *>{type, space.space});
+    // The tangent a caller receives is the user's answer (design principles 9.9): a number
+    // or a boolean is its own tangent, with the value zero. The machinery's narrower answer
+    // is what the graph walk below uses, not what the lifted signature promises.
+    camel::core::type::Type *space = camel::core::gradientTypeOf(type);
+    if (space != nullptr) {
+        shape.type = TupleType::create(std::vector<Type *>{type, space});
         shape.pair = true;
         return shape;
     }

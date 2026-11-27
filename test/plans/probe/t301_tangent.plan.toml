@@ -1,0 +1,31 @@
+id = "probe.t301"
+order = 999
+tier = "fast"
+tags = ["probe"]
+desc = "D-1127-217: a discrete result is the user's gradient (design principles 9.9), so jvp lifts it with the zero of its own type; a string result still has none."
+
+[defaults]
+kind = "behavior"
+args = ["${case}"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 60000
+
+[[tests]]
+name = "a_bool_result_keeps_its_zero"
+case = "../../../cases/probe/t301/bool.cml"
+expect_exit = 0
+expect_stdout = "true\nfalse\n"
+
+[[tests]]
+name = "an_int_result_keeps_its_zero"
+case = "../../../cases/probe/t301/int.cml"
+expect_exit = 0
+expect_stdout = "2\n0\n"
+
+[[tests]]
+name = "a_string_result_still_has_no_tangent"
+kind = "negative"
+case = "../../../cases/probe/t301/string.cml"
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["`jvp` takes a function whose result has a tangent space", "which has none"]
