@@ -480,3 +480,13 @@ git worktree add --detach <旧提交>
 **不要 `rm -fr` 那个目录**：它里面 `message` 与 `stopped-sha` 是"停止原因"的唯一记录；`--abort` 会先读它们再清场，`rm -fr` 只会把它们丢掉，然后你会对着一个 ref 停错位置的分支猜。
 
 一条伴随症状值得记：`pull --rebase` 在有残留 rebase 时**不报错、也不动**，看起来像成功。所以"pull 之后引用没变"不是远端没更新，可能是本地起不来 —— 判据是 `git rev-parse HEAD` 与 reflog，不是命令的沉默。
+
+## 机器坑（2026-11-27 夜，三次现场）
+
+**`-Plan` 只吃一个参数，多条用逗号。** 车道写 `-Plan test/plans/feat/trans test/plans/feat/compile`，被当成位置参数，报 `找不到接受自变量 'test/plans/feat/trans' 的位置参数` —— 而且它**退出得像"还在跑"**，两条构建就这样"发起"了半小时。正确写法 `-Plan 'test/plans/feat/trans,test/plans/feat/compile'`。**判据：日志里有 `BUILD_EXIT`/`[SUMMARY]` 才算跑过**；只有"已发起"这句话不算。
+
+**日志"停住"不等于卡住：结果按 plan 块落盘。** promo54 预检的日志在 `[PLAN] feat.opt.fold_warning` 那三条 PASS 之后 4 分钟不动，看着像挂死；实际 `run 目录` 里已有 49 条完成、4 个 `child-cpu.mjs` 在跑。**判据是 run 目录的计数与宿主进程，不是日志尾部。** 反过来也成立：日志不长 ≠ 没进度。
+
+**宿主侧"永久 `starting`"的运行记录会占位。** `HOST_OVERLAP_START` 里一串 `36844-20261127200107:starting` 在**开始与结束两份清单里都在**，而别的 run 结束后会消失 ⇒ 那是一条本地已 kill、宿主侧仍挂在 `starting` 的残留运行。它的代价是所有后来者排队（合并位 `-Jobs 1` 排了近一小时、witness 的 Debug 进不了构建）。**处置**：只有它的**所有者**能清（按 `host-tokens`/`/tmp/camel-tokens` 的持有者核，按工具自己的释放方式）；**不许按名字杀进程**，也不许碰别人的 run。
+
+**"读数一字不差"先查两棵树差什么。** promo54 预检与上一次晋级的四栏（9778/9535/182/28/33）**完全相同**，第一反应是"读到旧日志"。用 `git rev-list --count <base>..<tip>` = 16 笔 + `git diff --stat … -- src/ test/ scripts/ stdlib/` = 空 就排除了：那 16 笔只动 `internal/`，读数相同是**必然**。**同形读数先量"两棵树差什么"，再怀疑工具。**
