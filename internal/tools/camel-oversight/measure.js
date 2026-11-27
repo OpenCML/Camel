@@ -253,16 +253,20 @@ async function buildHostOf(host, probe) {
 export async function measure({ repo, fetch = true, stateDir = '', buildHost = '', buildProbe = '' }) {
     const git = (args) => run('git', args, { cwd: repo })
     const fetched = fetch ? await attempt(async () => (await git(['fetch', 'origin', '--prune']), 'ok')) : 'skipped'
+    // A failed fetch leaves the remote references as they were: a branch's age read from them would
+    // say "has not moved" about a branch that may well have, so those readings are not taken at all.
+    const stale = fetched !== 'ok' && fetched !== 'skipped' ? { unreadable: 'fetch failed; remote references not refreshed' } : null
+    const remote = (read) => (stale ? Promise.resolve(stale) : attempt(read))
     return {
         at: Date.now(),
         repo,
         fetched,
-        develop: await attempt(async () => ({
+        develop: await remote(async () => ({
             head: await git(['rev-parse', '--short=9', 'origin/develop']),
             ageMinutes: Math.round((Date.now() / 1000 - Number(await git(['log', '-1', '--format=%ct', 'origin/develop']))) / 60),
         })),
         // The integration branch, when there is one: how old its tip is, and how far develop trails it.
-        integration: await attempt(async () => {
+        integration: await remote(async () => {
             const has = await git(['rev-parse', '--verify', '--quiet', 'origin/integration']).then(() => true, () => false)
             if (!has) return { absent: true }
             return {
@@ -272,7 +276,7 @@ export async function measure({ repo, fetch = true, stateDir = '', buildHost = '
             }
         }),
         // What the other side pushed that has landed on neither shared line.
-        fshDev: await attempt(async () => {
+        fshDev: await remote(async () => {
             const hasIntegration = await git(['rev-parse', '--verify', '--quiet', 'origin/integration']).then(() => true, () => false)
             const exclude = hasIntegration ? ['^origin/develop', '^origin/integration'] : ['^origin/develop']
             return {
