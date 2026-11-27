@@ -1,0 +1,34 @@
+// A range loop in a differentiated function, and what the refusal says about it.
+//
+// `over_a_range(x) = loop s = x for i in 0 .. 3 do s + 1.0` walks a range, and walking one is the
+// `for` operator of `Range` (`stdlib/prelude.cml`), whose answer is a stream. A stream has no tangent
+// space, so the forward lift has no transform for that callee, and the function is refused. This case
+// pins the *sentence*: the fault names the callee's own line in `prelude.cml`, the call site's `jvp`
+// line, and the cause (`a function whose result has no tangent space`) -- instead of the bare "jvp has
+// no forward transform for this function" that named nothing, and whose reading was silent (an empty
+// refusal, three stages before the one that would have printed a `skip=`).
+//
+// The array loop beside it is the contrast, and the reason the refusal is about the iterable rather
+// than about loops: `for i in [1, 2, 3]` has no `for` operator to call, lifts, and answers its
+// derivative -- 4.0 and 1.0 for one round of `s + 1.0` from `x = 1` and a seed of 1. The missing piece
+// is the iterable's reading; a refusal is not an answer, which is why this file pins where the refusal
+// stopped rather than blessing it.
+import rulesets.jvp
+import { jvp } from transforms
+
+func over_an_array(x: float) => float {
+    return loop s = x for i in [1, 2, 3] do s + 1.0
+}
+
+func over_a_range(x: float) => float {
+    return loop s = x for i in 0 .. 3 do s + 1.0
+}
+
+func main() => int sync {
+    let (value, tangent) = jvp(over_an_array)(1.0, 1.0)
+    println(value)
+    println(tangent)
+    let (_, back) = jvp(over_a_range)(1.0, 0.0)
+    println(back)
+    return 0
+}
