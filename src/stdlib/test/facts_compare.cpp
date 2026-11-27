@@ -768,7 +768,8 @@ FactsCompareTestPass::apply(const camel::runtime::Program *program, std::ostream
         compareArrangeable(*graph, *store, arrange);
         censusArrangeable(*graph, *store, answers);
         compareDraft(*program, *graph, *store, draft, os);
-        if (const auto &context = program.context(); context != nullptr) {
+        compareEffects(*program, *graph, effects);
+        if (const auto context = program->context(); context != nullptr) {
             compareCoreKinds(*program, *graph, *store, context->facts(), coreKinds, os);
         }
     }
