@@ -40,6 +40,7 @@
 #include <cstring>
 #include <format>
 #include <map>
+#include <optional>
 #include <stdexcept>
 #include <tuple>
 #include <unordered_set>
@@ -768,6 +769,22 @@ GCGraph *encodeSpecializedGraph(
     return encoded;
 }
 
+/// The order two bindings are placed in, whichever graph formed them: a binding is named by the
+/// position it erases, and a type refinement by its type's canonical id -- never by the address of
+/// whichever object states it, or one instance would be two keys.
+bool bindingKeyOrder(
+    const RuntimeSpecializationBindingKey &lhs, const RuntimeSpecializationBindingKey &rhs) {
+    const auto orderOf = [](const RuntimeSpecializationBindingKey &binding) {
+        return std::tuple{
+            binding.kind,
+            binding.index,
+            camel::core::type::TypeTable::instance().canonicalId(binding.type),
+            binding.value,
+            binding.runtimeFlags};
+    };
+    return orderOf(lhs) < orderOf(rhs);
+}
+
 RuntimeSpecializationKey makeRuntimeSpecializationKey(
     const GCGraph *baseGraph, std::span<const DraftFormalBinding> bindings) {
     RuntimeSpecializationKey key{
@@ -796,19 +813,99 @@ RuntimeSpecializationKey makeRuntimeSpecializationKey(
     // The order is part of the key, so both sides must place two bindings of one type the same
     // way: a type is ordered by its canonical id (specializations.h) and not by the address of
     // whichever object states it, or one instance would be two keys.
-    const auto orderOf = [](const RuntimeSpecializationBindingKey &binding) {
-        return std::tuple{
-            binding.kind,
-            binding.index,
-            camel::core::type::TypeTable::instance().canonicalId(binding.type),
-            binding.value,
-            binding.runtimeFlags};
-    };
-    std::sort(
-        key.bindings.begin(),
-        key.bindings.end(),
-        [&orderOf](const auto &lhs, const auto &rhs) { return orderOf(lhs) < orderOf(rhs); });
+    std::sort(key.bindings.begin(), key.bindings.end(), bindingKeyOrder);
     return key;
+}
+
+/// The formal a binding key names, in the graph its key roots at: a binding the program's table
+/// remembers is re-applied to the root, and the root is the graph whose formals the key's
+/// positions count (the copy that carried it as well was made from that root).
+gc_node_ref_t formalNodeOfGraph(const GCGraph &graph, FormalKind kind, size_t index) {
+    switch (kind) {
+    case FormalKind::Norm:
+        return index < graph.normPorts().size() ? graph.normPorts()[index] : kInvalidNodeRef;
+    case FormalKind::With: {
+        // The key's positions count the ordinary ports first and the `with` ports after them
+        // (orderedDirectCallFormalNodes), so a `with` position is one past the ordinary ones.
+        const size_t normCount = graph.normPorts().size();
+        if (index < normCount) {
+            return kInvalidNodeRef;
+        }
+        const size_t withIndex = index - normCount;
+        return withIndex < graph.withPorts().size() ? graph.withPorts()[withIndex]
+                                                    : kInvalidNodeRef;
+    }
+    case FormalKind::Closure:
+        return index < graph.closureNodes().size() ? graph.closureNodes()[index] : kInvalidNodeRef;
+    }
+    return kInvalidNodeRef;
+}
+
+FormalKind toFormalKind(RuntimeSpecializationBindingKind kind) {
+    switch (kind) {
+    case RuntimeSpecializationBindingKind::Norm:
+        return FormalKind::Norm;
+    case RuntimeSpecializationBindingKind::With:
+        return FormalKind::With;
+    case RuntimeSpecializationBindingKind::Closure:
+    case RuntimeSpecializationBindingKind::Lift:
+        return FormalKind::Closure;
+    }
+    return FormalKind::Norm;
+}
+
+/// Where `node` sits among the formals of its kind, or nothing when the graph does not state it.
+/// A copy keeps the nodes of the root it was made from, so a position in the copy finds the root's
+/// position of the same node -- which is what a key, whose positions count the root's formals,
+/// needs when a binding was collected against a copy.
+std::optional<size_t>
+formalIndexInGraph(const GCGraph &graph, FormalKind kind, gc_node_ref_t node) {
+    const auto positionOf = [node](const auto &ports) -> std::optional<size_t> {
+        const auto found = std::find(ports.begin(), ports.end(), node);
+        if (found == ports.end()) {
+            return std::nullopt;
+        }
+        return static_cast<size_t>(std::distance(ports.begin(), found));
+    };
+    switch (kind) {
+    case FormalKind::Norm:
+        return positionOf(graph.normPorts());
+    case FormalKind::With: {
+        // The key's positions count the ordinary ports first and the `with` ports after them
+        // (orderedDirectCallFormalNodes), so a `with` position is one past the ordinary ones.
+        const auto withIndex = positionOf(graph.withPorts());
+        if (!withIndex.has_value()) {
+            return std::nullopt;
+        }
+        return graph.normPorts().size() + *withIndex;
+    }
+    case FormalKind::Closure:
+        return positionOf(graph.closureNodes());
+    }
+    return std::nullopt;
+}
+
+/// The bindings a copy already carries and the ones a call adds, as one key. A position the copy
+/// already erased cannot be named by the call (the copy's signature has no port for it), so a
+/// position both sides list is the same binding; every other position is added.
+std::vector<RuntimeSpecializationBindingKey> mergeBindingKeys(
+    std::vector<RuntimeSpecializationBindingKey> accumulated,
+    std::vector<RuntimeSpecializationBindingKey> incoming) {
+    for (RuntimeSpecializationBindingKey &binding : incoming) {
+        const auto same = std::find_if(
+            accumulated.begin(),
+            accumulated.end(),
+            [&binding](const RuntimeSpecializationBindingKey &other) {
+                return other.kind == binding.kind && other.index == binding.index;
+            });
+        if (same == accumulated.end()) {
+            accumulated.push_back(std::move(binding));
+        } else {
+            *same = std::move(binding);
+        }
+    }
+    std::sort(accumulated.begin(), accumulated.end(), bindingKeyOrder);
+    return accumulated;
 }
 
 /// The `uses` clause of a graph that lost formals, renumbered.
@@ -986,14 +1083,111 @@ GCGraph *specializeGraphWithBindings(
         return const_cast<GCGraph *>(baseGraph);
     }
 
-    RuntimeSpecializationKey cacheKey = makeRuntimeSpecializationKey(baseGraph, bindings);
+    // A call written against a copy is answered on the root the copy stands for. The copy's
+    // bindings and the call's are merged, and the root with that merged set is the key the table is
+    // asked, and the graph a miss is made from: a copy is the root with a set of formals erased,
+    // whichever call made it, so the copy of a copy is the same graph under another name -- one
+    // graph per round over one request instead of the reuse the table promises
+    // (design principles 5.11: an instance the ring already has is reused).
+    const GCGraph *root = baseGraph;
+    std::vector<RuntimeSpecializationBindingKey> accumulated{};
+    bool onCopy = false;
+    if (const ProgramSpecializationKey *origin = session.specializationOriginOf(baseGraph->id())) {
+        const GCGraph *rootGraph = session.work().graph(origin->baseGraph);
+        // A lift is not a formal the root states: it turns a capture into a port, so a copy whose
+        // entry names one was not made by erasing formals from the root, and the root cannot be
+        // rebuilt from that entry. Such a copy is specialized from itself, the way it always was.
+        const bool erasuresOnly = std::ranges::none_of(
+            origin->bindings,
+            [](const RuntimeSpecializationBindingKey &binding) {
+                return binding.kind == RuntimeSpecializationBindingKind::Lift;
+            });
+        // The root states the formals the entry's positions count. An entry whose root no longer
+        // states one of them names a graph this session cannot rebuild from, and the call is
+        // specialized the way it was before there was an entry at all.
+        const bool reachable = erasuresOnly && rootGraph != nullptr &&
+                               std::ranges::all_of(
+                                   origin->bindings,
+                                   [rootGraph](const RuntimeSpecializationBindingKey &binding) {
+                                       return formalNodeOfGraph(
+                                                  *rootGraph,
+                                                  toFormalKind(binding.kind),
+                                                  binding.index) != kInvalidNodeRef;
+                                   });
+        if (reachable) {
+            root        = rootGraph;
+            accumulated = origin->bindings;
+            onCopy      = true;
+        }
+    }
+    // A binding collected at a call names a position among the callee's own formals, and the callee
+    // here is the copy: the same node is the root's formal at a position the copy's erasures moved.
+    // The key counts the root's formals, so each position is translated to the root's.
+    std::vector<RuntimeSpecializationBindingKey> incoming =
+        makeRuntimeSpecializationKey(baseGraph, bindings).bindings;
+    if (onCopy) {
+        for (RuntimeSpecializationBindingKey &binding : incoming) {
+            const FormalKind kind    = toFormalKind(binding.kind);
+            const gc_node_ref_t node = formalNodeOfGraph(*baseGraph, kind, binding.index);
+            const std::optional<size_t> rootIndex =
+                node == kInvalidNodeRef ? std::nullopt : formalIndexInGraph(*root, kind, node);
+            if (!rootIndex.has_value()) {
+                // The copy and the root it is supposed to derive from do not state the same node:
+                // the entry names a graph this session cannot rebuild from, so the call is
+                // specialized from the graph it names, as it was before there was an entry.
+                root        = baseGraph;
+                accumulated = {};
+                onCopy      = false;
+                break;
+            }
+            binding.index = *rootIndex;
+        }
+    }
+    const std::vector<RuntimeSpecializationBindingKey> merged =
+        mergeBindingKeys(accumulated, std::move(incoming));
+    if (onCopy && merged == accumulated) {
+        // The call names no formal the copy does not already carry: the copy is that binding set.
+        return const_cast<GCGraph *>(baseGraph);
+    }
+
+    RuntimeSpecializationKey cacheKey{
+        .baseGraph = const_cast<GCGraph *>(root),
+        .bindings  = merged,
+    };
     if (GCGraph *cached = session.findSpecialization(cacheKey)) {
         return cached;
     }
 
-    auto draft        = GraphDraft::decode(session.work(), baseGraph);
+    // The bindings as the copy states them: a value the table remembers is a slot and a type, and
+    // the formal it erases is the root's port at the position the key names. Positions past a
+    // binding the same call erased together are the root's own, so they are read off the root and
+    // not off a graph the bindings already changed.
+    std::vector<DraftFormalBinding> applied;
+    applied.reserve(merged.size());
+    for (const RuntimeSpecializationBindingKey &binding : merged) {
+        DraftFormalBinding formal{
+            .kind         = toFormalKind(binding.kind),
+            .index        = binding.index,
+            .formalNodeId = formalNodeOfGraph(*root, toFormalKind(binding.kind), binding.index),
+        };
+        ASSERT(
+            formal.formalNodeId != kInvalidNodeRef,
+            "A specialization key names a formal its root does not state.");
+        if (binding.value == NullSlot && binding.runtimeFlags == kTypeBindingFlag) {
+            formal.refinedType = binding.type;
+        } else {
+            formal.staticValue = DraftStaticValue{
+                .value        = binding.value,
+                .type         = binding.type,
+                .runtimeFlags = binding.runtimeFlags,
+            };
+        }
+        applied.push_back(formal);
+    }
+
+    auto draft        = GraphDraft::decode(session.work(), root);
     bool refinesTypes = false;
-    for (const DraftFormalBinding &binding : bindings) {
+    for (const DraftFormalBinding &binding : applied) {
         const gc_node_ref_t formalDraftId = draft->draftIdOfSourceRef(binding.formalNodeId);
         ASSERT(
             formalDraftId != kInvalidNodeRef,
@@ -1018,17 +1212,17 @@ GCGraph *specializeGraphWithBindings(
     // (`renumberClauseAfterBindings`). It goes after the re-inference above because that keeps the
     // clause it finds and rewrites the parameter types; the clause set here is the one the copy
     // encodes.
-    if (const auto *baseType = baseGraph->funcType(); baseType != nullptr) {
+    if (const auto *baseType = root->funcType(); baseType != nullptr) {
         setRenumberedClause(
             *draft,
             renumberClauseAfterBindings(
                 baseType->resources(),
                 baseType->withTypesCount(),
                 baseType->normTypesCount(),
-                baseGraph->closureNodes().size(),
-                bindings));
+                root->closureNodes().size(),
+                applied));
     }
-    auto *specialized = encodeSpecializedGraph(session, *draft, baseGraph, tag, nonce);
+    auto *specialized = encodeSpecializedGraph(session, *draft, root, tag, nonce);
     session.rememberSpecialization(std::move(cacheKey), specialized);
     return specialized;
 }

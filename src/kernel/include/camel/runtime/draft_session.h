@@ -206,6 +206,10 @@ class RuntimeGraphDraftSession {
     /// Remembers the graph the session made for `key`, in the session and (when the key binds no
     /// GC-managed value) in the program, so a later session over the program finds it.
     void rememberSpecialization(RuntimeSpecializationKey key, GCGraph *graph);
+    /// The root and the bindings a copy of `graph` stands for, when the program's table still has
+    /// the entry: a copy is the root with those bindings erased, so a call written against the copy
+    /// is answered by the key instead of by the copy's own identity.
+    const ProgramSpecializationKey *specializationOriginOf(GraphId graph) const;
     /// The name numbers of new specializations, kept by the program so that a program derived
     /// from another continues where it left off instead of naming a second graph `walk$spec0`.
     uint64_t nextSpecializationNonce();
