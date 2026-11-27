@@ -23,7 +23,7 @@
 // pure, and the declaration carries that (a declaration carries types, not effects), so a call
 // may be folded, merged or run concurrently and its result may not be dropped.
 
-import { ResultOf, is_function } from types
+import { is_function } from types
 
 /// Lists the operator URIs the ONNX backend can lower at its default opset, in the order the
 /// lowering table reports them. A capability report only: it reads the table compiled into the
@@ -64,54 +64,5 @@ export func export_model::<F, E>(fn: F, example: E) => void! when is_function::<
 // scripts/stdlib-reference.mjs takes a declaration's parameters from a single line. The proper fix
 // is for the generator to read the block form. Do not
 // read this as the house style for pass parameters.
-with <out: string = '', target: string = '', dynamic_axes: int[] = [], trace: bool = false, dump: bool = false, prep_stats: bool = false>
+with <out: string = '', trace: bool = false, dump: bool = false, prep_stats: bool = false>
 export func export_model::<F>(f: F) => F! when is_function::<F>()
-
-export type Model<F>
-
-/// Writes `m`, a model, to the file `out`. The bytes are the model itself, so this is the whole
-/// of what the file form of `export_model` did once the translation is done: `save(model(fn,
-/// example), out)` and that form write the same file. `out` is a `with` parameter because it
-/// decides which file, not what is written.
-/// @effect writes a file
-/// @fails error value `IOError` when the file cannot be written
-/// @example model(fn, example)->save<out: "/tmp/model.onnx">
-#op('onnx:save')
-with <out: string>
-export func save::<F>(m: Model<F>) => void!
-
-/// Translates `fn` applied to arguments like `example` into an ONNX model, at the backend's
-/// default opset. `example` is one argument of a one-parameter `fn`, or a tuple with one example
-/// per parameter; the function's graph is translated after the generic passes, and a node the
-/// backend cannot lower is refused. A tensor the function captured from around it is translated
-/// as an initializer of the model, so a trained network is exported as it is, without being
-/// rewritten to take its parameters as arguments. `dynamic_axes` and `target` are `with`
-/// parameters because they are runtime values: `dynamic_axes` names the axes of the tensor inputs
-/// that are left unknown in the model (which is what lets one model run at several shapes), and
-/// `target` names the runtime whose capability data decides whether a node this backend lowers is
-/// one that runtime has (`'none'` switches the check off).
-/// @effect reads the function's graph
-/// @fails error value `ExportUnsupported` when `fn` is not a function, when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node
-/// @example let m = model(func (x: float) { x * 2.0 }, 2.0)
-/// @example let m = model<dynamic_axes: [0]>(func (xs: f32[2, 3]) { xs[0][0] }, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])
-#op('onnx:model')
-with <dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'>
-export func model::<F, E>(fn: F, example: E) => Model<F>! when is_function::<F>()
-
-/// Runs a model on the arguments its function takes, given the way `model` took their example:
-/// the one argument of a one-parameter function, or a tuple with one entry per parameter. Running a
-/// model means the translated function applied to those arguments -- the ONNX runtime is only how it
-/// is computed, so what the call reads and writes is what that function reads and writes. `model`
-/// is a `with` parameter because it decides which model, not what is computed: a call writes
-/// `(x, y)->run<model: m>`.
-///
-/// The result type is the function's own (`ResultOf<F>!`). `A` stands for the argument list: a
-/// declaration cannot write a rest parameter with a type, so the declaration names one parameter and
-/// the kernel reads the arguments as the function's parameter list.
-/// @effect the effect of the model's function
-/// @fails error value `ExportUnsupported` when the runtime the model targets is unavailable, or its session cannot be loaded or run
-/// @example let m = model(func (x: float) { x * 2.0 }, 2.0)
-/// @example let y = 3.0->run<model: m>
-#op('onnx:run')
-with <model: Model<F>>
-export func run::<F, A>(args: A) => ResultOf<F>! when is_function::<F>()

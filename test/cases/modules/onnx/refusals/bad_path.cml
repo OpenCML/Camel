@@ -1,12 +1,23 @@
 /**
- * The model cannot be written (a component of the path, package.json, is a file): the refusal
- * is reported when the pass writes the file. The case used to name the exported function in an
- * export_model call; the thin stage form translates the program the command line hands it, so
- * the program itself is the model.
+ * The model cannot be written (a component of the path, package.json, is a file): the refusal is reported at the
+ * export_model call (line 11).
  */
 
+import { export_model } from onnx
 import { reshape } from tensor
 
-func main() => f32[2] sync {
-    return reshape<[2]>([1.0, 2.0] as f32[])
+func main() => int sync {
+    let r = export_model<out: 'package.json/refusal_path.onnx'>(func (t: float[...]) => float[...] {
+        t * 2.0
+    }, reshape<[2]>([1.0, 2.0]))
+    return match r {
+        case error e => sync {
+            println(e)
+            return 1
+        }
+        case _ => sync {
+            println('exported')
+            return 0
+        }
+    }
 }

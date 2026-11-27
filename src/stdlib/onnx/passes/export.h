@@ -44,10 +44,9 @@ class OnnxExportPass : public GraphTranslatePass {
   public:
     OnnxExportPass(
         const camel::core::context::context_ptr_t &ctx, std::string out = {}, bool trace = false,
-        bool dump = false, bool prepStats = false, std::string target = {},
-        std::vector<int64_t> dynamicAxes = {})
+        bool dump = false, bool prepStats = false)
         : GraphTranslatePass(ctx), out_(std::move(out)), trace_(trace), dump_(dump),
-          prepStats_(prepStats), target_(std::move(target)), dynamicAxes_(std::move(dynamicAxes)) {}
+          prepStats_(prepStats) {}
 
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
@@ -58,11 +57,6 @@ class OnnxExportPass : public GraphTranslatePass {
     bool trace_     = false;
     bool dump_      = false;
     bool prepStats_ = false;
-    /// The parameter `target`: the runtime whose capability data decides whether a lowered node
-    /// is one that runtime has; empty or "none" switches the check off.
-    std::string target_;
-    /// The parameter dynamic_axes: axes of a tensor input left without a fixed extent.
-    std::vector<int64_t> dynamicAxes_;
 };
 
 /// Registers the onnx module's passes (onnx::export_model) with the pass registry.
