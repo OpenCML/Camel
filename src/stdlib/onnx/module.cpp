@@ -60,6 +60,9 @@ constexpr std::string_view kModelOperator = "<onnx::model>";
 /// The name an error value carries when `onnx::save` itself made it.
 constexpr std::string_view kSaveOperator = "<onnx::save>";
 
+/// The name an error value carries when `onnx::run` itself made it.
+constexpr std::string_view kRunOperator = "<onnx::run>";
+
 /// The result type of the call form: writing the model can fail, so the call gives `void!`
 /// (a refusal to translate the function, or a file that cannot be written).
 TupleType *fallibleVoid() {
@@ -205,6 +208,32 @@ slot_t saveKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     return makeOk(NullSlot, fallibleVoid());
 }
 
+// run<model: Model<F>>(args) => ResultOf<F>!
+//
+// Running a model means the translated function applied to `args`; the ONNX runtime is only how
+// it is computed, so the effect of the call is the effect of that function. The model is a value
+// the translation already finished: its bytes are the whole of what there is to run, which is why
+// the call needs no graph of its own and why `model` is a `with` parameter (it decides which
+// model, not what is computed).
+//
+// No runtime is loaded in this build: the module does not link or open the ONNX runtime, so every
+// call answers the error value the declaration promises (`ExportUnsupported`) instead of a result.
+// A caller that wants a result reports it as an error; one that does not gets the unhandled-error
+// diagnostic of the run, which names this operator's place in the program. The session, the
+// dlopen of the C API and the DLPack handover of the tensors are the next step, and they replace
+// the body of this function alone.
+slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)norm;
+    (void)ctx;
+    auto *model = with.get<camel::onnx::ModelValue *>(0);
+    (void)model;
+    return makeError(
+        "ExportUnsupported",
+        "onnx: the ONNX runtime is not available: this build loads no runtime, so a model value "
+        "cannot be run here",
+        kRunOperator);
+}
+
 slot_t supportedOperatorsKernel(ArgsView &, ArgsView &, Context &) {
     const auto uris =
         camel::onnx::LoweringRegistry::instance().supported(camel::onnx::kDefaultOpset);
@@ -220,6 +249,7 @@ class OnnxExecutor : public Executor {
     explicit OnnxExecutor(context_ptr_t ctx)
         : Executor(
               std::move(ctx), {{"export_model", &exportKernel},
+                               {"run", &runKernel},
                                {"model", &modelKernel},
                                {"save", &saveKernel},
                                {"supported_operators", &supportedOperatorsKernel}}) {}
@@ -252,7 +282,7 @@ bool OnnxModule::load() {
     // whose purity is set with its traits.
     camel::core::OperatorTable::instance().declare(
         "onnx",
-        {{"model", true}, {"save", false}, {"supported_operators", true}});
+        {{"model", true}, {"run", false}, {"save", false}, {"supported_operators", true}});
     // `onnx::model` translates a function value and answers it as a model value: the translation
     // reads the graph it is handed, and it writes nothing outside the program. `foldable = false`
     // because the call must run where the program writes it, though running it has no effect:
