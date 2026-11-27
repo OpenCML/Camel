@@ -2372,11 +2372,13 @@ void buildReverseClosure(
     const uint32_t bodyRegion = draft.addRegion(rt::GCRegionKind::LoopBody, 0);
     buildReverseCond(loop, transaction, condRegion);
     buildReverseBody(loop, transaction, bodyRegion, tapePorts);
-    // The last round of the tape, and the gradients the first reverse round gets.
-    const std::array<gc_node_ref_t, 1> tape{tapePorts.front()};
-    const gc_node_ref_t count = addOper(transaction, Type::Int64(), ":struct/len_arr", tape);
-    const std::array<gc_node_ref_t, 2> begin{count, addLoopInt(transaction, 1)};
-    std::vector<gc_node_ref_t> initial{addOper(transaction, Type::Int64(), ":op/sub_l", begin)};
+    // The last round of the tape, and the gradients the first reverse round gets. How many rounds
+    // there were is the pullback's reading of the count: the residuals, one per round.
+    const ReverseRoundCount rounds{
+        .source = ReverseRoundCount::Source::TapeLength,
+        .tape   = tapePorts.front()};
+    const gc_node_ref_t firstRound = reverseFirstRound(transaction, rounds);
+    std::vector<gc_node_ref_t> initial{firstRound};
     for (size_t j = 0; j < loop.stateTypes.size(); ++j) {
         if (loop.stateSlot[j] == kNoSlot) {
             continue;
@@ -5517,5 +5519,15 @@ void buildReverseCondRegion(
     const std::array<gc_node_ref_t, 2> compare{ports.front(), addLoopInt(transaction, 0)};
     draft.setRegionResult(region, addOper(transaction, Type::Bool(), ":op/ge_l", compare));
     draft.setInsertRegion(0);
+}
+gc_node_ref_t
+reverseFirstRound(rt::GraphTransaction &transaction, const ReverseRoundCount &rounds) {
+    gc_node_ref_t count = rounds.value;
+    if (rounds.source == ReverseRoundCount::Source::TapeLength) {
+        const std::array<gc_node_ref_t, 1> tape{rounds.tape};
+        count = addOper(transaction, Type::Int64(), ":struct/len_arr", tape);
+    }
+    const std::array<gc_node_ref_t, 2> begin{count, addLoopInt(transaction, 1)};
+    return addOper(transaction, Type::Int64(), ":op/sub_l", begin);
 }
 } // namespace camel::autodiff
