@@ -24,9 +24,10 @@
  *
  * The rows above the imports are answered where the scopes are, by each builder in its own way (the
  * value chain from the graph and template scopes, the type chain from the type scope), except
- * `BlockHead`, which the module-level chain answers itself from the block the name is written in; so
- * a module-level lookup starts at `rowsFrom(NameRow::BlockHead)`; the rows above it are listed here
- * because the order is one statement, and the reader of either chain has to see where it starts.
+ * `BlockHead`, which the module-level chain answers itself from the block the name is written in;
+ * so a module-level lookup starts at `rowsFrom(NameRow::BlockHead)`; the rows above it are listed
+ * here because the order is one statement, and the reader of either chain has to see where it
+ * starts.
  */
 #pragma once
 

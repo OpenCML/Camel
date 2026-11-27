@@ -460,7 +460,7 @@ class Builder {
     /// that does not compile is answered rather than fatal in a speculative instantiation, and the
     /// layer must not outlive the body either way.
     class BlockHeadModuleScope {
-    public:
+      public:
         BlockHeadModuleScope(
             std::vector<camel::core::module::module_ptr_t> &stack,
             camel::core::module::module_ptr_t module)
@@ -477,7 +477,7 @@ class Builder {
         BlockHeadModuleScope(const BlockHeadModuleScope &)            = delete;
         BlockHeadModuleScope &operator=(const BlockHeadModuleScope &) = delete;
 
-    private:
+      private:
         std::vector<camel::core::module::module_ptr_t> &stack_;
         bool pushed_;
     };

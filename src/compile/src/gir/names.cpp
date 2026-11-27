@@ -243,10 +243,10 @@ auto Builder::valueNameByRow(
                 return RowAnswer<ValueName>::absent();
             case NameRow::BlockHead: {
                 // The body of a headed block reads the module its head names, and reads it as a
-                // module's own names are read: this row answers from that module's exports alone and
-                // only while the body is being built, so the module is a layer of the body and no
-                // scope outside it gains a name (design 15.1). The innermost head answers first; a
-                // block inside a block reads the inner head's module, and the outer head's names
+                // module's own names are read: this row answers from that module's exports alone
+                // and only while the body is being built, so the module is a layer of the body and
+                // no scope outside it gains a name (design 15.1). The innermost head answers first;
+                // a block inside a block reads the inner head's module, and the outer head's names
                 // stay in force below it as the scopes of the outer body do.
                 if (exports_ == nullptr) {
                     return RowAnswer<ValueName>::absent();
