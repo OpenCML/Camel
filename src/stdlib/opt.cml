@@ -28,7 +28,7 @@
  * folding. No other number is computed here.
  */
 
-import { flatten, all, any } from array
+import { flatten, all, any, drop } from array
 import { Node, Graph, NodeKind, Region, RegionKind, graphs_of, graphs, nodes, inputs, with_inputs, value_users, kind, op, op_name, callee, may_be_recomputed, may_fault, may_be_rearranged, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, region_kind, region_parent, permissions, tags, constant, open, replace, erase, eval, commit, abort, inline_call } from graph
 import { saturate as saturate_rules } from rewrite
 import { algebra as algebra_laws, distribution, simplify } from rules
@@ -463,7 +463,7 @@ func expand_one(g: Graph, n: Node, rest: Node[], remaining: int) => int sync {
 // it may still be expanded: the pool is spent call by call, as the C++ engine spends one
 // `growthSpent` across its round, not one pool for each call.
 func expand_calls(g: Graph, calls: Node[], remaining: int) => int sync {
-    return if len(calls) == 0 then remaining else expand_one(g, calls[0], drop(calls, n: 1), remaining)
+    return if len(calls) == 0 then remaining else expand_one(g, calls[0], drop<1>(calls), remaining)
 }
 
 func expand_graph(g: Graph, rest: Graph[], remaining: int) => int sync {
@@ -471,7 +471,7 @@ func expand_graph(g: Graph, rest: Graph[], remaining: int) => int sync {
 }
 
 func expand_graphs(gs: Graph[], remaining: int) => int sync {
-    return if len(gs) == 0 then remaining else expand_graph(gs[0], drop(gs, n: 1), remaining)
+    return if len(gs) == 0 then remaining else expand_graph(gs[0], drop<1>(gs), remaining)
 }
 
 // Commits a round that expanded something, and abandons one that expanded nothing: the program the
@@ -487,7 +487,7 @@ func inline_rounds::<F>(f: F, remaining: int) => F! when is_function::<F>() sync
 /// its captures carried in by the function value. The selection rules are `std::cxx::inline`'s as far
 /// as this module can read them (see the four unaligned items above).
 /// @fails fault `InvalidArgument` when a selected call is one `inline_call` refuses
-/// @example (func (x: int) { x + 1 )->inline
+/// @example (func (x: int) { x + 1 })->inline
 with </// Nodes a run may copy: one pool for the whole run, each expansion paying for the nodes its copy
 /// carries (`copy_cost`) -- the way `std::cxx::inline` spends one `growthSpent` (its default 4096);
 /// 0 expands nothing at all.
@@ -495,3 +495,5 @@ growth_budget: int = 4096>
 export func inline::<F>(f: F) => F! when is_function::<F>() {
     return inline_rounds(f, growth_budget)
 }
+
+
