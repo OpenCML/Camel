@@ -61,7 +61,7 @@ item c
 ```
 
 - `->` 是管道：`xs->map<f>` 就是 `map(xs, f)`，写成一条链更好读（第 3 章）。
-- 传给 `map`、`filter` 的函数写成 lambda：`<(x: int): int => x * x>`，尖括号里是它的类型。
+- 传给 `map`、`filter` 的函数写成 lambda：`<func (x: int) { x * x }>`，尖括号里是它的值（它是 `map` 的 `with` 参数）。
 - `reduce` 需要初值，所以是 `reduce<f, 0>`。
 - 这四个算子的函数都保持纯：传给它们的函数不该有状态（下面有个反例）。
 

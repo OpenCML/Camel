@@ -63,7 +63,7 @@ item c
 ```
 
 - `->` is the pipe: `xs->map<f>` is `map(xs, f)`, and a chain of them reads better (chapter 3).
-- The function handed to `map` or `filter` is a lambda: `<(x: int): int => x * x>`, with its type in the angle
+- The function handed to `map` or `filter` is a lambda: `<func (x: int) { x * x }>`, with its value in the angle
   brackets.
 - `reduce` needs a starting value, so it is `reduce<f, 0>`.
 - The functions handed to these four operators stay pure: they should not carry state (there is a counter-example
