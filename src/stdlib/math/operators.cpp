@@ -22,6 +22,7 @@ using namespace camel::core::rtdata;
 using namespace camel::core::error;
 #include <cmath>
 #include <complex>
+#include <type_traits>
 
 // ---- min, max and abs over bf16 and f16 ------------------------------------------------------
 //
@@ -90,12 +91,24 @@ slot_t __math_abs_bf__(ArgsView &, ArgsView &norm, Context &) { return halfAbs<B
 
 slot_t __math_abs_f6__(ArgsView &, ArgsView &norm, Context &) { return halfAbs<Float16>(norm); }
 
+/// `abs(x) = x < 0 ? -x : x`, with the negation wrapping like every other integer overflow
+/// (design: integer add/sub/mul wrap, and the smallest integer divided by -1 keeps the wrap). So
+/// `abs(INT_MIN)` is `INT_MIN` itself -- it is not its positive value, and the value is defined:
+/// `std::abs` on the smallest integer is undefined behaviour, which is what this replaces.
+template <typename T> T wrappingAbs(T value) {
+    if (value >= 0) {
+        return value;
+    }
+    using U = std::make_unsigned_t<T>;
+    return static_cast<T>(U{0} - static_cast<U>(value));
+}
+
 slot_t __math_abs__(ArgsView &with, ArgsView &norm, Context &ctx) {
     switch (norm.code(0)) {
     case TypeCode::Int32:
-        return toSlot(std::abs(norm.get<Int32>(0)));
+        return toSlot(wrappingAbs(norm.get<Int32>(0)));
     case TypeCode::Int64:
-        return toSlot(std::abs(norm.get<Int64>(0)));
+        return toSlot(wrappingAbs(norm.get<Int64>(0)));
     case TypeCode::Float32:
         return toSlot(std::fabs(norm.get<Float32>(0)));
     case TypeCode::Float64:

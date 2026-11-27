@@ -121,12 +121,20 @@ struct IntegerOperator {
 std::optional<IntegerOperator> integerOperator(std::string_view uri) {
     using Kind = Term::Kind;
     static const std::unordered_map<std::string_view, IntegerOperator> table{
-        {":op/add_l", {Kind::Add, 2}},      {":op/add_i", {Kind::Add, 2}},
-        {":op/sub_l", {Kind::Sub, 2}},      {":op/sub_i", {Kind::Sub, 2}},
-        {":op/mul_l", {Kind::Multiply, 2}}, {":op/mul_i", {Kind::Multiply, 2}},
-        {":op/div_l", {Kind::Divide, 2}},   {":op/div_i", {Kind::Divide, 2}},
-        {":op/mod_l", {Kind::Remainder, 2}}, {":op/mod_i", {Kind::Remainder, 2}},
-        {":op/neg_l", {Kind::Negate, 1}},   {":op/neg_i", {Kind::Negate, 1}},
+        {":op/add_l", {Kind::Add, 2}},
+        {":op/add_i", {Kind::Add, 2}},
+        {":op/sub_l", {Kind::Sub, 2}},
+        {":op/sub_i", {Kind::Sub, 2}},
+        {":op/mul_l", {Kind::Multiply, 2}},
+        {":op/mul_i", {Kind::Multiply, 2}},
+        {":op/div_l", {Kind::Divide, 2}},
+        {":op/div_i", {Kind::Divide, 2}},
+        {":op/mod_l", {Kind::Remainder, 2}},
+        {":op/mod_i", {Kind::Remainder, 2}},
+        {":op/neg_l", {Kind::Negate, 1}},
+        {":op/neg_i", {Kind::Negate, 1}},
+        {"math:abs_l", {Kind::Abs, 1}},
+        {"math:abs_i", {Kind::Abs, 1}},
     };
     const auto found = table.find(uri);
     if (found == table.end()) {
@@ -368,6 +376,8 @@ std::string render(const Term &term) {
         return std::to_string(signedValue(term));
     case Term::Kind::Parameter:
         return term.name.empty() ? std::format("x{}", term.parameter) : term.name;
+    case Term::Kind::Abs:
+        return std::format("|{}|", term.left == nullptr ? std::string("?") : render(*term.left));
     case Term::Kind::Negate:
         return std::format("(-{})", term.left == nullptr ? std::string("?") : render(*term.left));
     case Term::Kind::Add:
