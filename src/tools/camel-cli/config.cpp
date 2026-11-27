@@ -876,23 +876,8 @@ bool parseArgs(int argc, char *argv[]) {
          opt_values("input", targetFiles) %
              "input file (optional if --input given; at least one required)");
 
-    // The subcommands, in the one table the three places that need them read: the word the command
-    // line is read by (below), the grammar group each one adds, and the usage line `--help` prints.
-    // A name added here is a subcommand in all three places at once.
-    struct Subcommand {
-        const char *name;  // the word, as the first argument of the command line
-        Command command;   // what the run is doing, once that word is the first argument
-        const char *usage; // the line `--help` prints for it
-    };
-
-    const Subcommand kSubcommands[] = {
-        {"docs", Command::Info, "camel docs [<module>...]"},
-        {"about", Command::Info, "camel about"},
-        {"zen", Command::Info, "camel zen"},
-        {"explain", Command::Info, "camel explain <name or code>"},
-        {"check", Command::Check, "camel check [options] <file>"},
-        {"inspect", Command::Inspect, "camel inspect [options] <file>"},
-    };
+    // The subcommand table is below, after the grammars: an entry names the grammar that reads the
+    // rest of its line, so the table has to be written where those grammars exist.
     // The information commands are subcommands, not options: they are not a setting of a run.
     // Each is its own group, so the first word of the command line decides which one it is.
     auto infoFlags =
@@ -974,6 +959,32 @@ bool parseArgs(int argc, char *argv[]) {
          globalOps,
          values("input", targetFiles) % "input file");
 
+    // The subcommands, in the one table every place that needs them reads: the word the command
+    // line is read by, the grammar that reads what follows that word, the usage line `--help`
+    // prints, and the information the word turns on. A name added here is a subcommand in all of
+    // those places at once, and no place dispatches on the word's position in the table.
+    clipp::group docsGrammar    = docsCommand | infoFlags;
+    clipp::group aboutGrammar   = infoFlags;
+    clipp::group zenGrammar     = infoFlags;
+    clipp::group explainGrammar = infoFlags; // the name is read from the line, not by the grammar
+    struct Subcommand {
+        const char *name;            // the word, as the first argument of the command line
+        Command command;             // what the run is doing, once that word is the first argument
+        const char *usage;           // the line `--help` prints for it
+        const clipp::group *grammar; // the settings the word takes after it
+        bool *info;                  // the information word this one turns on (null: none)
+        bool nameIsTheArgument;      // the word after this one is its argument, not a flag
+    };
+
+    const Subcommand kSubcommands[] = {
+        {"docs", Command::Info, "camel docs [<module>...]", &docsGrammar, &showDocs, false},
+        {"about", Command::Info, "camel about", &aboutGrammar, &showAbout, false},
+        {"zen", Command::Info, "camel zen", &zenGrammar, &showZen, false},
+        {"explain", Command::Info, "camel explain <name or code>", &explainGrammar, nullptr, true},
+        {"check", Command::Check, "camel check [options] <file>", &check, nullptr, false},
+        {"inspect", Command::Inspect, "camel inspect [options] <file>", &inspect, nullptr, false},
+    };
+
     // The word is read before the grammar is built, so the groups are alternatives only where the
     // command line has no word: a group that loses its command would otherwise fall back to a plain
     // run, and its settings would be read as the ones of a run.
@@ -981,15 +992,18 @@ bool parseArgs(int argc, char *argv[]) {
     // carries, so a word written after an option is refused with the sentence that says so instead
     // of falling through to a run that then wants an input file.
     const char *word = argc > 1 ? argv[1] : nullptr;
-    bool named       = false;
+    const Subcommand *named = nullptr;
     for (const Subcommand &sub : kSubcommands) {
         if (word != nullptr && std::string_view(word) == sub.name) {
-            named           = true;
+            named           = &sub;
             selectedCommand = sub.command;
+            if (sub.info != nullptr) {
+                *sub.info = true;
+            }
             break;
         }
     }
-    if (!named) {
+    if (named == nullptr) {
         word = nullptr;
         for (int i = 2; i < argc; ++i) {
             for (const Subcommand &sub : kSubcommands) {
@@ -1002,14 +1016,6 @@ bool parseArgs(int argc, char *argv[]) {
                 }
             }
         }
-    }
-
-    if (word != nullptr && std::string_view(word) == kSubcommands[0].name) {
-        showDocs = true;
-    } else if (word != nullptr && std::string_view(word) == kSubcommands[1].name) {
-        showAbout = true;
-    } else if (word != nullptr && std::string_view(word) == kSubcommands[2].name) {
-        showZen = true;
     }
 
     // `--help` lists what the command line can be: the run's settings and each subcommand's line,
@@ -1040,30 +1046,18 @@ bool parseArgs(int argc, char *argv[]) {
     // The grammar that reads the line is the one the word picked: a subcommand's group holds its
     // own settings, and a line without a word is a run's.
     const parsing_result parsed = [&]() -> parsing_result {
-        if (word != nullptr) {
-            if (std::string_view(word) == kSubcommands[0].name) {
-                return parse(argc, argv, docsCommand | infoFlags);
-            }
-            if (std::string_view(word) == kSubcommands[1].name) {
-                return parse(argc, argv, infoFlags); // bout takes no argument of its own
-            }
-            if (std::string_view(word) == kSubcommands[2].name) {
-                return parse(argc, argv, infoFlags); // zen takes no argument of its own
-            }
-            if (std::string_view(word) == kSubcommands[3].name) {
-                // The name is the argument the word introduced, so it is read here and the parser
-                // is left with the flags: a diagnostic name is never a setting of the parser.
-                if (argc > 1) {
-                    Diag::explain = argv[1];
-                }
-                return parse(1, argv, infoFlags);
-            }
-            if (std::string_view(word) == kSubcommands[4].name) {
-                return parse(argc, argv, check);
-            }
-            return parse(argc, argv, inspect);
+        if (named == nullptr) {
+            return parse(argc, argv, run | infoFlags);
         }
-        return parse(argc, argv, run | infoFlags);
+        if (named->nameIsTheArgument) {
+            // The name is the argument the word introduced, so it is read here and the parser
+            // is left with the flags: a diagnostic name is never a setting of the parser.
+            if (argc > 1) {
+                Diag::explain = argv[1];
+            }
+            return parse(1, argv, *named->grammar);
+        }
+        return parse(argc, argv, *named->grammar);
     }();
     if (!parsed) {
         // Name what did not parse (an unknown option, a missing value, a conflict) before the
