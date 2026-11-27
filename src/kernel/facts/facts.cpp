@@ -95,6 +95,21 @@ void checkKind(const KindInfo &info) {
             reject(info.key, "a fact of class (i) is the graph's content: the kind must read it");
         }
     }
+    // A portable text form is a back end's cache of an answer that is the same in every process:
+    // content and derived answers are, and where a target kind's answer applies is the back end's
+    // to know, not the core's. Both hooks or neither: a text that cannot be read back is a leak.
+    if (bool(info.encode) != bool(info.decode)) {
+        reject(
+            info.key,
+            "a kind that gives one of encode and decode gives both (a text that reads back is "
+            "what a cross-process cache needs)");
+    }
+    if (info.encode && info.cls == Class::Target) {
+        reject(
+            info.key,
+            "a fact of class (iii) states no portable form: where its answer applies is the back "
+            "end's, not something the core hands to another process");
+    }
 }
 
 /// The distinct graphs of `anchors`, in the order they first appear.

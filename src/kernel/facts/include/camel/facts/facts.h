@@ -272,6 +272,14 @@ struct KindInfo {
     std::function<bool(const void *, const void *)> equal;
     std::function<std::string(const void *)> print;
 
+    /// A portable text form of the value, and the value that text reads back to. A back end that
+    /// keeps answers across processes (a compile cache) uses these; the core stores nothing
+    /// outside the process. Only a Content or Derived kind may give them: what a kind says it is
+    /// is the same in every process, while where a Target kind's answer applies is the back end's.
+    /// A kind that gives one gives both, and a text the decode does not accept reads back null.
+    std::function<std::optional<std::string>(const void *)> encode;
+    std::function<std::shared_ptr<const void>(std::string_view)> decode;
+
     /// The anchors in the view at which the kind has a fact to compute, for `computeAll`: by
     /// default every node (Node scope) or the graph (Graph scope); a CrossNode or CrossGraph kind
     /// that wants to be computed in bulk says where.
@@ -289,6 +297,8 @@ struct KindInfo {
  *             analysis rather than a cache (design principles red line 4); a kind with no merge
  *             must state why in its own file.
  *   print     one line of text, which is what `camel inspect --facts` shows. Required.
+ *   encode / decode   a portable text form of the value and the value it reads back to (a back
+ *             end's cross-process cache). Content and Derived kinds only, and both or neither.
  * Values are compared with `==` (verify, and the round trip of a module's encoding).
  */
 template <typename T> struct Kind {
@@ -304,6 +314,8 @@ template <typename T> struct Kind {
     std::function<std::optional<T>(const T &left, const T &right)> merge;
     std::function<std::string(const T &)> print;
     std::function<std::vector<std::vector<Anchor>>(const graph::GraphView &)> anchorsIn;
+    std::function<std::optional<std::string>(const T &)> encode;
+    std::function<std::optional<T>(std::string_view)> decode;
 };
 
 /// Registers a kind (the type-erased form; `registerKind<T>` below builds it). Throws
@@ -350,6 +362,16 @@ template <typename T> KindId registerKind(Kind<T> kind) {
     if (kind.print) {
         info.print = [print = std::move(kind.print)](const void *value) {
             return print(*static_cast<const T *>(value));
+        };
+    }
+    if (kind.encode && kind.decode) {
+        info.encode = [encode = std::move(kind.encode)](const void *value) {
+            return encode(*static_cast<const T *>(value));
+        };
+        info.decode = [decode = std::move(kind.decode)](std::string_view text) {
+            std::optional<T> value = decode(text);
+            return value ? std::make_shared<const T>(std::move(*value))
+                         : std::shared_ptr<const void>{};
         };
     }
     return registerKind(std::move(info));
