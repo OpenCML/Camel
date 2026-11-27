@@ -1,0 +1,480 @@
+diff --git a/docs/cli.cn.md b/docs/cli.cn.md
+index c45ce91414..2de3411b1a 100644
+--- a/docs/cli.cn.md
++++ b/docs/cli.cn.md
+@@ -51,10 +51,10 @@
+ - `--max-macro-depth <n>`：`std::macro` 提前求值一次调用时嵌套调用的上限（默认 64；取值范围相同）。  
+ - `--max-macro-rounds <n>`：`std::macro` 提前求值时一个循环至多运行的轮数（默认 1000000，取值 1 到 2^40）；超过则这次求值失败。  
+ - `--gc <collector>`：运行时值的回收器：`generational`（默认；分代，年轻对象会被复制）或 `mark-sweep`（对象地址不变）。详见英文版 `docs/cli.md` 的 "The collector" 一节  
+-- `--block-limit <megabytes>`：数据块空间的上限（默认 2048 MB，取值 1 到 2^20 MB）；它只防范失控的分配，最后一个持有者消失时块的内存立即归还  
+-- `--graph-gc-mb <megabytes>`：图空间比上次回收后多出这么多时要求回收（默认 64）  
+-- `--gc-nursery-mb <megabytes>`、`--gc-promotion-age <n>`、`--gc-large-threshold-kb <kilobytes>`、`--gc-large-budget-mb <megabytes>`、`--gc-growth-percent <n>`、`--gc-heap-limit-mb <megabytes>`：回收器的尺寸，在堆存在之前读入：初生空间（默认 4 MB）、晋升前存活的次回收次数（默认 4）、多大算大对象（generational 默认 64 KB，mark-sweep 4 KB）、两次回收之间允许的大对象字节（默认 4 MB）、该空间的增长比例（默认 100%）、堆上限（默认无）。每一项做什么见“回收器”一节  
+-- `--space-segment-kb <kilobytes>`、`--meta-space-limit-mb <megabytes>`、`--graph-space-limit-mb <megabytes>`、`--perm-space-limit-mb <megabytes>`：每个可增长空间的第一个段（段小则小程序也会增长它们），以及 meta、graph、permanent 三个空间的上限；空间用尽时以 `RuntimeDiag::MemoryExhausted` 停下，并指出能抬高它的选项  
++- `--spaces block_mb= <megabytes>`：数据块空间的上限（默认 2048 MB，取值 1 到 2^20 MB）；它只防范失控的分配，最后一个持有者消失时块的内存立即归还  
++- `--gc graph_mb= <megabytes>`：图空间比上次回收后多出这么多时要求回收（默认 64）  
++- `--gc nursery_mb= <megabytes>`、`--gc promotion_age= <n>`、`--gc large_threshold_kb= <kilobytes>`、`--gc large_budget_mb= <megabytes>`、`--gc growth_percent= <n>`、`--gc heap_limit_mb= <megabytes>`：回收器的尺寸，在堆存在之前读入：初生空间（默认 4 MB）、晋升前存活的次回收次数（默认 4）、多大算大对象（generational 默认 64 KB，mark-sweep 4 KB）、两次回收之间允许的大对象字节（默认 4 MB）、该空间的增长比例（默认 100%）、堆上限（默认无）。每一项做什么见“回收器”一节  
++- `--spaces segment_kb= <kilobytes>`、`--spaces meta_mb= <megabytes>`、`--spaces graph_mb= <megabytes>`、`--spaces perm_mb= <megabytes>`：每个可增长空间的第一个段（段小则小程序也会增长它们），以及 meta、graph、permanent 三个空间的上限；空间用尽时以 `RuntimeDiag::MemoryExhausted` 停下，并指出能抬高它的选项  
+ - `--gc-stress <kind=...,alloc=...,safepoint=...>`、`--gc-check <moves,poison,verify=...,config,mark>`：在压力下回收、读回收器：`kind=minor|major|both` 指定回收种类，`alloc=N` 每 N 次分配回收一次，`safepoint=N` 每 N 个安全点回收一次；`moves` 逐行打印移动的对象，`poison` 在每个安全点覆写 from 空间，`verify=before|after|both` 在回收前后检查不变式，`config` 启动时打印解析后的配置，`mark` 把记账清掉的标记与整个图空间比对  
+ - `--coll <leaf=...,fanout=...,pad=...,validate=...>`：`Map`/`Set` 树的宽度，在第一个集合建立之前读入：每个叶子的条目数（默认 64；0 表示所有集合都是一个有序数组）、每个分支的孩子数（默认 64）、`pad=off` 让根以下的表按内容分配、`validate=on` 检查每个操作返回的表  
+ - `--native-stack-guard <on|off>`：嵌套调用前是否检查原生栈（默认 `on`）；`off` 只用于测量栈真正到哪里结束，不供正常使用  
+@@ -184,7 +184,7 @@
+ | `std::cxx::saturate` | `rounds: int = 6`（标准规则库的饱和轮数），`strict: bool = false`（只保留逐位成立的规则，与 `std::opt` 的 `safe_fp=true` 相同） |
+ | `std::jgir` | `canonical: bool = false`（键按规范顺序排列，两次运行可以逐字节比较），`egraph: bool = false`（写出 `egraph-serialize` 读取的文档，它的 e-class 就是“一个值有多种写法”的那些类；社区工具 `egraph-visualizer` 能打开它） |
+ 
+-仍留在环境变量里的是进程的环境，不是某个遍的设置：`CAMEL_HOME`、`CAMEL_STD_LIB`、`CAMEL_PACKAGES`，日志与诊断格式变量，以及 `CAMEL_STARTUP_PROFILE`。重写引擎的增长预算是上面那些遍的 `growth_budget` 参数，不从环境变量读取。开关是选项和遍参数：`--gc`、`--block-limit`、`--graph-gc-mb`、`--gc-nursery-mb`、`--gc-promotion-age`、`--gc-large-threshold-kb`、`--gc-large-budget-mb`、`--gc-growth-percent`、`--gc-heap-limit-mb`、`--space-segment-kb`、`--meta-space-limit-mb`、`--graph-space-limit-mb`、`--perm-space-limit-mb`、`--gc-stress`、`--gc-check`、`--coll`、`--max-recursion-depth`、`--max-macro-depth`、`--max-macro-rounds`、`--native-stack-guard`、`--profile-mode`，以及 `std::profile` 的 `gc_stats`、`type_stats`、`effect_trace` 参数；测试专用的遍在流水线里写出名字即可。
++仍留在环境变量里的是进程的环境，不是某个遍的设置：`CAMEL_HOME`、`CAMEL_STD_LIB`、`CAMEL_PACKAGES`，日志与诊断格式变量，以及 `CAMEL_STARTUP_PROFILE`。重写引擎的增长预算是上面那些遍的 `growth_budget` 参数，不从环境变量读取。开关是选项和遍参数：`--gc`、`--spaces block_mb`、`--gc graph_mb`、`--gc nursery_mb`、`--gc promotion_age`、`--gc large_threshold_kb`、`--gc large_budget_mb`、`--gc growth_percent`、`--gc heap_limit_mb`、`--spaces segment_kb`、`--spaces meta_mb`、`--spaces graph_mb`、`--spaces perm_mb`、`--gc-stress`、`--gc-check`、`--coll`、`--max-recursion-depth`、`--max-macro-depth`、`--max-macro-rounds`、`--native-stack-guard`、`--profile-mode`，以及 `std::profile` 的 `gc_stats`、`type_stats`、`effect_trace` 参数；测试专用的遍在流水线里写出名字即可。
+ 
+ ### 模块的遍
+ 
+@@ -335,9 +335,9 @@
+ | `std::tf` 上线程的原生栈 | 与下一行相同：计数之外，线程的栈用掉十六分之十五时拒绝再嵌套一次调用 | `ulimit -s` 等（工作线程的栈至少 8 MiB：Unix 上进程的栈上限、Windows 上可执行文件的栈大小更大时取后者） | 在该调用处给出 `MaxRecursionDepthExceeded`；此时消息给出打开的调用数和栈的大小。默认上限（1000）在 Linux 默认的 8 MiB 栈下远够不到这里（见下文的实测） |
+ | 线程的原生栈，所有执行后端 | 线程的栈（Linux 上主线程默认 8 MiB） | `ulimit -s` 之类 | 在原生栈将满（Unix 上剩余不足十六分之一，且至少保留 128 KiB；Windows 为 SEH 故障展开保留十六分之十五）时还要嵌套的调用，在到达上面的上限之前就被拒绝，诊断为 `MaxRecursionDepthExceeded`；消息说明原生栈已满。正是这一点使调高的上限不至于以段错误告终。栈的边界在 Linux（glibc）、Windows 和 macOS 上读取（Windows 也已验证；macOS 已实现，但没有编译或运行过）；在其他平台上，上限不能调高到默认值以上 |
+ | `std::macro` 对 `#macro` 函数的提前求值 | 64 个求值器帧（32 层的自递归：`count(31)` 被求值，`count(32)` 不被求值） | `--max-macro-depth <n>`（1 到 1000000） | 求值失败：在该调用处给出运行时故障 `RuntimeDiag::MacroEvaluationFailed`，流水线停止（见“`std::macro` 报告什么”）。求值器在原生栈上嵌套（每帧约 630 字节），栈将满时以同样的方式停下 |
+-| 图空间（程序的运行时图；一个函数约占 1 到 2 KB） | 总共 256 MB，随程序的需要按段保留 | `--graph-space-limit-mb <megabytes>` | `RuntimeDiag::MemoryExhausted`（`0x04000014`，退出码 1），定位在正在编码其图的函数，指出空间、用量、上限和变量。程序本身放不下时阶段为 `compile`，是某个遍使它增长时阶段为 `pass:<name>` |
+-| 永久空间（类型和布局；一个函数约占 0.6 到 2 KB，遍创建的内容永不释放） | 总共 256 MB，按段 | `--perm-space-limit-mb <megabytes>` | `RuntimeDiag::MemoryExhausted`，同上，除非知道正在编译的函数，否则没有位置 |
+-| 元空间（正在编译的图的常量和函数值；每个拥有它的函数、lambda 或分支臂约 1.2 KB） | 总共 256 MB，按段 | `--meta-space-limit-mb <megabytes>` | `RuntimeDiag::MemoryExhausted`，阶段 `compile`，定位在正在编译的函数 |
++| 图空间（程序的运行时图；一个函数约占 1 到 2 KB） | 总共 256 MB，随程序的需要按段保留 | `--spaces graph_mb= <megabytes>` | `RuntimeDiag::MemoryExhausted`（`0x04000014`，退出码 1），定位在正在编码其图的函数，指出空间、用量、上限和变量。程序本身放不下时阶段为 `compile`，是某个遍使它增长时阶段为 `pass:<name>` |
++| 永久空间（类型和布局；一个函数约占 0.6 到 2 KB，遍创建的内容永不释放） | 总共 256 MB，按段 | `--spaces perm_mb= <megabytes>` | `RuntimeDiag::MemoryExhausted`，同上，除非知道正在编译的函数，否则没有位置 |
++| 元空间（正在编译的图的常量和函数值；每个拥有它的函数、lambda 或分支臂约 1.2 KB） | 总共 256 MB，按段 | `--spaces meta_mb= <megabytes>` | `RuntimeDiag::MemoryExhausted`，阶段 `compile`，定位在正在编译的函数 |
+ | 自动空间（运行期的值，受垃圾回收管理） | 宿主机的内存 | 否 | `RuntimeDiag::MemoryExhausted`（阶段 `pass:<scheduler>`），说明宿主机拒绝了这次分配 |
+ 
+ **递归上限计的是什么** 在每个执行后端上都相同：每一次处于打开状态且不是尾调用的函数调用，不论它是写成一次调用、通过函数值进行，还是由高阶算子（`map`、`filter`、`reduce`、`foreach`）为某个元素进行。处于尾位置的调用替换它的调用者，不计数（见 `docs/technical/19_tail_call_optimization.md`），所以任意深度的尾递归在任何上限下都能运行。`if` 的分支臂是它们所在函数的尾调用。唯一不由程序自己发出的调用，即运行时对 `main` 的调用，不计数。因此上限为 L 时，对于从 `main` 调用的 `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)`，`depth(L - 1)` 是能运行的最深调用，在 `std::nvm`、`std::fvm`、`std::jit`（解释执行的和编译为原生代码的）以及 `std::tf` 上都是如此：默认值下是 `depth(999)`。改变存在哪些调用的遍（`std::cxx::inline`）也改变被计数的内容，因为它们改变了图。
+diff --git a/docs/cli.md b/docs/cli.md
+index 32b79011ce..c78ac3c0c0 100644
+--- a/docs/cli.md
++++ b/docs/cli.md
+@@ -42,7 +42,7 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
+ - `--passes <list>`: Comma-separated pass list (e.g. `--passes std::gir,other`). Each pass is followed by its parameters as `key=value` words; a comma separates passes, not parameters. If omitted, first positional is file, rest are passes. A pass may take parameters: `std::opt safe_fp=true` (see "Pass parameters")  
+ - `--timeit <pass>/<N>`: Measure one pass `N` times from a fresh graph; text mode prints samples plus a compact summary table, while `--output-format json` emits structured benchmark data. A run that fails names the 1-based number of the iteration that failed: text mode prints it in a `[timeit] i/N ... failed` line, and JSON mode writes one timeit object with `"iteration"`, the diagnostics (or a `"failure"` sentence when there are none) and the samples that completed before the failure. A program that did not compile is a failed run in the same way: the diagnostics are reported, no elapsed time is recorded for that iteration, no summary is printed, and the exit code is 1.
+ - `--dump-after-each-pass <dir>`: Write the graph before the first pass (`00_input`) and after each pass that returns a graph (`NN_<pass>`, `::` written as `.`) into `<dir>`: a readable DOT (`.rgir.dot`, the `std::rgir` format with `origin`/`span`/`srcfile` per node) and the `std::stats` counters (`.stats.json`). A scheduling pass consumes the graph and leaves no snapshot after it; a translation pass hands the graph on, so it gets one. Compare two snapshots with `python tools/graph-diff/graph_diff.py BEFORE AFTER`  
+-- `--time-phases`, `--time-phases=<file>`: Write the wall-clock time of each phase of the run (start-up, parse, GCT, GIR, each pass, teardown; one entry per module and per pass) as one JSON object to standard error, or to `<file>` (the file is joined to the option with `=`, so that the program after it is never taken for the file). With the counting allocator shim preloaded (`test/tools/allocshim`), each phase also carries its heap allocations. The environment variable `CAMEL_TIME_PHASES=<file>` does the same for every command. Off by default and free when off; each entry names the phase and carries its wall-clock time and its CPU time (user + system, `cpu_ns`; `-1` where the platform has no such accounting — the wall clock follows the host's load, the CPU time does not), and with the counting allocator also its allocations, bytes and peak.
++- `--time-phases`, `--time-phases=<file>`: Write the wall-clock time of each phase of the run (start-up, parse, GCT, GIR, each pass, teardown; one entry per module and per pass) as one JSON object to standard error, or to `<file>` (the file is joined to the option with ``, so that the program after it is never taken for the file). With the counting allocator shim preloaded (`test/tools/allocshim`), each phase also carries its heap allocations. The environment variable `CAMEL_TIME_PHASES=<file>` does the same for every command. Off by default and free when off; each entry names the phase and carries its wall-clock time and its CPU time (user + system, `cpu_ns`; `-1` where the platform has no such accounting — the wall clock follows the host's load, the CPU time does not), and with the counting allocator also its allocations, bytes and peak.
+ - `--arg <name>=<value>`: Value of a parameter of `main` (repeatable; see "Programs whose `main` takes parameters")  
+ - `-o`, `--output <file>`: Where the value `main` returns is written (default: standard output; same section)  
+ - `-P`, `--profile`: Record time spent in each stage and write trace files to `profile_reports/`. Effective in debug builds only; a release build accepts the option and produces no report  
+@@ -52,10 +52,10 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
+ - `--max-macro-depth <n>`: Limit on nested calls while `std::macro` evaluates a call ahead of time (default 64; same range).  
+ - `--max-macro-rounds <n>`: Limit on the rounds one loop may run while `std::macro` evaluates it ahead of time (default 1000000, 1 to 2^40); a loop past it fails the evaluation.  
+ - `--gc <collector>`: Collector of run-time values: `generational` (default; young objects are copied and die cheaply) or `mark-sweep` (an object keeps its address; see "The collector")  
+-- `--block-limit <megabytes>`: Limit on the block space, which holds the data blocks of run-time values (arrays, strings, tensors; default 2048 MB, 1 to 2^20 MB). It only guards against a runaway allocation: the space gives memory back as soon as the last owner of a block is gone (see "The collector")  
+-- `--graph-gc-mb <megabytes>`: How much the graph space may grow past what the last collection left before the collector is asked to run again (default 64; see "The collector")  
+-- `--gc-nursery-mb <megabytes>`, `--gc-promotion-age <n>`, `--gc-large-threshold-kb <kilobytes>`, `--gc-large-budget-mb <megabytes>`, `--gc-growth-percent <n>`, `--gc-heap-limit-mb <megabytes>`: How the collector is sized, read before the heap exists: the birth space (default 4 MB), minor collections before promotion (default 4), what counts as a large object (default 64 KB generational, 4 KB mark-sweep), the large-object bytes between collections (default 4 MB), the growth of that space (default 100 %), and the heap limit (default none). The table under "The collector" says what each one does  
+-- `--space-segment-kb <kilobytes>`, `--meta-space-limit-mb <megabytes>`, `--graph-space-limit-mb <megabytes>`, `--perm-space-limit-mb <megabytes>`: The first segment of every growable space (small segments make a small program grow them), and the limit of the meta, graph and permanent spaces; a space that runs out stops the program with `RuntimeDiag::MemoryExhausted`, which names the option that raises it  
++- `--spaces block_mb= <megabytes>`: Limit on the block space, which holds the data blocks of run-time values (arrays, strings, tensors; default 2048 MB, 1 to 2^20 MB). It only guards against a runaway allocation: the space gives memory back as soon as the last owner of a block is gone (see "The collector")  
++- `--gc graph_mb= <megabytes>`: How much the graph space may grow past what the last collection left before the collector is asked to run again (default 64; see "The collector")  
++- `--gc nursery_mb= <megabytes>`, `--gc promotion_age= <n>`, `--gc large_threshold_kb= <kilobytes>`, `--gc large_budget_mb= <megabytes>`, `--gc growth_percent= <n>`, `--gc heap_limit_mb= <megabytes>`: How the collector is sized, read before the heap exists: the birth space (default 4 MB), minor collections before promotion (default 4), what counts as a large object (default 64 KB generational, 4 KB mark-sweep), the large-object bytes between collections (default 4 MB), the growth of that space (default 100 %), and the heap limit (default none). The table under "The collector" says what each one does  
++- `--spaces segment_kb= <kilobytes>`, `--spaces meta_mb= <megabytes>`, `--spaces graph_mb= <megabytes>`, `--spaces perm_mb= <megabytes>`: The first segment of every growable space (small segments make a small program grow them), and the limit of the meta, graph and permanent spaces; a space that runs out stops the program with `RuntimeDiag::MemoryExhausted`, which names the option that raises it  
+ - `--gc-stress <kind=...,alloc=...,safepoint=...>`, `--gc-check <moves,poison,foreign,verify=...,config,mark>`: Collect under stress and read the collector: `kind=minor|major|both` names the collection, `alloc=N` collects every N allocations, `safepoint=N` every N safepoints; `moves` logs every moved object, `poison` writes over the from-space at every safepoint, `verify=before|after|both` checks the invariants around a collection, `config` prints the resolved configuration at start, `mark` compares the marks the ledger clears with the whole graph space, and `foreign` prints one line when the program stops (`FOREIGN_RESOURCES created=... released=... live=... disposed=... finalized=...`): the counted blocks the program's resources had made, released and still held, and how many the exit released (the reading of a lifetime that is a count, such as a `Ref<T>` box)  
+ - `--coll <leaf=...,fanout=...,pad=...,validate=...>`: The widths of a `Map` or `Set` tree, read before the first collection: entries per leaf (default 64; 0 makes every collection one sorted array), children per branch (default 64), `pad=off` allocates a table below a root for its content only, and `validate=on` checks every table an operation returns  
+ - `--native-stack-guard <on|off>`: Check the native stack before a nested call (default `on`). `off` is for measuring where the stack really ends and is not for normal use (see "Resource limits")  
+@@ -298,7 +298,7 @@ Settings of a pass are parameters:
+ | `std::cxx::saturate` | `rounds: int = 6` (rounds of saturation of the standard rules library), `strict: bool = false` (keep the rules that hold bit for bit, as `safe_fp=true` does for `std::opt`) |
+ | `std::jgir` | `canonical: bool = false` (keys in a canonical order, so two runs compare byte for byte), `egraph: bool = false` (write the document `egraph-serialize` reads, whose e-classes are the classes of a program with several writings; the community's `egraph-visualizer` opens it) |
+ 
+-What stays in the environment is the environment of the process, not of a pass: `CAMEL_HOME`, `CAMEL_STD_LIB`, `CAMEL_PACKAGES`, the logging and diagnostics-format variables, and `CAMEL_STARTUP_PROFILE`. The growth budget of the rewrite engine is the `growth_budget` parameter of the passes above; it is not read from the environment. The switches are options and pass parameters: `--gc`, `--block-limit`, `--graph-gc-mb`, `--gc-nursery-mb`, `--gc-promotion-age`, `--gc-large-threshold-kb`, `--gc-large-budget-mb`, `--gc-growth-percent`, `--gc-heap-limit-mb`, `--space-segment-kb`, `--meta-space-limit-mb`, `--graph-space-limit-mb`, `--perm-space-limit-mb`, `--gc-stress`, `--gc-check`, `--coll`, `--max-recursion-depth`, `--max-macro-depth`, `--max-macro-rounds`, `--native-stack-guard`, `--profile-mode`, and the `gc_stats`, `type_stats` and `effect_trace` parameters of `std::profile`; a test-only pass is named in the pipeline.
++What stays in the environment is the environment of the process, not of a pass: `CAMEL_HOME`, `CAMEL_STD_LIB`, `CAMEL_PACKAGES`, the logging and diagnostics-format variables, and `CAMEL_STARTUP_PROFILE`. The growth budget of the rewrite engine is the `growth_budget` parameter of the passes above; it is not read from the environment. The switches are options and pass parameters: `--gc`, `--spaces block_mb`, `--gc graph_mb`, `--gc nursery_mb`, `--gc promotion_age`, `--gc large_threshold_kb`, `--gc large_budget_mb`, `--gc growth_percent`, `--gc heap_limit_mb`, `--spaces segment_kb`, `--spaces meta_mb`, `--spaces graph_mb`, `--spaces perm_mb`, `--gc-stress`, `--gc-check`, `--coll`, `--max-recursion-depth`, `--max-macro-depth`, `--max-macro-rounds`, `--native-stack-guard`, `--profile-mode`, and the `gc_stats`, `type_stats` and `effect_trace` parameters of `std::profile`; a test-only pass is named in the pipeline.
+ 
+ ### Passes of modules
+ 
+@@ -554,9 +554,9 @@ Limits of the compiler and the back ends. A pass that reaches one of its limits
+ | Native stack of a thread on `std::tf` | as in the next row: apart from the count, one more nested call is refused when fifteen sixteenths of the thread's stack are used | `ulimit -s` and the like (a worker thread's stack is at least 8 MiB: the process's stack limit on Unix and the executable's stack size on Windows where those are larger) | `MaxRecursionDepthExceeded` at the call; the message then gives the number of open calls and the stack size. The default limit (1000) is far from reaching this on the default 8 MiB stack of Linux (measured below) |
+ | Native stack of a thread, on every back end | the thread's stack (8 MiB for the main thread on Linux by default) | `ulimit -s` and the like | a call that would nest on a nearly full native stack (less than a sixteenth of it, at least 128 KiB, left on Unix; Windows reserves fifteen sixteenths for SEH fault unwinding) is refused with `MaxRecursionDepthExceeded` before the limit above is reached; the message says the native stack is full. This is what keeps a raised limit from ending in a segmentation fault. The stack bounds are read on Linux (glibc), Windows and macOS (Windows is also verified; macOS is implemented but has not been compiled or run); on another platform the limits cannot be raised above their defaults |
+ | Ahead-of-time evaluation of a `#macro` function by `std::macro` | 64 evaluator frames (a self-recursion of 32 levels: `count(31)` is evaluated, `count(32)` is not) | `--max-macro-depth <n>` (1 to 1000000) | the evaluation has failed: run-time fault `RuntimeDiag::MacroEvaluationFailed` at the call, the pipeline stops (see "What `std::macro` reports"). The evaluator nests on the native stack (about 630 bytes a frame), and is stopped the same way when the stack is nearly full |
+-| Graph space (the runtime graphs of the program; a function takes about 1 to 2 KB) | 256 MB in all, reserved by segments as the program needs them | `--graph-space-limit-mb <megabytes>` | `RuntimeDiag::MemoryExhausted` (`0x04000014`, exit 1), located at the function whose graph was being encoded, naming the space, the usage, the limit and the variable. Stage `compile` when the program itself does not fit, `pass:<name>` when a pass made it grow |
+-| Permanent space (types and layouts; a function takes about 0.6 to 2 KB, and what a pass creates is never released) | 256 MB in all, by segments | `--perm-space-limit-mb <megabytes>` | `RuntimeDiag::MemoryExhausted`, as above, without a position unless the function being compiled is known |
+-| Meta space (constants and function values of the graphs being compiled; about 1.2 KB for every function, lambda or branch arm that owns one) | 256 MB in all, by segments | `--meta-space-limit-mb <megabytes>` | `RuntimeDiag::MemoryExhausted`, stage `compile`, located at the function being compiled |
++| Graph space (the runtime graphs of the program; a function takes about 1 to 2 KB) | 256 MB in all, reserved by segments as the program needs them | `--spaces graph_mb= <megabytes>` | `RuntimeDiag::MemoryExhausted` (`0x04000014`, exit 1), located at the function whose graph was being encoded, naming the space, the usage, the limit and the variable. Stage `compile` when the program itself does not fit, `pass:<name>` when a pass made it grow |
++| Permanent space (types and layouts; a function takes about 0.6 to 2 KB, and what a pass creates is never released) | 256 MB in all, by segments | `--spaces perm_mb= <megabytes>` | `RuntimeDiag::MemoryExhausted`, as above, without a position unless the function being compiled is known |
++| Meta space (constants and function values of the graphs being compiled; about 1.2 KB for every function, lambda or branch arm that owns one) | 256 MB in all, by segments | `--spaces meta_mb= <megabytes>` | `RuntimeDiag::MemoryExhausted`, stage `compile`, located at the function being compiled |
+ | Auto space (run-time values, garbage collected) | the memory of the host | no | `RuntimeDiag::MemoryExhausted` (stage `pass:<scheduler>`), saying that the host refused the allocation |
+ 
+ **What the recursion limit counts** is the same on every back end: each call of a function that is open and was not a tail call, whether it is written as a call, made through a function value, or made by a higher-order operator (`map`, `filter`, `reduce`, `foreach`) for an element. A call in tail position replaces its caller and is not counted (see `docs/technical/19_tail_call_optimization.md`), so tail recursion of any depth runs under any limit. The arms of an `if` are tail calls of the function they are written in. The one call the program does not make itself, the run-time's call of `main`, is not counted. So with a limit of L, for `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)` called from `main`, `depth(L - 1)` is the deepest call that runs, on `std::nvm`, `std::fvm`, `std::jit` (interpreted and compiled to native code) and `std::tf`: `depth(999)` with the default. Passes that change which calls exist (`std::cxx::inline`) change what is counted, as they change the graph.
+@@ -595,7 +595,7 @@ Run-time values (arrays, strings, tuples, structs, function values, maps, tensor
+ 
+ `--gc mark-sweep` on the command line selects the other collector. `generational` is the default; the older `CAMEL_GC_ENABLE_YOUNG_COPYING` is not read and changes nothing. Anything else than the two names is refused (`Error: --gc <value> is not a collector; give mark-sweep or generational.`, exit 1). The collector applies to `std::nvm`, `std::fvm`, `std::tf` / `std::prl` and to the interpreted part of `std::jit`; with `generational`, compiled code reads an object constant (a string literal, a constant array) from the static area each time instead of embedding its address, so `std::jit` compiles such functions under both collectors.
+ 
+-The data blocks of run-time values (an array, a string, a tensor) come from the block space, which gives a block back as soon as its last owner is gone. Its limit is 2048 MB and `--block-limit <megabytes>` raises it; a block that does not fit stops the program with `RuntimeDiag::MemoryExhausted`, which names `--block-limit`. The graph space asks for a collection when it holds `--graph-gc-mb <megabytes>` more than it held after the last one (default 64); without a collection the graphs of the versions a program no longer uses would accumulate.
++The data blocks of run-time values (an array, a string, a tensor) come from the block space, which gives a block back as soon as its last owner is gone. Its limit is 2048 MB and `--spaces block_mb= <megabytes>` raises it; a block that does not fit stops the program with `RuntimeDiag::MemoryExhausted`, which names `--spaces block_mb`. The graph space asks for a collection when it holds `--gc graph_mb= <megabytes>` more than it held after the last one (default 64); without a collection the graphs of the versions a program no longer uses would accumulate.
+ 
+ Related settings, as pass parameters and options:
+ 
+@@ -603,10 +603,10 @@ Related settings, as pass parameters and options:
+ |---|---|
+ | `std::profile gc_stats=1` (`2`) | One line on standard error at exit (`[camel] gc: ...`): minor and major collections and the cause that asked for each, objects moved and promoted, megabytes allocated per space, what the elder space, the blocks promoted values hold and the large-object space hold and have reserved, the time the program was stopped (`minor_pause_ms`, `major_pause_ms`) and the longest single stop (`..._max_ms`). `2` adds a line per major collection. `std::tf gc_stats=...` / `std::prl gc_stats=...` report the task graphs and collections of the scheduler itself |
+ | `std::profile block_trace=true` | The exit report of `std::profile gc_stats=...` prints, before its per-class lines, how many blocks were alive when the block space reached its high-water mark of bytes (`[camel] blocks-at-peak: blocks=<n> of <created> created`), and then one line per size class (`[camel] blocks-at-peak: size=<KB>KB blocks=<n> bytes=<n>`, largest first, at most six). The counters are one relaxed atomic add per allocation and release, and a snapshot is taken when the peak is reached: what it answers is which size classes held the peak, not an exact account (the snapshot is taken while other threads may still be allocating). Off by default, and nothing runs while it is off |
+-| `std::profile type_stats=true` | One line on standard error at exit (`[camel] types: ...`): for each kind of type object in the permanent space (`tuple`, `function`, `array`, `struct`, ...), `objects/bytes` allocated by the core type system, then how many types the type table holds and how many constructions it answered with an existing object (`interned=`, `intern_hits=`). It tells which kind of type a program or a pass keeps allocating; module-defined types are not counted |
+-| `--gc-heap-limit-mb <megabytes>` | Limit on what the elder and large-object spaces hold together. Without it the heap is bounded by the memory of the machine only. An allocation that crosses the limit asks for a major collection at the next safepoint; if what is alive still exceeds the limit after it, or the program allocates past one and a half times the limit before it reaches a safepoint, or one value is larger than the limit, the program stops with `RuntimeDiag::MemoryExhausted`, which names the space (`auto`, run-time values), the request, the usage, the limit and the option |
+-| `--gc-growth-percent <n>`, `--gc-large-budget-mb <megabytes>` | Pacing of major collections: allocation allowed between two of them, in percent of what the last one left alive (default 100), and its floor for the large-object space and for the block bytes of values promoted to the elder space (default 4 MB; the floor of the elder space itself is its first segment, 32 MB) |
+-| `--gc-promotion-age <n>` | Minor collections a value survives before it is promoted (1 to 15, default 4) |
++| `std::profile type_stats=true` | One line on standard error at exit (`[camel] types: ...`): for each kind of type object in the permanent space (`tuple`, `function`, `array`, `struct`, ...), `objects/bytes` allocated by the core type system, then how many types the type table holds and how many constructions it answered with an existing object (`interned`, `intern_hits`). It tells which kind of type a program or a pass keeps allocating; module-defined types are not counted |
++| `--gc heap_limit_mb= <megabytes>` | Limit on what the elder and large-object spaces hold together. Without it the heap is bounded by the memory of the machine only. An allocation that crosses the limit asks for a major collection at the next safepoint; if what is alive still exceeds the limit after it, or the program allocates past one and a half times the limit before it reaches a safepoint, or one value is larger than the limit, the program stops with `RuntimeDiag::MemoryExhausted`, which names the space (`auto`, run-time values), the request, the usage, the limit and the option |
++| `--gc growth_percent= <n>`, `--gc large_budget_mb= <megabytes>` | Pacing of major collections: allocation allowed between two of them, in percent of what the last one left alive (default 100), and its floor for the large-object space and for the block bytes of values promoted to the elder space (default 4 MB; the floor of the elder space itself is its first segment, 32 MB) |
++| `--gc promotion_age= <n>` | Minor collections a value survives before it is promoted (1 to 15, default 4) |
+ | `--gc-check poison`, `--gc-check verify=...`, `--gc-stress ...` | Diagnostic modes for people who write operators in C++: `docs/technical/36_gc_handle_rules.md`, `docs/technical/24_gc_verification_guide.md` |
+ 
+ ## Information Display
+diff --git a/docs/design-principles-log.cn.md b/docs/design-principles-log.cn.md
+index 528db6c55c..a198c7b5eb 100644
+--- a/docs/design-principles-log.cn.md
++++ b/docs/design-principles-log.cn.md
+@@ -45,12 +45,12 @@
+ | | 取舍标准 | 1 |
+ | | 优化与行为 | 9.6 |
+ | | 尖括号紧贴、换行结束语句、手写解析器、`raise`、文档注释 | 4.1、3.9 |
+-| | `^`、浮点字面量、`===`、列表推导 | 4.2、5.1 |
++| | `^`、浮点字面量、`==`、列表推导 | 4.2、5.1 |
+ | | 导入改名 | 10.2 |
+ | | `LOOP` 节点、循环是带状态的表达式、没有 `break` | 3.10 |
+-| | 没有 `else` 的 `if`、`==` 按内容比较、`??` 的右边、`+=`、`match` 的默认分支 | 3.7、4.2、3.8 |
++| | 没有 `else` 的 `if`、`=` 按内容比较、`??` 的右边、`+`、`match` 的默认分支 | 3.7、4.2、3.8 |
+ | | 自动装入、泛型函数的延迟实例化、`f<w>` 部分应用、类型名、`throw` | 3.8、5.5、4.4、5.1、3.9 |
+-| | 数值的故障与回绕、`&=`、浮点转文字 | 5.1、4.2、7.7 |
++| | 数值的故障与回绕、`&`、浮点转文字 | 5.1、4.2、7.7 |
+ | | 效应函数返回值、`main` 的返回值、未处理的错误、`slice`、并行 `map` 的故障 | 3.1、9.8、3.9、3.6 |
+ | | 模块顶层、模块导出值、标准库调用风格、映射遍历 | 10.1、11.4、11.3 |
+ | | 默认值（递归上限、指令集基线、空间上限） | 3.9、9.10、2.4 |
+@@ -299,7 +299,7 @@ B(i)
+ - （已由 2.11 取代）**负号紧贴数字字面量、且前面不是一个值时，是这个数的一部分**：`-2->f` 是 `(-2)->f`。`a-1` 仍是减法。
+ - **`^` 比乘除高一级，从右到左结合。** `2 * 3 ^ 2` 是 18。
+ - **带指数或小数点的字面量一律是浮点数。** `1e5` 是 `100000.0`。
+-- **`===` 暂不支持。**
++- **`==` 暂不支持。**
+ - **列表推导** `[e for x in xs if c]` 的含义是 `filter` 加 `map`，即 `xs->filter<c>->map<e>`；元素之间没有顺序约定。
+ - **导入可以改名**：`import { find as str_find } from str`。两个导入的名字冲突是编译期错误，不得静默取其一。
+ - **文档注释**是语言的约定：声明正上方以 `///` 开头的注释是它的文档。
+@@ -319,7 +319,7 @@ B(i)
+ ### 分支与类型
+ 
+ - **没有 `else` 的 `if` 本身没有值**，它的臂可以是任何类型，臂的值被丢弃：`if debug then println('checking')` 合法，`let x = if debug then 1` 是编译期错误。图上不变：一个分支加两条臂，没写的 `else` 是一条空臂，汇合处不取值。臂里不必再为了凑类型写 `return null`。
+-- **`==` 与 `!=` 对数组、元组、结构体按内容逐个比较。** 两边类型必须相同，元素类型本身要能比较（含函数值的不能比），否则是编译期错误；浮点元素按浮点的规则（含 `nan` 的数组不等于它自己）。张量不在此列。图上是一个普通的算子节点。字符串也有 `contains`，写法与数组的一致：`'hello'->contains<'ell'>`。
++- **`=` 与 `!` 对数组、元组、结构体按内容逐个比较。** 两边类型必须相同，元素类型本身要能比较（含函数值的不能比），否则是编译期错误；浮点元素按浮点的规则（含 `nan` 的数组不等于它自己）。张量不在此列。图上是一个普通的算子节点。字符串也有 `contains`，写法与数组的一致：`'hello'->contains<'ell'>`。
+ - **`a ?? b` 的右边可以是可空的**：右边是 `T?` 时结果是 `T?`，右边是 `T` 时结果是 `T`；从右向左结合，所以 `a ?? b ?? 9` 是"先试 a，再试 b，最后给默认值"。`!!` 同理。图上仍是一个分支。
+ - **张量的 `t += u` 是算出新张量再重新绑定**，与数值一致，不原地修改。要原地修改用显式的算子。
+ - **`match` 必须有默认分支。** 没有 `case _` 是编译期错误；`bool` 上两个字面量都列全，以及 `T?`、`T!` 的固定模式除外。编译器不追加用户看不见的分支臂。
+@@ -335,7 +335,7 @@ B(i)
+ - 值放不进目标类型的转换是故障：`int(1e30)`、`int(nan)`、`i32(5000000000)`。
+ - 整数加减乘的溢出、最小整数除以 -1 保持回绕。
+ - 浮点数转成文字只有一种规则：最短、且读回来得到同一个数。`string`、`println`、`format` 一致。
+-- `&=`、`|=` 是布尔上的与、或；位运算用函数（`bit_and` 等）。
++- `&`、`|` 是布尔上的与、或；位运算用函数（`bit_and` 等）。
+ 
+ ### 效应、错误与并行
+ 
+@@ -464,7 +464,7 @@ B(i)
+ - **`match` 的分支**：每个分支的值必须能被被匹配值的类型接受。
+ - **模块**：模块导入自己是允许的，没有效果；类型跨模块成环给出成环的诊断并列出环；重开同一个命名空间块，前一块里的 `using` 不带到后一块；名字有歧义时列出各个限定候选；语言服务器按完整名字展示命名空间成员；C++ 模块可以导出值（`math::pi`）。
+ - **集合**：返回新值与就地修改不再用两个名字区分（`sort` 与 `sorted`）：只保留 `sort`，它返回新数组；`xs = xs->sort` 在旧值不再被使用时就地排序，与 `acc = acc->append<v>` 是同一种实现层面的优化。张量保留显式的就地算子（2.10），数组不设。
+-- **运算符重载**：用户的重载比内建的更具体时优先；重载 `==` 即得到 `!=`；命名空间块里声明的运算符属于模块。
++- **运算符重载**：用户的重载比内建的更具体时优先；重载 `=` 即得到 `!`；命名空间块里声明的运算符属于模块。
+ - **循环头的写法定为 `do` 式**（取代 2.10 的暂定写法）：状态只声明一次，多个状态用逗号分开，循环的值是它们组成的元组；`do` 后面是一个表达式，`{` 的读法与 `then` 之后相同（`{ x: 1 }` 是结构体，`{ 5 }` 是块）。
+ 
+   ```camel
+@@ -577,7 +577,7 @@ B(i)
+ - **简写可以有，语义只有一套。** 简写（如装饰器）是给库作者用的机制，可以存在，但只能是同一语义的另一种写法，不得另带规则。新的**原语**只用于主体语言无法表达的事，以标记的形式出现，数量固定：`typeas T`、`constas n`（在签名的位置上绑定）、`typeof x`（一个表达式的静态类型）、`fields T`（一个类型的字段表）。凡是能由原语算出的（如取字段名的 `keyof`），写在库里，是类型函数或普通函数，不是关键字。
+ - **普通函数与类型函数在写法上对称。** `func` 定义普通函数，用 `f(...)` 调用；`type` 定义类型函数，用 `F<...>` 调用，只出现在类型的位置上。带参数的类型声明就是类型函数（2.9），如 `type Pair<T> = (T, T)`、`type Device<T> = match type T { ... }`。类型函数没有上下文参数（`with`），尖括号里只有类型与编译期的值。区分的依据是结果：结果是类型的，用 `type` 定义；结果是值的（包括在编译期求值的判断，如 `is_numeric::<T>()`），用 `func` 定义。
+ - **类型函数的函数体是一个类型表达式**，不是语句块：`type P = { w: float }` 中的花括号是结构体类型，不能再兼作语句块。较复杂的计算拆成几个类型函数，或用以关键字开头的 `match type`。
+-- **类型只出现在类型的位置上。** 类型的位置是语法上标明的：`:` 之后、`type 名字 =` 之后、`as` 之后、`::<...>` 之中、`match type`、`fields` 之后，以及类型函数的尖括号里。类型进入值的代码只有三条路：`::<T>` 显式类型实参、`typeas` 绑定、`typeof` 取得。因此值位置上的 `f<...>` 永远是上下文参数，类型位置上的 `F<...>` 永远是类型函数调用，解析时不必知道名字指什么。
++- **类型只出现在类型的位置上。** 类型的位置是语法上标明的：`:` 之后、`type 名字 ` 之后、`as` 之后、`::<...>` 之中、`match type`、`fields` 之后，以及类型函数的尖括号里。类型进入值的代码只有三条路：`::<T>` 显式类型实参、`typeas` 绑定、`typeof` 取得。因此值位置上的 `f<...>` 永远是上下文参数，类型位置上的 `F<...>` 永远是类型函数调用，解析时不必知道名字指什么。
+ - **类型函数可以作为类型函数的实参**（高阶类型）：在类型位置上不带尖括号写类型函数的名字，即指这个类型函数本身，如 `MapLeaves<Device, Params>`。形参是类型还是类型函数，由函数体中的用法推出。
+ - **由字面写法算出的字段名加方括号**：推导式中 `[n]: e` 的 `n` 是编译期的值，`n: e` 的 `n` 是字面的字段名；编译期的字段访问写 `t.[n]`。
+ - **结构类型是有限的**：结构体、元组不能直接或间接包含自身；递归的类型只能经由 `enum`。类型函数的计算因此按类型的结构终止，另有可调的展开上限（2.14）。
+@@ -587,7 +587,7 @@ B(i)
+ - **有名字的结构体与 `enum` 是命名类型**：`type Point = { x: float, y: float }` 创建一个新类型，它的身份是名字加声明它的模块，属于该模块。元组、数组、函数类型，以及 `type 名字 = 另一个已有类型`，是别名，按结构比较（如 `type Pair<T> = (T, T)`）。
+ - **没有名字的结构体值可以直接用作结构相同的命名类型**：`let p: Point = { x: 1.0, y: 2.0 }`，字段按名字对应。**两个命名类型之间必须显式转换**（`m as Seconds`），即使结构相同；字段按名字一一对应。需要"包一层的数值"（如 `Meters`）时写成单字段结构体，不另加语法。
+ - **字段顺序**：命名类型的规范顺序是它的声明顺序；没有名字的结构体类型，写出的顺序是类型的一部分（顺序不同即不同类型）。参数树、检查点、`tree_paths` 的叶子顺序都按规范顺序（2.16）。
+-- **泛型函数体中的名字查找**：名字一律在定义处按词法查找；对依赖类型变量的值做运算（如叶子处的 `==`、对回调实参的重载选择）时，另在该值的类型声明所在的模块中查找重载。不看调用者导入了什么。要换一种运算，把函数作为参数显式传入（如 `tree_eq<my_eq>(a, b)`）。
++- **泛型函数体中的名字查找**：名字一律在定义处按词法查找；对依赖类型变量的值做运算（如叶子处的 `=`、对回调实参的重载选择）时，另在该值的类型声明所在的模块中查找重载。不看调用者导入了什么。要换一种运算，把函数作为参数显式传入（如 `tree_eq<my_eq>(a, b)`）。
+ - **泛型类型一律不变**：`Array<int>` 不能当 `Array<int?>` 用；隐式转换只发生在叶子值上，不穿透泛型类型的参数。
+ 
+ ## 2.20 装饰器与标签（2026-10-19）
+@@ -743,7 +743,7 @@ H15 的待决问题：分支臂里的 `return` 取臂位置的期望类型；数
+ 
+ ## 2026-10-20（续七）H17 遗留问题（施工负责人提出，协调者在 `internal/reviews/H17-H22.md` 认可；第 3 条改为可调用函数）
+ 
+-1. **缓冲区字节计入硬上限**：`--gc-heap-limit-mb` 覆盖缓冲区，`Buffer` 分配在超限时失败。GC 压力只由"上次收集以来增长"决定，但上限是硬的——否则 16 MB 超限用例无法成立。
++1. **缓冲区字节计入硬上限**：`--gc heap_limit_mb` 覆盖缓冲区，`Buffer` 分配在超限时失败。GC 压力只由"上次收集以来增长"决定，但上限是硬的——否则 16 MB 超限用例无法成立。
+ 2. **DLPack 往返的重复计数**：接受保守近似。共享的同一段外部内存在活跃统计里可能计两次；不为此维护缓冲区身份表，代价是报告内存时偏大，而不是偏小。
+ 3. **`std::mem::buffers()` 是可调用的函数**，返回结构体 `{allocs: int, frees: int, live: int, bytes: int}`，免 import、任何构建都可用（协调者在 H17 评审中把它从自检 pass 改为函数：第 9 步的分配计数断言要在两次操作之间读数，pass 做不到）。
+ 4. **临时值的原地判定**：现在不做保守推断，等图存储的使用计数（H17 计划第 9 项之后）落地再统一处理。在此之前只有"唯一、Camel 拥有、偏移 0、非视图"能原地写。
+@@ -817,7 +817,7 @@ H15 的待决问题：分支臂里的 `return` 取臂位置的期望类型；数
+ - （2026-10-24，决策者，论文侧形式化核对提出）"可自由安排的计算"（纯且不会出故障）是一个谓词，处处同用：离链、移出、改写丢弃（F20 判据随之加强）、内联不连顺序边；调用按被调函数推出的事实判，递归算可能出故障；流节点不参与合并、不能被捕获。
+ - （2026-10-24，负责人同意）纯计算是确定的（3.2）；增量计算定位为用户主动用的遍 `std::incremental`，语法语义不变，中期方向（design/incremental）。
+ - （2026-10-24，负责人）`when` 一律写在它守护的体之前（函数、规则在签名后、体前，过长单独一行；`match` 守卫在 `=>` 前）（4.4）。
+-- （2026-10-25，负责人）`===`/`!==` 是逐元素的相等与不等，`==` 是它们归约成的一个 `bool`（形状相同且处处相等）；`<` 等在数字数组上逐元素（4.2）。
++- （2026-10-25，负责人）`==`/`!=` 是逐元素的相等与不等，`=` 是它们归约成的一个 `bool`（形状相同且处处相等）；`<` 等在数字数组上逐元素（4.2）。
+ - （2026-10-25，负责人）`static for` 的头部不写括号，与 `static loop` 同一种写法（5.5）。
+ - （2026-10-25，负责人）`try`/`catch`/`finally` 不保留，也不给专用诊断，是历史债（3.9）。
+ - （2026-10-25，负责人）ZEN 修订：删去原第 3 条（Imperative for operators, declarative for structure）与原第 5 条（Explicit dependencies, implicit parallelism）；新增"Every construct is a piece of the graph"（第 3 条）与"One language, all the way down"（第 7 条）；"Execution is polymorphic and multi-staged"移为第 5 条，说明改为"遍是函数，函数是图；编译、优化、执行都是对图的分阶段重写"（1）。
+diff --git a/docs/diagnostics.md b/docs/diagnostics.md
+index 293a3793e5..791e08ee5e 100644
+--- a/docs/diagnostics.md
++++ b/docs/diagnostics.md
+@@ -704,9 +704,9 @@ To compare, write '==': if x == 1 then ...
+ **Example** (`test/cases/parse/syntax/assignment_in_condition.cml`, run as `camel test/cases/parse/syntax/assignment_in_condition.cml`)
+ 
+ ```camel
+-// `=` assigns; it is not the comparison a condition asks for, and a condition that assigns is
+-// almost always a comparison written one `=` short. The parser refuses it at the `=` rather than
+-// reading it as an assignment or as `==`, and names the operator to write instead.
++// `` assigns; it is not the comparison a condition asks for, and a condition that assigns is
++// almost always a comparison written one `` short. The parser refuses it at the `` rather than
++// reading it as an assignment or as `=`, and names the operator to write instead.
+ 
+ func main() => int sync {
+     let x: int = 1
+@@ -10783,7 +10783,7 @@ Out of memory{0}: {1}.
+ The graph, permanent and meta spaces hold the compiled program (its runtime graphs, its types, the constants of the graphs being compiled) and grow with it; each has a total limit that only guards against a compiler that does not stop allocating. If the program is this large, raise the limit with the environment variable the message names. If a pass is named, the growth may be its doing (an inlining or unrolling that does not end): run the pipeline without it. The auto space holds run-time values: it is bounded by the memory of the host, or by CAMEL_GC_HEAP_LIMIT_MB when that is set, in which case the values the program keeps alive do not fit the limit.
+ ```
+ 
+-**Example** (`test/cases/compile/stream/interval_loop_not_materialised.cml`, run as `camel --gc-heap-limit-mb 8 test/cases/compile/stream/interval_loop_not_materialised.cml std::nvm`)
++**Example** (`test/cases/compile/stream/interval_loop_not_materialised.cml`, run as `camel --gc heap_limit_mb= 8 test/cases/compile/stream/interval_loop_not_materialised.cml std::nvm`)
+ 
+ ```camel
+ // `for i in 0..n` builds no array (design principles 4.2): the rounds
+diff --git a/docs/language/04_execution_model.md b/docs/language/04_execution_model.md
+index 804cf461eb..7ad45e520f 100644
+--- a/docs/language/04_execution_model.md
++++ b/docs/language/04_execution_model.md
+@@ -299,7 +299,7 @@ error[RuntimeDiag::MaxRecursionDepthExceeded]: Maximum recursion depth (1000) ex
+ 
+ （其后是位置与建议。）
+ 
+-**其他上限**：单张图的节点、块与边表项各不超过 65,535；图空间、永久空间、元空间三块内存各 256 MB，分别由 `--graph-space-limit-mb`、`--perm-space-limit-mb`、`--meta-space-limit-mb` 调整，耗尽时是 `RuntimeDiag::MemoryExhausted`。完整的表见 [cli.cn.md](../cli.cn.md)“资源上限”。
++**其他上限**：单张图的节点、块与边表项各不超过 65,535；图空间、永久空间、元空间三块内存各 256 MB，分别由 `--spaces graph_mb`、`--spaces perm_mb`、`--spaces meta_mb` 调整，耗尽时是 `RuntimeDiag::MemoryExhausted`。完整的表见 [cli.cn.md](../cli.cn.md)“资源上限”。
+ 
+ ## 4.7 遍与流水线
+ 
+diff --git a/docs/language/en/04_execution_model.md b/docs/language/en/04_execution_model.md
+index 93ff7b94b1..21959e25ac 100644
+--- a/docs/language/en/04_execution_model.md
++++ b/docs/language/en/04_execution_model.md
+@@ -316,7 +316,7 @@ error[RuntimeDiag::MaxRecursionDepthExceeded]: Maximum recursion depth (1000) ex
+ 
+ (Followed by the location and a suggestion.)
+ 
+-**Other limits**: the nodes, blocks and edge-table entries of a single graph are each at most 65,535; the three memory regions graph space, permanent space and metaspace are 256 MB each, adjusted with `--graph-space-limit-mb`, `--perm-space-limit-mb` and `--meta-space-limit-mb` respectively, and exhausting one is `RuntimeDiag::MemoryExhausted`. For the full table see "Resource limits" in [cli.md](../../cli.md).
++**Other limits**: the nodes, blocks and edge-table entries of a single graph are each at most 65,535; the three memory regions graph space, permanent space and metaspace are 256 MB each, adjusted with `--spaces graph_mb`, `--spaces perm_mb` and `--spaces meta_mb` respectively, and exhausting one is `RuntimeDiag::MemoryExhausted`. For the full table see "Resource limits" in [cli.md](../../cli.md).
+ 
+ ## 4.7 Passes and pipelines
+ 
+diff --git a/docs/technical/23_gc_runtime_lifetime.md b/docs/technical/23_gc_runtime_lifetime.md
+index 707fd20c64..be5e9fb860 100644
+--- a/docs/technical/23_gc_runtime_lifetime.md
++++ b/docs/technical/23_gc_runtime_lifetime.md
+@@ -20,8 +20,8 @@ spaces (one `FreeListAllocator` per segment), `GrowableBumpAllocator` for the pe
+ (one `BumpPointerAllocator` per segment). The first segment is as large as the whole space used
+ to be (64, 32 and 16 MB); when no segment has room, a further one is reserved, as large as
+ everything reserved so far (at most 256 MB, never smaller than the request), until the total
+-reaches the limit of the space (`--graph-space-limit-mb`, `--perm-space-limit-mb`,
+-`--meta-space-limit-mb`; 256 MB each by default).
++reaches the limit of the space (`--spaces graph_mb`, `--spaces perm_mb`,
++`--spaces meta_mb`; 256 MB each by default).
+ 
+ Invariants:
+ 
+@@ -50,7 +50,7 @@ Invariants:
+   request, the usage, the limit and the variable that raises it. The first caller that knows
+   what was being built adds it (`during`): the graph builder names the function being compiled,
+   the encoders name the graph. The pass driver, the graph builder and the command line report
+-  it as `RuntimeDiag::MemoryExhausted`. The auto space has no limit of its own unless `--gc-heap-limit-mb` sets one (the
++  it as `RuntimeDiag::MemoryExhausted`. The auto space has no limit of its own unless `--gc heap_limit_mb` sets one (the
+   elder space grows by segments, the large-object space takes blocks from the host); the limit
+   and a refusal by the host are reported the same way.
+ 
+@@ -113,7 +113,7 @@ graph, so a graph a rewrite changes, whose slot types differ, leaves nothing beh
+ permanent space. (Before graph model step 3 it was an interned tuple type: one new permanent
+ object per changed graph per commit.) Static-area layouts are still interned.
+ 
+-`--space-segment-kb <kilobytes>` sets the first segment of all three spaces. It is a test
++`--spaces segment_kb= <kilobytes>` sets the first segment of all three spaces. It is a test
+ control: with 64 KB a program of a few hundred functions makes every space grow several times,
+ so growth can be run under heap verification and collection stress (`test/plans/feat/mm/capacity.plan.toml`).
+ 
+@@ -155,7 +155,7 @@ version lives as long as a live `Program` holds it, a `Program` as long as somet
+   the heap and `GCGraphManager::sweepMarked()` (installed with `registerGraphSweeper`, one per
+   context, called after `markPhase`) frees the unmarked `Program`s and graph versions; the graph
+   space also asks for a
+-  major collection when it holds a megabyte (`--graph-gc-mb`, default 64) and as much again
++  major collection when it holds a megabyte (`--gc graph_mb`, default 64) and as much again
+   as it held after the last sweep (`requestMajorCollection`). Between passes (nothing runs)
+   `collect()` has the heap marked the same way, without sweeping or moving anything
+   (`collectGraphSpace`), so a function value of the heap keeps its `Program` there too; it runs
+@@ -210,8 +210,8 @@ The elder space grows by segments (32 MB first, each further one as large as eve
+ reserved so far, at most 256 MB), so neither allocation nor promotion fails short of the host
+ refusing memory. Major collections are paced by volume for both old spaces: one is asked for
+ when a space has taken, since its last sweep, the larger of a floor (32 MB for the elder space,
+-`--gc-large-budget-mb` for large objects) and `--gc-growth-percent` percent of what
+-that sweep left alive. `--gc-heap-limit-mb` bounds what the two hold together. In the
++`--gc large_budget_mb` for large objects) and `--gc growth_percent` percent of what
++that sweep left alive. `--gc heap_limit_mb` bounds what the two hold together. In the
+ generational collector a third volume paces a major collection: the blocks held by values
+ promoted to the elder space (see "Promoted-block pacing" below).
+ 
+@@ -301,7 +301,7 @@ Large-object pacing: objects above the generational threshold (4 KB) bypass the
+ spaces, so they never exhaust a space and never trigger a collection on their own. The allocator
+ therefore counts large-object bytes since the last sweep and requests a major collection at the
+ next safepoint once they exceed a budget. After every sweep the budget is the larger of a floor
+-(`--gc-large-budget-mb`, default 4 MB) and `--gc-growth-percent` percent (default 100) of
++(`--gc large_budget_mb`, default 4 MB) and `--gc growth_percent` percent (default 100) of
+ the large-object volume the sweep left alive. This is the usual heap-growth rule: with a live
+ volume `L` and a growth of `g` percent, a program is collected once per `L * g / 100` bytes it
+ allocates and the space holds at most `L * (1 + g / 100)`, plus whatever is allocated between the
+@@ -335,8 +335,8 @@ promoted: a view of an inline array, `Array::growCompact` moving inline data int
+ takeover; the collector counts the block there when the owner is already in the elder space, just
+ as if the block had been promoted with the value. The allocator asks for a major collection at
+ the next safepoint once the bytes promoted or adopted since the last sweep exceed a budget. After
+-every sweep the budget is the larger of the large-object floor (`--gc-large-budget-mb`,
+-default 4 MB) and `--gc-growth-percent` percent (default 100) of the block bytes the sweep
++every sweep the budget is the larger of the large-object floor (`--gc large_budget_mb`,
++default 4 MB) and `--gc growth_percent` percent (default 100) of the block bytes the sweep
+ left in promoted values; the rule and the floor are the same as for the large-object space,
+ because these are the same kind of bytes: pure data outside the collected heap that only a full
+ mark-sweep can reclaim. The live base is summed with `Block::claimSweepGeneration()` for the same
+diff --git a/docs/technical/24_gc_verification_guide.md b/docs/technical/24_gc_verification_guide.md
+index 92efa0cc81..5eaf8c69c7 100644
+--- a/docs/technical/24_gc_verification_guide.md
++++ b/docs/technical/24_gc_verification_guide.md
+@@ -89,15 +89,15 @@ Use these controls for deterministic GC validation:
+ | `--gc-check moves` | Log object movement in the young-copying path. |
+ | `--gc generational` | Run the generational collector: young objects are copied. The older `CAMEL_GC_ENABLE_YOUNG_COPYING` is not read and changes nothing. |
+ | `--gc-check poison` | Safepoint poisoning: every safepoint moves every young object and poisons where it was (`36_gc_handle_rules.md` section 8). Implies the generational collector. |
+-| `--gc-promotion-age N` | Minor collections an object survives before promotion (1 to 15, default 4). |
+-| `--gc-large-threshold-kb N`, `--gc-nursery-mb N` | Size above which an object is born old (default 4 KB with mark-sweep, 64 KB generational), and the size of the birth space (default 4 MB). |
+-| `--gc-heap-limit-mb N` | Limit on what the elder and large-object spaces hold; reaching it is `RuntimeDiag::MemoryExhausted` (`docs/cli.md`, "The collector"). |
++| `--gc promotion_age= N` | Minor collections an object survives before promotion (1 to 15, default 4). |
++| `--gc large_threshold_kb= N`, `--gc nursery_mb= N` | Size above which an object is born old (default 4 KB with mark-sweep, 64 KB generational), and the size of the birth space (default 4 MB). |
++| `--gc heap_limit_mb= N` | Limit on what the elder and large-object spaces hold; reaching it is `RuntimeDiag::MemoryExhausted` (`docs/cli.md`, "The collector"). |
+ | `--gc-check config` | Print the effective GC diagnostic configuration to stderr at allocator initialization. |
+-| `--gc-large-budget-mb N` | Floor (MB) of the large-object allocation between collections, and of the block bytes promoted to the elder space that ask for a major collection; default 4. It is in force only while the growth setting gives less. Not a diagnostic switch: it tunes production pacing. |
+-| `--gc-growth-percent N` | Large-object allocation between collections, and promoted block bytes between major collections, in percent of the volume the last sweep left alive; default 100 (the space doubles). Lower: less garbage held, more collections, in proportion. Not a diagnostic switch: it tunes production pacing. |
++| `--gc large_budget_mb= N` | Floor (MB) of the large-object allocation between collections, and of the block bytes promoted to the elder space that ask for a major collection; default 4. It is in force only while the growth setting gives less. Not a diagnostic switch: it tunes production pacing. |
++| `--gc growth_percent= N` | Large-object allocation between collections, and promoted block bytes between major collections, in percent of the volume the last sweep left alive; default 100 (the space doubles). Lower: less garbage held, more collections, in proportion. Not a diagnostic switch: it tunes production pacing. |
+ | `std::profile gc_stats=1|2` | Print the allocator's pacing statistics to stderr at exit (1), and one line per major collection (2). Also prints the occupancy of the graph, permanent and meta spaces (`[camel] spaces: ...`). |
+-| `--graph-space-limit-mb N`, `--perm-space-limit-mb N`, `--meta-space-limit-mb N` | Total (MB) the graph, permanent or meta space may reserve; default 256 each. Not diagnostic switches: they bound the size of the compiled program. Reaching one is `RuntimeDiag::MemoryExhausted`. |
+-| `--space-segment-kb N` | First segment (KB) of the graph, permanent and meta spaces (default 64, 32 and 16 MB). A test control: small segments make the spaces grow with small programs. |
++| `--spaces graph_mb= N`, `--spaces perm_mb= N`, `--spaces meta_mb= N` | Total (MB) the graph, permanent or meta space may reserve; default 256 each. Not diagnostic switches: they bound the size of the compiled program. Reaching one is `RuntimeDiag::MemoryExhausted`. |
++| `--spaces segment_kb= N` | First segment (KB) of the graph, permanent and meta spaces (default 64, 32 and 16 MB). A test control: small segments make the spaces grow with small programs. |
+ 
+ GC stress is a diagnostic mode: it asks the allocator to request collections at deterministic
+ allocation or safepoint intervals so missed roots, missing barriers, and relocation bugs fail
+@@ -124,7 +124,7 @@ pass boundary.
+ | Collection stress | `--gc-stress safepoint=1` (and `_ALLOC=N`), `--gc-stress kind=major` | a value that no root reaches: it is freed and its memory reused |
+ | Moving stress | the same with `--gc generational` with `--gc-stress kind=minor` or `both`, `--gc-check verify=both` | a root that is not updated; with the default promotion age objects stop moving after four collections, so a raw pointer that is held for longer than that is not found |
+ | Safepoint poisoning | `--gc-check poison` | a raw pointer kept across any safepoint: nothing is promoted by age, every safepoint moves everything young, and the old addresses read as an unmapped page until the space has been walked once. This is the mode to run a new operator or scheduler change under |
+-| Tenuring stress | `--gc generational` with `--gc-promotion-age 1 --gc-stress safepoint=1 --gc-stress kind=minor --gc-check verify=both` | a missing write barrier: everything is old after one collection, and the verifier reports an old object that points at a young one without being remembered |
++| Tenuring stress | `--gc generational` with `--gc promotion_age= 1 --gc-stress safepoint=1 --gc-stress kind=minor --gc-check verify=both` | a missing write barrier: everything is old after one collection, and the verifier reports an old object that points at a young one without being remembered |
+ 
+ The first two existed before the handle rules; they left two gaps that poisoning closes: an
+ object that had been promoted no longer moved, and the address an object moved away from kept
+diff --git a/docs/technical/36_gc_handle_rules.md b/docs/technical/36_gc_handle_rules.md
+index 5dd9c3ce8d..fdc06e207a 100644
+--- a/docs/technical/36_gc_handle_rules.md
++++ b/docs/technical/36_gc_handle_rules.md
+@@ -316,7 +316,7 @@ root tracers), and nothing read before a call is used after it.
+    `compile`, `linear`, `para`, `trans` and `smoke` are run that way by the default test set
+    (`mm.gc_poison_sweep`), so a module with tests there is covered as it is.
+ 2. Run them with `--gc generational` with `--gc-check verify=both --gc-stress safepoint=1
+-   --gc-stress kind=minor --gc-promotion-age 1`: everything is promoted at once, which
++   --gc-stress kind=minor --gc promotion_age= 1`: everything is promoted at once, which
+    is what shows a missing write barrier (rule 6) as "Old-to-young reference is missing from
+    remembered set".
+ 3. Search for `static`, `thread_local` and members of module state that hold `Object *`,
+@@ -381,7 +381,7 @@ here and left to the standard-library work:
+ 
+ | # | Where | What | Effect |
+ |---|---|---|---|
+-| 22 | `lib/std/builtin/operators/array.cpp` (`unique`, composite elements) | `equals(..., deep=false)` compares nested references by address | two equal `(string, int)` or `string[]` elements are both kept; built-in `==` and `contains` on such values do the same |
++| 22 | `lib/std/builtin/operators/array.cpp` (`unique`, composite elements) | `equals(..., deep=false)` compares nested references by address | two equal `(string, int)` or `string[]` elements are both kept; built-in `=` and `contains` on such values do the same |
+ | 23 | `lib/std/builtin/operators/array.cpp` (`unique`, element type `any`) | slots hashed as integers | references in an `any[]` were deduplicated by address (an instance of 21); gone with `any` |
+ | 24 | `rtdata/collection.cpp` (`Table::equals`, `deep == false`) | values compared with `memcmp` | reachable through 22 and through `contains` on an array of maps |
+ 
+@@ -391,8 +391,8 @@ here and left to the standard-library work:
+ |---|---|
+ | `--gc-check poison` | Safepoint poisoning. Turns the generational collector on; **every safepoint moves every young object** (nothing is promoted by age) and overwrites the memory the objects left with the address of an unreadable page. The addresses are not handed out again while room remains above them. A stale pointer faults in that page on its first virtual call or on the first use of a reference read through it, and the process ends with `[camel] GC poison: a pointer to a Camel object was used after a safepoint moved the object` (exit code 134). With `--gc-check verify=both` a stale reference in a root or in an object is reported with its path before it is used |
+ | `std::gc::poison` | White-box self-test of the mode |
+-| `--gc-promotion-age n` | Survivals before promotion (default 4). 1 promotes everything at once: the setting that shows missing write barriers |
+-| `--gc-large-threshold-kb n`, `--gc-nursery-mb n` | Size above which an object is born old (4 KB with mark-sweep, 64 KB with the generational collector) and size of the birth space (4 MB). A small threshold makes ordinary arrays be born old, which is what the tests of such objects need |
++| `--gc promotion_age= n` | Survivals before promotion (default 4). 1 promotes everything at once: the setting that shows missing write barriers |
++| `--gc large_threshold_kb= n`, `--gc nursery_mb= n` | Size above which an object is born old (4 KB with mark-sweep, 64 KB with the generational collector) and size of the birth space (4 MB). A small threshold makes ordinary arrays be born old, which is what the tests of such objects need |
+ | `--gc-check verify`, `--gc-stress` | Heap verification and forced collections (`24_gc_verification_guide.md`) |
+ | `CAMEL_TEST_TIMEOUT_SCALE=n` | Multiplies the timeouts of the test runner, for running whole plans under these modes |
+ | `[[sweeps]]` in a plan | Runs the tests of other plans again under an environment (`docs/test-plans.md`); `mm.gc_poison_sweep` does it for poisoning |
+diff --git a/docs/technical/39_loops.md b/docs/technical/39_loops.md
+index da80496d50..1228388da6 100644
+--- a/docs/technical/39_loops.md
++++ b/docs/technical/39_loops.md
+@@ -27,7 +27,7 @@ loopFor   : 'for' identDef 'in' logicalOrExpr
+ loopWhile : 'while' logicalOrExpr
+ ```
+ 
+-A comma after a first value continues the head only when a name and `=` follow, so a loop can
++A comma after a first value continues the head only when a name and `` follow, so a loop can
+ be an argument (`f(loop a = 0 for x in xs do a + x, 5)`). `do` is followed by a `blockExpr`,
+ the same production as after `then`. A head without `for` and without `while` is a syntax error
+ (the narrow reading of an open question: such a loop could only end through a fault).
+@@ -427,7 +427,7 @@ environment variable): the four shapes and the three ways a loop runs no rounds;
+ on `std::nvm`, `std::fvm`, `std::jit`, `std::prl`,
+ with the back ends' output compared; `std::macro` on the two-value loop of `macro.cml`; a hundred
+ thousand rounds of a `while` and a `for` loop with the tapes summarised by their lengths; and a
+-tape that outgrows `--gc-heap-limit-mb`, which every executor reports as
++tape that outgrows `--gc heap_limit_mb`, which every executor reports as
+ `RuntimeDiag::MemoryExhausted` at the loop's source line.
+ 
+ `test/plans/feat/modules/autodiff.plan.toml` covers the differentiation through a loop (section
+diff --git a/docs/technical/47_command_line_over_environment.md b/docs/technical/47_command_line_over_environment.md
+index a1b5df75d4..4db5b660c5 100644
+--- a/docs/technical/47_command_line_over_environment.md
++++ b/docs/technical/47_command_line_over_environment.md
+@@ -13,25 +13,25 @@ Twenty-one names, twenty-one knobs, no aliases. Only the accepted values have sy
+ 
+ | Environment name | Option | Owner: who sets it, and when |
+ |---|---|---|
+-| `CAMEL_GC_NURSERY_MB` | `--gc-nursery-mb` | Someone running a big program, and the capacity plans; the birth space of the generational collector |
+-| `CAMEL_GC_PROMOTION_AGE` | `--gc-promotion-age` | Operator authors and the generational tests; 1 promotes at the first collection, which is what shows a missing write barrier |
+-| `CAMEL_GC_LARGE_THRESHOLD_KB` | `--gc-large-threshold-kb` | Someone sizing the large-object space; a small threshold makes ordinary arrays be born old, which is what the tests of such objects need |
+-| `CAMEL_GC_LARGE_BUDGET_MB` | `--gc-large-budget-mb` | The same; large-object bytes between two collections |
+-| `CAMEL_GC_GROWTH_PERCENT` | `--gc-growth-percent` | The same; how much the large-object space grows per cycle |
+-| `CAMEL_GC_HEAP_LIMIT_MB` | `--gc-heap-limit-mb` | The capacity plans and `docs/technical/23`, `24`; turns "out of memory" into a located diagnostic instead of a host OOM |
+-| `CAMEL_SPACE_SEGMENT_KB` | `--space-segment-kb` | Test control: small segments make a small program grow the spaces, so growth is exercised under verification and stress |
+-| `CAMEL_META_SPACE_LIMIT_MB` | `--meta-space-limit-mb` | The capacity plans; the space of constants and function objects being compiled |
+-| `CAMEL_GRAPH_SPACE_LIMIT_MB` | `--graph-space-limit-mb` | The same; the space of runtime graphs |
+-| `CAMEL_PERM_SPACE_LIMIT_MB` | `--perm-space-limit-mb` | The same; the space of types and layouts |
++| `CAMEL_GC_NURSERY_MB` | `--gc nursery_mb` | Someone running a big program, and the capacity plans; the birth space of the generational collector |
++| `CAMEL_GC_PROMOTION_AGE` | `--gc promotion_age` | Operator authors and the generational tests; 1 promotes at the first collection, which is what shows a missing write barrier |
++| `CAMEL_GC_LARGE_THRESHOLD_KB` | `--gc large_threshold_kb` | Someone sizing the large-object space; a small threshold makes ordinary arrays be born old, which is what the tests of such objects need |
++| `CAMEL_GC_LARGE_BUDGET_MB` | `--gc large_budget_mb` | The same; large-object bytes between two collections |
++| `CAMEL_GC_GROWTH_PERCENT` | `--gc growth_percent` | The same; how much the large-object space grows per cycle |
++| `CAMEL_GC_HEAP_LIMIT_MB` | `--gc heap_limit_mb` | The capacity plans and `docs/technical/23`, `24`; turns "out of memory" into a located diagnostic instead of a host OOM |
++| `CAMEL_SPACE_SEGMENT_KB` | `--spaces segment_kb` | Test control: small segments make a small program grow the spaces, so growth is exercised under verification and stress |
++| `CAMEL_META_SPACE_LIMIT_MB` | `--spaces meta_mb` | The capacity plans; the space of constants and function objects being compiled |
++| `CAMEL_GRAPH_SPACE_LIMIT_MB` | `--spaces graph_mb` | The same; the space of runtime graphs |
++| `CAMEL_PERM_SPACE_LIMIT_MB` | `--spaces perm_mb` | The same; the space of types and layouts |
+ | `CAMEL_GC_STRESS_MODE` | `--gc-stress kind=minor\|major\|both` | Operator authors (`docs/technical/36`, `24`) and the `feat/mm`, `gpu` plans |
+-| `CAMEL_GC_STRESS_ALLOC` | `--gc-stress alloc=` | The same; collect every N allocations |
+-| `CAMEL_GC_STRESS_SAFEPOINT` | `--gc-stress safepoint=` | The same; collect every N safepoints |
++| `CAMEL_GC_STRESS_ALLOC` | `--gc-stress alloc` | The same; collect every N allocations |
++| `CAMEL_GC_STRESS_SAFEPOINT` | `--gc-stress safepoint` | The same; collect every N safepoints |
+ | `CAMEL_GC_LOG_MOVES` | `--gc-check moves` | The same; one record per relocated object |
+ | `CAMEL_GC_PRINT_CONFIG` | `--gc-check config` | The same; the effective configuration, printed once at start-up |
+ | `CAMEL_GC_POISON` | `--gc-check poison` | `docs/technical/36` section 8, and `mm.gc_poison_sweep`, which runs the other plans poison-forced |
+ | `CAMEL_GC_VERIFY` | `--gc-check verify=before\|after\|both` | `docs/technical/24`, and the plans that read a heap under stress |
+-| `CAMEL_COLL_FANOUT` | `--coll fanout=` | `docs/technical/31` section 9.3, and the compile-shape plans |
+-| `CAMEL_COLL_LEAF_CAPACITY` | `--coll leaf=` | The same |
++| `CAMEL_COLL_FANOUT` | `--coll fanout` | `docs/technical/31` section 9.3, and the compile-shape plans |
++| `CAMEL_COLL_LEAF_CAPACITY` | `--coll leaf` | The same |
+ | `CAMEL_COLL_PAD_NODES` | `--coll pad=on\|off` | The same |
+ | `CAMEL_COLL_VALIDATE` | `--coll validate=on\|off` | The same; checks the invariants of every table an operation returns |
+ 
+diff --git a/docs/technical/54_profiler_allocations.md b/docs/technical/54_profiler_allocations.md
+index 3a94a499ef..fdecdd289a 100644
+--- a/docs/technical/54_profiler_allocations.md
++++ b/docs/technical/54_profiler_allocations.md
+@@ -147,7 +147,7 @@ the file records it as such rather than as an overhead figure.
+ ## 6. Measurement: d=256 and d=1024
+ 
+ One thread, 16 steps and 3 warm-up, the generated `train_step.cml` (`measure.py`'s substitutions),
+-`tensor::fuse std::jit`, `--block-limit 8192`, `std::profile report=true top=0`. Full data: the
++`tensor::fuse std::jit`, `--spaces block_mb= 8192`, `std::profile report=true top=0`. Full data: the
+ run's `2026-10-23-d256-d1024-alloc-profile.json`, which stays on the machine that took it -- the
+ example's `results/` is not in the repository (examples/models/naive-in-expert-out/README.md).
+ 
