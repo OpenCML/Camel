@@ -1,0 +1,4 @@
+func main() => int {
+    let g = (x: int): int => x
+    return g(1)
+}

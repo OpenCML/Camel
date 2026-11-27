@@ -475,3 +475,26 @@ expect_diagnostic_name = "SyntaxDiag::MissingToken"
 expect_output_contains = ["Expected '>' before '='"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+[[tests]]
+name = "syntax.colon_return_type"
+desc = "A colon between a function's parameter list and its return type is not syntax: the parser reports the ':' it cannot place, and says nothing about the spelling that replaced it."
+kind = "negative"
+case = "../../../cases/parse/syntax/colon_return_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["Unexpected ':'; expected a declaration or the end of the file."]
+expect_output_not_contains = ["=>", "did you mean"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.arrow_lambda"
+desc = "A lambda written with a ':' is not syntax either: the parameter list is read as a list, so the ':' is the token the parser refuses, with no hint pointing at the arrow form."
+kind = "negative"
+case = "../../../cases/parse/syntax/arrow_lambda.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["Expected ',' or ')' before ':'."]
+expect_output_not_contains = ["did you mean"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
