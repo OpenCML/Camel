@@ -3712,3 +3712,59 @@ expect_output_contains = ["`has_aux` differentiates the first element of the pai
 expect_output_not_contains = ["UnknownInternalError", "never printed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
+
+# ---------------------------------------------------------------------------------------------------
+# The gradient of a loop that collects one value per round, against finite differences: the CC main
+# case's backward half (design principles 9.9).
+[[tests]]
+name = "loop_residual_grad.runtime.nvm"
+desc = "The gradient of a loop that collects one value per round -- the loss of every round into the residual array the reverse loop reads -- matches central differences: 4 coordinates, h = 1e-4, f64 throughout, a loss exactly quadratic in w so the difference has no truncation term and only roundoff of about eps*|loss|/h = 2e-12 is left; the program fails unless the largest relative difference stays under 1e-9. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_residual_grad.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["rounds budget=0.5 2 budget=100 6 totals 0.8125 0.953125", "residuals budget=0.5 [0.25, 0.5625] budget=100 [0.25, 0.5625, 0.015625, 0.0625, 0.0625, 0.0]", "grad [-0.125, 2.875, 6.375, 3.375]", "stepped [0.5125, -1.2875, 1.3624999999999998, -0.08750000000000002]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const match = out.match(/worst ([0-9.e+-]+)/)
+assert(match, `the program printed no worst difference: ${out}`)
+const worst = Number(match[1])
+assert(worst > 0 && worst <= 1e-9, `the gradient differs from central differences by ${worst}, which is above 1e-9 or not a difference at all`)
+const finite = out.match(/finite [^\\n]+/)
+assert(finite, `the program printed no central differences: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "loop_residual_grad.macro.nvm"
+desc = "The same gradient with std::macro: with_grad expands at compile time, so the derived graphs are the ones a model is exported from, and the finite-difference reading is the same."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_residual_grad.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["rounds budget=0.5 2 budget=100 6 totals 0.8125 0.953125", "grad [-0.125, 2.875, 6.375, 3.375]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const match = out.match(/worst ([0-9.e+-]+)/)
+assert(match, `the program printed no worst difference: ${out}`)
+const worst = Number(match[1])
+assert(worst > 0 && worst <= 1e-9, `the gradient differs from central differences by ${worst}, which is above 1e-9 or not a difference at all`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "loop_residual_grad.tape"
+desc = "The derived graph of the collecting loop already holds the reverse loop of 9.9 -- a tape loop read backwards -- and the forward loop that collects the residuals: `with_grad` expanded at compile time and printed as JSON shows both graphs. This pins what the export has to lower (it refuses today at ':struct/append_arr'), so the gap cannot close silently."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_residual_grad.cml"
+args = ["${case}", "std::macro", "std::jgir"]
+expect_exit = 0
+expect_stdout_contains = ["tape.reverse", "forward.fwd"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 30000
