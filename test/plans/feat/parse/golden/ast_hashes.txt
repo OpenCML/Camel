@@ -524,7 +524,7 @@ cb32c9dd5cb81d91 ok src/stdlib/io.cml
 781c6adf9b64b7fe ok src/stdlib/laws.cml
 7d5de741d221bff6 ok src/stdlib/math.cml
 4bd3189fe34a101a ok src/stdlib/nn.cml
-7894f59b36eee8c4 ok src/stdlib/onnx.cml
+2f99ae94bcec8605 ok src/stdlib/onnx.cml
 93780c4e22a23893 ok src/stdlib/opt.cml
 49015cbc4407a506 ok src/stdlib/optim.cml
 cfd1905583789732 ok src/stdlib/para.cml
@@ -3322,6 +3322,7 @@ e0ef0ceec825900b ok test/cases/modules/nn/siamese_shared_encoder.cml
 2c60c907acff7887 ok test/cases/modules/nn/tiny_cnn.cml
 0923605f63cc6bd1 ok test/cases/modules/nn/tiny_rnn.cml
 566cefbb789c3bb8 ok test/cases/modules/nn/with_context_step_demo.cml
+230b49ee1e010e20 ok test/cases/modules/onnx/dynamic_axes.cml
 66a0943e9bad5560 ok test/cases/modules/onnx/export_branch.cml
 244bcaeda395c486 ok test/cases/modules/onnx/export_canonical_kernel.cml
 8604e275ad4d7e59 ok test/cases/modules/onnx/export_capability.cml
@@ -3421,7 +3422,7 @@ fd769b1a2b6f9912 ok test/cases/modules/onnx/loop_collect/for_collect_static.cml
 de83b3de99a9fd4d ok test/cases/modules/onnx/refusals/as_constant_fails.cml
 17990328fb0cf2c6 ok test/cases/modules/onnx/refusals/as_unproven.cml
 02cc8236160fb56e ok test/cases/modules/onnx/refusals/bad_arity.cml
-dc9c680bf83b8fdb ok test/cases/modules/onnx/refusals/bad_axis.cml
+f93351775d008cc2 ok test/cases/modules/onnx/refusals/bad_axis.cml
 d98318492f3c66fc ok test/cases/modules/onnx/refusals/bad_output.cml
 246351da207a3d34 ok test/cases/modules/onnx/refusals/bad_path.cml
 e55fa306a33611be ok test/cases/modules/onnx/refusals/bad_target.cml
