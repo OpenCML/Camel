@@ -2,17 +2,17 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Exporting Camel programs as ONNX models: `export_model` writes the model of a function applied
- * to an example argument, and `supported_operators` lists the operator URIs the backend can
- * lower. The module is the ONNX exporter, not a runtime: loading it and asking what it can lower
- * needs neither the ONNX runtime nor a GPU; only a run of `export_model` writes a file.
+ * Translating Camel functions into ONNX models: `model` translates a function applied to an
+ * example argument into a model value, `save` writes that value out, and `supported_operators`
+ * lists the operator URIs the backend can lower. Loading the module and asking what it can
+ * lower needs neither the ONNX runtime nor a GPU; neither `model` nor `save` needs one either.
  */
 
 // The declarations of the C++ module `lib/onnx` (design principles 6.4). This file is the one
 // source of both operators' signatures; the C++ side keeps the kernels, the executor and the
 // purity.
 //
-// `export_model`'s `with` parameters are declared once, with their defaults: a call gives them by
+// `model`'s `with` parameters are declared once, with their defaults: a call gives them by
 // name, leaves out the ones with a default, and the value it left out is this declaration's
 // constant (design principles 4.4). `fn` and `example` are ordinary parameters; `fn` is a function
 // (`when is_function::<F>()`, which a pass of one argument also writes, and the count of arguments
