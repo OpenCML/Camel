@@ -11,7 +11,7 @@
 | 类型 | 是什么 | 实现 |
 | --- | --- | --- |
 | `Graph`、`Node<T>`、`Op`、`TypeRef`、`Region`、`Tag` | 命名某个函数的图里的东西 | 一个被追踪的 `Handle` 对象（`lib/graph/handle.h`）：种类、所属的 `Program`、`GraphId`、序号、`Type*` |
-| `Draft<F>` | 在函数 `f: F` 上开的事务 | 句柄资源类型：外部资源对象持有一个草稿会话；`F` 是这次提交会造出的函数类型，`commit(d)` 给出同类型的 `F!`。句柄类型带类型实参，`Draft<F>` 与 `Graph` 同一种句柄（`HandleKind::Graph`），`F` 只作类型表的 intern 键，所以事务里读它的算子照旧按 `Graph` 写 |
+| `Txn<F>` | 在函数 `f: F` 上开的事务 | 句柄资源类型：外部资源对象持有一个草稿会话；`commit(t)` 给出同类型的 `F!`。因为是资源，改写它的算子写 `uses t` |
 | `Value` | 值；目前与 `Node` 同一个类型 | `Node` 的另一个名字 |
 | `NodeKind` | `Data, Port, Fill, Accs, Brch, Join, Call, Func, Oper, Gate, Loop` | Camel 的 `enum`（`nodekind.cpp` = `src/stdlib/graph/nodekind.cpp`）；`nodeKindTag` 对 `GCNodeKind` 做穷尽的 `switch`，图模型新增一种节点时这里编译不过，直到它被放进枚举或明确排除（`Bind`、`Dref`、`Dead` 不是程序里看得见的节点）。`Cast`、`Copy`、`Sync` 不在这张表里，也不是节点种类：转换与拷贝是 `:op/cast` / `:op/copy` 的调用，`kind` 对它们答 `Oper`，`op_name` 给出是哪一种；`sync` 块的次序由同步边表达 |
 | `RegionKind` | `Root, Arm, LoopCond, LoopBody, Inline, Block, Dead` | Camel 的 `enum`（`regionkind.cpp`），与 `GCRegionKind` 一一对应；新增一种区域时 `regionKindTag` 编译不过 |
@@ -34,7 +34,7 @@
 
 ## 事务
 
-`open(f)` 在函数 `f` 上开一个 `Draft<F>`：一个 `RuntimeGraphDraftSession` 由一个外部资源对象持有，会话在提交或放弃时释放，没有人提交就由收集器在安全点释放。事务只含 `f` 的图及其可达的子图。编辑有三个，其中两个整节点，都带语义而不暴露原始邻接改写：
+`open(f)` 在函数 `f` 上开一个 `Txn<F>`：一个 `RuntimeGraphDraftSession` 由一个外部资源对象持有，会话在提交或放弃时释放，没有人提交就由收集器在安全点释放。事务只含 `f` 的图及其可达的子图。编辑有三个，其中两个整节点，都带语义而不暴露原始邻接改写：
 
 - `replace(t, old, new)`：把同一张图里的 `new` 放到 `old` 的位置并删除 `old`，用的是优化器的 `replaceNode`，所以 `old` 排过的顺序（同步边、顺序边和它的值所来自的有序节点）保持不变。`old` 是图的锚（出口、输出、返回、分支臂首尾）、`new` 由 `old` 算出、或事务已结束，是故障。
 - `erase(t, n)`：删除没有人读取其值的节点。
@@ -45,7 +45,7 @@
 
 `add_constant(t, g, 值)` 创建事务自己产生的值：把值放进图的静态槽并返回持有它的 `Node`（数值、布尔或字符串；字符串复制进 `permSpace`）。草稿的静态槽是裸引用，NodeVM 的安全点可能在 Camel 代码运行时移动对象，所以 `RuntimeGraphDraftSession::traceStaticSlots` 在每个事务被追踪时把草稿静态槽里的指针重定位；字符串还要独立于追踪活下来，因为旧世代的资源包装对象不一定在每个安全点被追踪。常量折叠（`fold_constants::fold`）就是这样把 `a + b` 的结果做成新值再 `replace`。
 
-`commit(d)` 用 `commitChecked()`：校验草稿（`docs/technical/17_graph_rewrite_api_contracts.md` 4.2 的边不变量），编码新快照，它与旧的共享没有改的图；结果是一个**同类型 `F` 的新函数值**：克隆原来的函数值再 `rebind` 到提交出来的快照，运行中的程序和别人手里的原函数都不变（设计原则 9.1）。错误值的 `kind`：`GraphConflict`（事务读过或写过的图，在上下文的程序里已有别的版本）、`GraphInvalid`（编辑破坏了不变量，消息带图、节点与边）、`TxnUsed`（事务已结束）。`abort(t)` 丢弃事务。改写后的函数值在每个后端上都与原函数算同样的结果。
+`commit(t)` 用 `commitChecked()`：校验草稿（`docs/technical/17_graph_rewrite_api_contracts.md` 4.2 的边不变量），编码新快照，它与旧的共享没有改的图；结果是一个**同类型 `F` 的新函数值**：克隆原来的函数值再 `rebind` 到提交出来的快照，运行中的程序和别人手里的原函数都不变（设计原则 9.1）。错误值的 `kind`：`GraphConflict`（事务读过或写过的图，在上下文的程序里已有别的版本）、`GraphInvalid`（编辑破坏了不变量，消息带图、节点与边）、`TxnUsed`（事务已结束）。`abort(t)` 丢弃事务。改写后的函数值在每个后端上都与原函数算同样的结果。
 
 ## 用 Camel 写遍
 

@@ -6084,11 +6084,8 @@ The graph of a function, as a value. A function is a graph; this module reads it
 draft, edits it. The handles `Graph`, `Node`, `Op`, `TypeRef`, `Region` and `Tag` name things
 inside the graphs of one function and compare with `==` and `!=`. Reads are pure.
 
-A draft is a `Draft<F>`: `open(f)` answers the graph `f` is, in a copy the edits go to, and every
-handle read through it names a node of that copy. `F` is the type of the function its commit
-makes, so a draft goes where a `Graph` is stated -- the queries and the edit operators take it as
-one -- and a `Graph` does not go where a draft is stated: committing one is committing the type it
-was opened on. The root queries take the draft -- `nodes(d)`,
+A draft is a `Graph`: `open(f)` answers the graph `f` is, in a copy the edits go to, and every
+handle read through it names a node of that copy. The root queries take the draft -- `nodes(d)`,
 `graphs(d)`, `params(d)`, `exit(d)` -- and an edit names the nodes it changes and nothing else:
 `replace(old, new)`, `erase(n)`. The draft is reached through the nodes, so a second argument
 naming it is not needed and not offered (docs/design/graph-editing/README.cn.md 15.2, 15.3).
@@ -6705,7 +6702,7 @@ a program is immutable (design principles 3.3).
 #### `open`
 
 ```camel
-open: (f: F) => Draft<F> when is_function::<F>()
+open: (f: F) => Graph when is_function::<F>()
 ```
 
 Opens a function's graphs as a draft and gives the graph of the function itself: what an edit
@@ -6853,14 +6850,14 @@ creates may be live at a safepoint where its draft is not traced.
 #### `commit`
 
 ```camel
-commit: (d: Draft<F>) => F! when is_function::<F>()
+commit: (d: Graph) => F!
 ```
 
 Checks the edits and makes the changed function: the same type as the one that was opened, with
 the values it captured, sharing every graph nothing changed. The draft is over.
 
 - Failure: error value `GraphConflict` when a graph the draft touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant (the message names the graph, the node and the edge); error value `TxnUsed` when the draft was over already.
-- Example: `commit(open(func (x: int) => int { x + 1 }))`
+- Example: `commit::<(x: int) => int>(open(func (x: int) => int { x + 1 }))`
 
 #### `abort`
 
