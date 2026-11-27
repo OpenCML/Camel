@@ -1026,25 +1026,18 @@ bool parseArgs(int argc, char *argv[]) {
         }
     }
 
-    clipp::group cli;
-    if (word == nullptr) {
-        cli = run | infoFlags;
-    } else if (word == kSubcommands[0].name) {
+    if (word != nullptr && word == kSubcommands[0].name) {
         showDocs = true;
-        cli      = docsCommand;
-    } else if (word == kSubcommands[1].name) {
+    } else if (word != nullptr && word == kSubcommands[1].name) {
         showAbout = true;
-        cli       = aboutCommand;
-    } else if (word == kSubcommands[2].name) {
+    } else if (word != nullptr && word == kSubcommands[2].name) {
         showZen = true;
-        cli     = zenCommand;
-    } else if (word == kSubcommands[3].name) {
-        cli = explainCommand;
-    } else if (word == kSubcommands[4].name) {
-        cli = check;
-    } else {
-        cli = inspect;
     }
+
+    // `--help` lists what the command line can be: the run's settings and each subcommand's line,
+    // both taken from the table above.
+    auto cli = docsCommand | aboutCommand | zenCommand | explainCommand | run | infoFlags | check |
+               inspect;
     startupMark("construct");
 
     std::vector<char *> args = takeWarningArguments(argc, argv);
@@ -1055,7 +1048,29 @@ bool parseArgs(int argc, char *argv[]) {
     argv                     = args.data();
     startupMark("warnings");
 
-    const parsing_result parsed = parse(argc, argv, cli);
+    // The grammar that reads the line is the one the word picked: a subcommand's group holds its
+    // own settings, and a line without a word is a run's.
+    const parsing_result parsed = [&]() -> parsing_result {
+        if (word != nullptr) {
+            if (word == kSubcommands[0].name) {
+                return parse(argc, argv, docsCommand);
+            }
+            if (word == kSubcommands[1].name) {
+                return parse(argc, argv, aboutCommand);
+            }
+            if (word == kSubcommands[2].name) {
+                return parse(argc, argv, zenCommand);
+            }
+            if (word == kSubcommands[3].name) {
+                return parse(argc, argv, explainCommand);
+            }
+            if (word == kSubcommands[4].name) {
+                return parse(argc, argv, check);
+            }
+            return parse(argc, argv, inspect);
+        }
+        return parse(argc, argv, run | infoFlags);
+    }();
     if (!parsed) {
         // Name what did not parse (an unknown option, a missing value, a conflict) before the
         // usage: a command line that cannot be honoured is an error, not a run with a default.
