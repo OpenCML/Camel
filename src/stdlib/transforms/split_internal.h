@@ -42,6 +42,7 @@
 #include <numeric>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -81,6 +82,26 @@ bool refuseAt(
 
 /// The node's data inputs: its norm inputs followed by its with inputs, in order.
 std::vector<gc_node_ref_t> dataInputsOf(const camel::graph::GraphView &view, gc_node_ref_t ref);
+
+/// The word for a construct a half does not carry, and empty for every node it does carry. Those
+/// three are refused at the node itself (`copyHalf`), so what fails to arrive at a reader is the
+/// construct and not one of its operands: a refusal that said "an operand of the node" named the
+/// place downstream of the thing the reader has to move.
+inline std::string_view halfAbsentWordOf(const rt::GCNode *node) {
+    if (node == nullptr) {
+        return {};
+    }
+    switch (node->kind) {
+    case rt::GCNodeKind::Loop:
+        return "loop";
+    case rt::GCNodeKind::Brch:
+        return "branch";
+    case rt::GCNodeKind::Join:
+        return "join";
+    default:
+        return {};
+    }
+}
 
 /// A `Tuple` fill of `members`, with the empty tuple as the static operand the fill reads.
 gc_node_ref_t fillTuple(rt::GraphDraft &draft, Type *type, std::span<const gc_node_ref_t> members);
@@ -458,12 +479,29 @@ struct Half {
                 copyOf[input] = accs;
             }
             if (input >= source->nodeCount() || copyOf[input] == rt::kInvalidNodeRef) {
+                // The operand that failed to arrive is the answer, and it is usually not an operand
+                // at all: `copyHalf` leaves a loop, a branch and a join out of a half on purpose,
+                // so what a reader has to move is that construct, and a sentence about "an operand"
+                // names the thing downstream of it. The construct is named where it is known.
+                const rt::GCNode *absent =
+                    input < source->nodeCount() ? source->node(input) : nullptr;
+                const std::string_view word = halfAbsentWordOf(absent);
+                if (!word.empty()) {
+                    return refuseAt(
+                        refusal,
+                        source->view(),
+                        ref,
+                        std::string("a node reading a ") + std::string(word),
+                        std::string("the ") + std::string(word) +
+                            " is not part of this half, so the operand it gives is not reachable");
+                }
                 return refuseAt(
                     refusal,
                     source->view(),
                     ref,
                     "a node whose input was not copied",
-                    "an operand of the node is not reachable from the half's exit");
+                    "the node its operand comes from is not part of this half, so the operand is "
+                    "not reachable");
             }
             inputs.push_back(copyOf[input]);
         }
