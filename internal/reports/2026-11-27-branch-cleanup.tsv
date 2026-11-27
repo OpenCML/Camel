@@ -58,3 +58,21 @@ lane/pass-registry-salvaged	34f83155ce	skipped-hold	patch-identical to c1-measur
 lane/pass-registry-from-e0	e0e31424d9	skipped-hold	patch-identical to c1-measure (range-diff =); same clause as above	pass: a pass that reads tag facts states it on the operator, not in a list beside it
 lane/pass-classify	4c32ee2955	hold	three commits unmerged, 141 behind; ruling: decide after C1's registry surface lands	test: a declaration that is not shaped like a pass is checked, not swallowed
 lane/pass-decl-gate	8a852a4f55	skipped-instruction	named in the do-not-delete list	compile: a pass-shaped declaration that names an operator is a declaration still
+# --- 树级退场（tree retirements, 14 棵；本文件第二节，列：树路径 | 原 HEAD | 树里曾有什么 | 处置 | 保档在哪）---
+# 处置 弃 = 内容别处已有等价物或只是配置副本；保档 = 内容归档后才退。全部先 checkout -- / 删未跟踪内容、status 空之后才 worktree remove，无 --force。
+D:/Projects/Camel-wt/stdlib-exceptions	lane/cpp-noise @ 7cdbdcbae9	无未提交内容（树干净）	弃+退树	—
+D:/Projects/Camel-wt/grammar-notes	lane/grammar-notes @ c55275edcb	无未提交内容（树干净）	弃+退树	—
+D:/Projects/Camel-wt/loop-handback	lane/loop-handback @ fcccbaac9b	无未提交内容（树干净）	弃+退树	—
+D:/Projects/Camel-wt/plain-gate-2	lane/plain-gate-2 @ 93ab748d73	2 个未跟踪文件：facts_readers_sweep.plan.toml、probe-facts-readers.mjs（旧版，差 2/3 行）	弃+退树	integration 已有这两文件的新版（ca640d9764）
+D:/Projects/Camel-wt/transpose-carry	lane/transpose-carry @ 314c6f6504	internal/_tcprobe/（23 文件 1.35MB：探针 .cml/.plan + 原始日志）	弃+退树	两页 transpose 报告已声明不入 git 并转抄读数（2026-11-25 / 2026-11-26 两篇 .cn.md）
+D:/Projects/Camel-wt/editview-b	lane/editview-b @ 7c17dc39b4	3 个 .cml 探针 + 1 个 plan	保档+退树	lane/probe-evidence @ 70fbfad2d4（test/cases/probe/editview_b/、test/plans/probe/editview_b.plan.toml，逐字节相同）
+D:/Projects/Camel-wt/gc-pacing	lane/gc-pacing @ 6c7dffe5cb	gc_pacing_probe2.cml + plan	保档+退树	lane/probe-evidence @ 70fbfad2d4
+D:/Projects/Camel-wt/hdrweight-tools	lane/hdrweight-tools @ f6f5ea2a80	3 个 header-weight-*.py 量测工具	保档+退树	lane/probe-evidence @ 70fbfad2d4（internal/tools/，hash 相同）
+D:/Projects/Camel-wt/pooljvp	lane/pool-jvp @ 750191c745	internal/_pjprobe/：15 个 .log（1.31MB）+ pools.plan.toml + 4 个 probe_*.cml	日志弃、程序保档；退树	lane/probe-evidence @ 70fbfad2d4（日志无引用，程序与 plan 逐字节相同）
+D:/Projects/Camel-wt/timeout-retry	lane/timeout-retry @ 08fdf3d04d	test/tools/selftest/_compare/ 三件（compare_base.mjs + 2 plan）	保档+退树	lane/probe-evidence @ 70fbfad2d4（同路径同内容）
+D:/Projects/Camel-wt/ad	detached @ 34d47009b7	_probe-logs/（5 文件 145,773B 旧探针日志）	弃+退树	—（detached，无枝可删）
+D:/Projects/Camel-wt/catchup-f-parser-old-spelling	detached @ f02c6f724a	camel-gate.local.json（441B，git-ignored 配置副本）	弃+退树	—（detached，无枝可删）
+D:/Projects/Camel-wt/backfill	probe/d1123-102-backfill @ d2c3f10d6f	M semantic.cpp：LoopSequenceNotIterable 两条诊断文本的旧稿	弃+退树（checkout -- 复原）	integration 的 semantic.cpp 已是新版文本（“a value of a named type that says how to walk it” / “a range's iterator is such a declaration (5.4, 5.7)”），旧稿无新内容
+D:/Projects/Camel-wt/ex	detached @ b1c103bc1a	M 6 文件 57+/5-：graph 读取通道 + 三处文档同步（relative_cost_stated）	保档+退树（checkout -- 复原）	internal/reports/2026-11-27-parked-ex-relative-cost-stated.patch（integration 98ff0ee6af，13,179B/149 行）；代码里 relative_cost_stated 零命中，故这 57 行是真没落地的活
+# 合计 14 棵（不是 9）：第一批 3 + plain-gate-2/transpose-carry 2 + 五棵探针树 5 + ad/catchup 2 + backfill/ex 2。
+# worktree list 65 → 53；其间别人新增了 2 棵，故 65-14+2=53。
