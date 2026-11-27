@@ -2,7 +2,7 @@
     "version": 1,
     "tool": "scripts/coverage-table.mjs",
     "tier": "fast",
-    "inputs": {"selection":"sha256:8541f11c374f3386dda2942fca20099aa45fdff0a9247538085c02fcf9c315a0","files":"sha256:534d77a2314ec489a1a2acae12805c3a6d6941f84b1cb17f5d233b96f2f8b4b3","plans":"sha256:94fef12c7dfc60331e1a68266a8ae54c731469f7f85fb3310a995c3a500767aa"},
+    "inputs": {"selection":"sha256:8541f11c374f3386dda2942fca20099aa45fdff0a9247538085c02fcf9c315a0","files":"sha256:534d77a2314ec489a1a2acae12805c3a6d6941f84b1cb17f5d233b96f2f8b4b3","plans":"sha256:a63e9489dabc5e7a9e52a2aa428d301b36e8245584bcbfb602d389564e1beff7"},
     "totals": {"files":9076,"rows":2710,"dirRows":684,"fileRows":900,"noneRows":1126,"uncoveredRows":1081,"excludedRows":45,"uncoveredNotAllowlisted":722,"planFiles":459,"casesInLayer":9853},
     "groups": [
         {"group":"review-page","files":558,"excludedByRule":0,"allowlisted":false},
