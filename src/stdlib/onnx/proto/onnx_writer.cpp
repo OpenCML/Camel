@@ -236,11 +236,17 @@ WireWriter encodeValueInfo(const ValueInfo &vi) {
 
     WireWriter type;
     if (vi.isSequence) {
-        // A sequence: `TypeProto.sequence_type` wraps the element's own TypeProto. The element is
-        // written by the same code, so an element with a shape and one without (a tensor of unknown
-        // rank) both work, and the sequence itself carries no shape: its length is the run's.
+        // A sequence: `TypeProto.sequence_type` holds a Sequence message whose `elem_type` is the
+        // element's *own TypeProto* -- the tensor message above wrapped once more, because a
+        // Sequence's element is a TypeProto and not a Tensor (onnx.proto: `TypeProto.Sequence {
+        // TypeProto elem_type = 1; }`). Wrapping it only once writes a TypeProto whose field 1 is a
+        // varint instead of the `tensor_type` message: the ONNX checker lets that pass and ONNX
+        // Runtime refuses the model with "Unsuported type proto value case" -- the reading that
+        // found this was the runtime's own refusal, not the checker's acceptance.
+        WireWriter element;
+        element.messageField(type_f::TensorType, tensorType);
         WireWriter sequence;
-        sequence.messageField(sequence_f::ElemType, tensorType);
+        sequence.messageField(sequence_f::ElemType, element);
         type.messageField(type_f::SequenceType, sequence);
     } else {
         type.messageField(type_f::TensorType, tensorType);
