@@ -529,3 +529,5 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
 · **读一处发射点，先看它所在的分支条件，再看行号**（`lane-parked-rebase` 的教训：`graph_of` 的 `makeDRef` 在 `hasRootParam = !isEdit && …` 里，view 专用，被误判成"降级里的第二条实现"）。
 · **身份由持图方传入，框架不许自己造、连问都不该问**（`lane-arrangeable` 的 SIGSEGV）：`GCGraphManager::noteGraph` 里"问图要身份"会在**图还在构造**时被调用（`EncodeSession::run`），对半成品对象 `dynamic_cast` 是 UB ⇒ 崩在 `runtime::graphIdentity`。改法：身份由 owner 传（`toValue(graph->id())`），store 只记指针、从不解引用；`forgetGraph`/`~GCGraph`/`~GraphDraft` 同样传身份。
 · **"注释参与 AST 哈希"**：只改注释的车道会带 7～N 条 `ast stale` —— 那不是红，是**合并后在合并树上重采一次**的活（铁律 14 顺序）；车道不许去改 `ast_hashes.txt`，也不许与别人的整份重采同时动同一份金标。
+· **"用例跑不到"比"用例红"更坏**：新增用例只在 `test/cases/` 存在、`test/plans/` 里没有条目 ⇒ 它永远不跑、也不报警（只在 `ast_hashes.txt` 里留下名字）。交回前用 `git grep -rln <用例名> test/plans` 自查一次；引入笔自带用例跑不到，补条目比留着强。
+· **一处抬、一处不抬 ⇒ 只留一处**：同一条边上有两处各自决定"抬不抬类型"（例：`pairOf`/`mixedMemberTypeOf` 在 gate 侧抬、被前向的 copy 侧不抬）时，正解是**让其中一处做决定**（读另一处的类型），不是两处都抬；判据是"两条边由构造相等"。
