@@ -8,7 +8,7 @@
  * so the driver compares Camel's array with the model's output -- shape and values.
  */
 import { get_env } from env
-import { export_model } from onnx
+import { model, save } from onnx
 import { load_npy, save_npy, sum } from tensor
 
 func build(x: f32[?]) => (int[], int) {
@@ -22,9 +22,9 @@ func main() => string! sync {
     println(k)
     let out = get_env('ONNX_OUT') ?? ''
     return if out == '' then '0'
-    else match export_model<out: out, dynamic_axes: [0]>(func (x: f32[?]) => (int[], int) {
+    else match model<dynamic_axes: [0]>(func (x: f32[?]) => (int[], int) {
         build(x)
-    }, (x)) {
+    }, (x))->save<out: out> {
         case error e => {
             return e
         }

@@ -19,7 +19,7 @@
  */
 
 import { get_env } from env
-import { export_model } from onnx
+import { model, save } from onnx
 import { reshape, relu } from tensor
 
 func counts(t: f32[...]) => int[...] {
@@ -28,7 +28,7 @@ func counts(t: f32[...]) => int[...] {
 
 func main() => string sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as f32[])
-    let r = export_model<out: get_env('ONNX_OUT') ?? ''>(counts, x)
+    let r = model(counts, x)->save<out: get_env('ONNX_OUT') ?? ''>
     return match r {
         case error e => 'refused ' + e.kind
         case v => 'exported'

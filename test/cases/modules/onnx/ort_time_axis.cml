@@ -6,7 +6,7 @@
  * loops must take a step only when the recursion goes on. Run by ort_time_axis.py with STEPS.
  */
 import { get_env } from env
-import { export_model } from onnx
+import { model, save } from onnx
 import { ones, reshape, sum, shape, tanh, zeros } from tensor
 
 func at(x: f32[...], t: int) => f32[...] {
@@ -25,12 +25,12 @@ func back(t: int, steps: int, x: f32[...]) => f32[...] {
 func main() => string! sync {
     let steps = int(get_env('STEPS') ?? '')
     let x = ones::<f32>([2, steps, 3]) * 0.1
-    return match export_model<out: get_env('ONNX_OUT') ?? ''>(
+    return match model(
         func (x: f32[...]) => (f32[...], f32[...]) {
             (scan(0, shape(x)[1], x, zeros::<f32>([shape(x)[0], shape(x)[2]])), back(0, shape(x)[1], x))
         },
         x
-    ) {
+    )->save<out: get_env('ONNX_OUT') ?? ''> {
         case error e => {
             return e
         }

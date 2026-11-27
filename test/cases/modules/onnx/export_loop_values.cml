@@ -7,7 +7,7 @@
  */
 import { with_grad } from autodiff
 import { get_env } from env
-import { export_model } from onnx
+import { model as onnx_model, save } from onnx
 import { reshape, sum, tanh } from tensor
 
 type P = { w: f32[...] }
@@ -23,7 +23,7 @@ func loss(x: f32[...]) => float {
     return float(sum(h * h)) * (1.0 + 0.5 * float(k))
 }
 
-func model(w: f32[...], x: f32[...]) => (f32[...], int, float[...], f32[...]) {
+func net(w: f32[...], x: f32[...]) => (f32[...], int, float[...], f32[...]) {
     let m = { w: w }
     let (h, k) = walk<m>(x, 0)
     let g = with_grad(loss)<m>(x)
@@ -33,9 +33,9 @@ func model(w: f32[...], x: f32[...]) => (f32[...], int, float[...], f32[...]) {
 func main() => string! sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as f32[])
     let w = reshape<[2, 2]>([0.5, -0.25, 0.1, 0.3] as f32[])
-    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (w: f32[...], x: f32[...]) => (f32[...], int, float[...], f32[...]) {
-        model(w, x)
-    }, (w, x)) {
+    return match onnx_model(func (w: f32[...], x: f32[...]) => (f32[...], int, float[...], f32[...]) {
+        net(w, x)
+    }, (w, x))->save<out: get_env('ONNX_OUT') ?? ''> {
         case error e => {
             return e
         }

@@ -5,7 +5,7 @@
  * item 3); the model has one Loop and the tuple's two values as outputs.
  */
 import { get_env } from env
-import { export_model } from onnx
+import { model, save } from onnx
 import { reshape, sum, tanh } from tensor
 
 func walk(s: (float[...], int)) => (float[...], int) {
@@ -15,9 +15,9 @@ func walk(s: (float[...], int)) => (float[...], int) {
 func main() => string! sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
     println(walk((x, 0)).1)
-    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: float[...]) => (float[...], int) {
+    return match model(func (x: float[...]) => (float[...], int) {
         walk((x, 0))
-    }, (x)) {
+    }, (x))->save<out: get_env('ONNX_OUT') ?? ''> {
         case error e => {
             return e
         }

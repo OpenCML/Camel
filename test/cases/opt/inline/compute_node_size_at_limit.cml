@@ -7,7 +7,7 @@
  * splice adds are not counted.
  */
 
-import { export_model } from onnx
+import { model, save } from onnx
 import { cpu_count } from process
 import { reshape } from tensor
 
@@ -23,7 +23,7 @@ func spin(n: int) => int sync {
 func main() => int sync {
     // Unbound on purpose: this `main` is measured by the number of compute nodes it holds, and
     // reading the refusal would add nodes to the number the case is about.
-    export_model<out: 'tmp/test/onnx/compute_node_size_at_limit.onnx'>(double, reshape<[2]>([1.0, 2.0]))
+    model(double, reshape<[2]>([1.0, 2.0]))->save<out: 'tmp/test/onnx/compute_node_size_at_limit.onnx'>
     let x = cpu_count()
     println(x)
     println(x)

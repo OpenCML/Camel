@@ -5,7 +5,7 @@
  */
 
 import { get_env } from env
-import { export_model } from onnx
+import { model, save } from onnx
 import { zeros } from tensor
 
 func double(t: f32[...]) => f32[...] {
@@ -15,7 +15,7 @@ func double(t: f32[...]) => f32[...] {
 func main() => int sync {
     return if (get_env('P7_MODE') ?? '') == 'export' then sync {
         let shape: int[] = [len(get_env('P7_INPUT') ?? ''), 2]
-        let r = export_model<out: 'tmp/test/onnx/refusal_request_in_arm_and_target.onnx'>(double, zeros::<f32>(shape))
+        let r = model(double, zeros::<f32>(shape))->save<out: 'tmp/test/onnx/refusal_request_in_arm_and_target.onnx'>
         match r {
             case error e => sync {
                 println(e)

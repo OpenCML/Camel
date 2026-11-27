@@ -15,7 +15,7 @@
  */
 
 import { with_grad } from autodiff
-import { export_model } from onnx
+import { model, save } from onnx
 import { reshape, sum, tanh } from tensor
 
 func affine(x: f32[2, 3]) => f32[...] {
@@ -65,8 +65,8 @@ func report(r1: void!, r2: void!, r3: void!) => string! {
 
 func main() => string! sync {
     let ex = reshape<[2, 3]>([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[]) as f32[2, 3]
-    let r1 = export_model<out: 'affine.onnx'>(affine, ex)
-    let r2 = export_model<out: 'checked.onnx'>(checked, ex)
-    let r3 = export_model<out: 'step.onnx'>(step, ex)
+    let r1 = model(affine, ex)->save<out: 'affine.onnx'>
+    let r2 = model(checked, ex)->save<out: 'checked.onnx'>
+    let r3 = model(step, ex)->save<out: 'step.onnx'>
     return report(r1, r2, r3)
 }

@@ -9,7 +9,7 @@
  * three GATEs the splice adds for its arguments were counted).
  */
 
-import { export_model } from onnx
+import { model, save } from onnx
 import { cpu_count } from process
 import { reshape } from tensor
 
@@ -30,7 +30,7 @@ func main() => int sync {
     // The refusal is what this case measures, and binding it would add compute nodes to the
     // function whose size the refusal reports, so the value stays unbound: the compiler reports
     // that with its own warning.
-    export_model<out: 'tmp/test/onnx/compute_nodes_two_shapes.onnx'>(double, reshape<[2]>([1.0, 2.0]))
+    model(double, reshape<[2]>([1.0, 2.0]))->save<out: 'tmp/test/onnx/compute_nodes_two_shapes.onnx'>
     let x = cpu_count()
     println(x)
     println('before')

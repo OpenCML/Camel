@@ -54,6 +54,14 @@ namespace {
 constexpr const char *kPassName   = "onnx::export_model";
 constexpr const char *kRequestUri = "onnx:export_model";
 
+/// Whether node `ref` of `g` is the translation that makes the model the request saves.
+bool isModelCall(const GraphView &g, NodeRef ref);
+
+/// Whether the branch condition `cond` is decided while translating. `a->b` writes its body in an
+/// arm of an `:op/tag_is_error` branch; when the tagged value came from a translation, whether
+/// that arm runs is the translation's own answer, which this pass is computing.
+bool conditionDecidedAtTranslation(const GCGraph *g, gc_node_ref_t cond);
+
 /// Why the pass does not translate, and the node it is about. A refusal that is about no
 /// particular node leaves `origin` invalid; apply() then reports it at the export_model call
 /// being translated or, before any call is known, at the entry function (see locate()).
@@ -224,14 +232,41 @@ Request readRequest(const GCGraph *g, gc_node_ref_t node, const std::string &out
     Request request;
     request.origin  = originNear(g->view(), node);
     const auto with = g->withInputsOf(node);
-    readFunction(g, node, request);
+
+    // The request is the pair `model(...)->save<...>`: the translation says what the model is and
+    // the save says where it goes. A `save` of anything else is refused here, not left to fall
+    // through to the "no request" path, which would translate `main` instead of refusing.
+    const auto args = g->normInputsOf(node);
+    if (args.empty() || !isModelCall(g->view(), args[0])) {
+        throw Refusal{
+            originNear(g->view(), node),
+            "the model onnx.export_model writes must be one onnx::model produced: write the "
+            "translation as `save<out: ...>(model(fn, example))`"};
+    }
+    // The value steps through `:op/tag_error_value` on its way from the translation to the save.
+    static const camel::core::OperId tagOper =
+        camel::core::OperatorTable::instance().intern(":op/tag_error_value");
+    gc_node_ref_t model = args[0];
+    for (int step = 0; step < 8 && g->node(model)->kind == GCNodeKind::Oper; ++step) {
+        if (g->nodeBodyAs<camel::runtime::GCOperBody>(model)->oper != tagOper) {
+            break;
+        }
+        const auto inner = g->normInputsOf(model);
+        if (inner.empty()) {
+            break;
+        }
+        model = inner[0];
+    }
+    const auto modelWith = g->withInputsOf(model);
+
+    readFunction(g, model, request);
     if (!request.graph) {
         throw Refusal{originNear(g->view(), node), "onnx.export_model expects a function value"};
     }
 
     // `example` is the argument of a one-parameter function, or a tuple with one example per
     // parameter (as the export_model operator reads it).
-    const Example example = constantArg(g, node, 1, "example argument");
+    const Example example = constantArg(g, model, 1, "example argument");
     if (request.graph->view().ports(PortGroup::Normal).size() == 1 ||
         example.type->code() != TypeCode::Tuple) {
         request.examples.push_back(example);
@@ -248,8 +283,8 @@ Request readRequest(const GCGraph *g, gc_node_ref_t node, const std::string &out
     } else if (with.empty()) {
         throw Refusal{
             originNear(g->view(), node),
-            "the onnx.export_model call names no model file: give it as the `out` argument "
-            "(export_model<out: \"model.onnx\">(fn, example)), or name it with the parameter "
+            "the export names no model file: give it as the `out` argument "
+            "(model(fn, example)->save<out: \"model.onnx\">), or name it with the parameter "
             "out of the pass (onnx::export_model out=\"model.onnx\")"};
     } else if (const auto path = constantOf(g, with[0])) {
         request.path = rtdata::fromSlot<::String *>(path->value)->toString();
@@ -262,13 +297,13 @@ Request readRequest(const GCGraph *g, gc_node_ref_t node, const std::string &out
                 "(onnx::export_model out=\"model.onnx\"), or write the path as a string literal",
                 describeNode(g->view(), with[0]))};
     }
-    if (with.size() > 1) {
-        const Example axes = constantWithArg(g, node, 1, "dynamic_axes argument");
+    if (modelWith.size() > 0) {
+        const Example axes = constantWithArg(g, model, 0, "dynamic_axes argument");
         request.options.dynamicAxes =
             tensor::parseIntArray(rtdata::fromSlot<::Array *>(axes.value), axes.type);
     }
-    if (with.size() > 2) {
-        const Example target   = constantWithArg(g, node, 2, "target argument");
+    if (modelWith.size() > 1) {
+        const Example target   = constantWithArg(g, model, 1, "target argument");
         request.options.target = rtdata::fromSlot<::String *>(target.value)->toString();
     }
     return request;
@@ -276,6 +311,18 @@ Request readRequest(const GCGraph *g, gc_node_ref_t node, const std::string &out
 
 /// The branch of `g` in whose arm `node` sits (the innermost one), when the condition of that
 /// branch is not a constant of the graph: whether the arm runs is then decided at run time.
+bool conditionDecidedAtTranslation(const GCGraph *g, gc_node_ref_t cond) {
+    static const camel::core::OperId tagIsError =
+        camel::core::OperatorTable::instance().intern(":op/tag_is_error");
+    const auto *n = g->node(cond);
+    if (!n || n->kind != GCNodeKind::Oper ||
+        g->nodeBodyAs<camel::runtime::GCOperBody>(cond)->oper != tagIsError) {
+        return false;
+    }
+    const auto tagged = g->normInputsOf(cond);
+    return !tagged.empty() && isModelCall(g->view(), tagged.front());
+}
+
 std::optional<gc_node_ref_t> runtimeBranchOver(GCGraph *g, gc_node_ref_t node) {
     std::optional<gc_node_ref_t> found;
     size_t foundSize = 0;
@@ -285,7 +332,8 @@ std::optional<gc_node_ref_t> runtimeBranchOver(GCGraph *g, gc_node_ref_t node) {
             continue;
         }
         const auto cond = g->normInputsOf(it.ref());
-        if (!cond.empty() && constantOf(g, cond.front())) {
+        if (!cond.empty() &&
+            (constantOf(g, cond.front()) || conditionDecidedAtTranslation(g, cond.front()))) {
             continue;
         }
         const size_t arms = g->armCountOf(it.ref());
@@ -438,11 +486,49 @@ uint64_t entryOriginOf(core::context::Context &ctx, const GCGraph *root) {
     return graphOriginOf(ctx, root);
 }
 
-/// Whether node `ref` of `g` is the export request (the operator kRequestUri).
+/// The error-value tag a `T!` passes through (`:op/tag_error_value`): the request saves the model
+/// that came out of a translation, and that value sits behind this node.
+bool isTagErrorValue(const GraphView &g, NodeRef ref) {
+    static const camel::core::OperId tag =
+        camel::core::OperatorTable::instance().intern(":op/tag_error_value");
+    return g.kindOf(ref) == NodeKind::Oper && g.operatorOf(ref) == tag;
+}
+
+/// Whether node `ref` of `g` is the translation that makes the model the request saves, with the
+/// tags of the fallible path between them stepped over.
+bool isModelCall(const GraphView &g, NodeRef ref) {
+    static const camel::core::OperId model =
+        camel::core::OperatorTable::instance().intern("onnx:model");
+    for (int step = 0; step < 8; ++step) {
+        if (g.kindOf(ref) != NodeKind::Oper) {
+            return false;
+        }
+        if (g.operatorOf(ref) == model) {
+            return true;
+        }
+        if (!isTagErrorValue(g, ref)) {
+            return false;
+        }
+        const std::span<const NodeRef> args = g.inputs(ref, PortGroup::Normal);
+        if (args.empty()) {
+            return false;
+        }
+        ref = args[0];
+    }
+    return false;
+}
+
+/// Whether node `ref` of `g` is the export request: a `save` whose model argument is a
+/// translation. The request is that pair -- the translation says what the model is, the save says
+/// where it goes -- so a `save` of anything else is not a request and is refused as one.
 bool isRequest(const GraphView &g, NodeRef ref) {
-    static const camel::core::OperId request =
-        camel::core::OperatorTable::instance().intern(kRequestUri);
-    return g.kindOf(ref) == NodeKind::Oper && g.operatorOf(ref) == request;
+    static const camel::core::OperId save =
+        camel::core::OperatorTable::instance().intern("onnx:save");
+    if (g.kindOf(ref) != NodeKind::Oper || g.operatorOf(ref) != save) {
+        return false;
+    }
+    const std::span<const NodeRef> args = g.inputs(ref, PortGroup::Normal);
+    return !args.empty() && isModelCall(g, args[0]);
 }
 
 bool holdsRequest(const GraphView &g) {
@@ -717,7 +803,7 @@ void exportEntry(
         throw Refusal{
             camel::source::kInvalidOriginId,
             std::format(
-                "the program contains no export_model<out: path>(fn, example) call, so "
+                "the program contains no model(fn, example)->save<out: path> call, so "
                 "onnx::export_model translates 'main' itself, and the model file is not named: "
                 "give "
                 "it as the parameter out, onnx::export_model out=\"model.onnx\"")};

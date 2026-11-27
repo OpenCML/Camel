@@ -35,7 +35,7 @@
  * Checked by ort_core_slice.py.
  */
 import { get_env } from env
-import { export_model } from onnx
+import { model, save } from onnx
 import { reshape, sum } from tensor
 
 /// A row count from the data: every input the checker gives sums to 1, 2 or 4, so the reshape
@@ -130,153 +130,153 @@ func main() => string! sync {
     let out = get_env('ONNX_OUT') ?? ''
     let mode = get_env('MODE') ?? ''
     if mode == 'open' then {
-        return match export_model<out: out>(func (x: f32[...]) => f32[...] {
+        return match model(func (x: f32[...]) => f32[...] {
             openEnd(x)
-        }, four) {
+        }, four)->save<out: out> {
             case error e => {
                 return e
             }
             case v => 'exported'
         }
     } else if mode == 'start' then {
-        return match export_model<out: out>(func (x: f32[...]) => f32[...] {
+        return match model(func (x: f32[...]) => f32[...] {
             runtimeStart(x)
-        }, four) {
+        }, four)->save<out: out> {
             case error e => {
                 return e
             }
             case v => 'exported'
         }
     } else if mode == 'rank2' then {
-        return match export_model<out: out>(func (x: f32[...]) => f32[...] {
+        return match model(func (x: f32[...]) => f32[...] {
             rank2(x)
-        }, four) {
+        }, four)->save<out: out> {
             case error e => {
                 return e
             }
             case v => 'exported'
         }
     } else if mode == 'known' then {
-        return match export_model<out: out>(func (x: f32[...]) => f32[...] {
+        return match model(func (x: f32[...]) => f32[...] {
             known(x)
-        }, four) {
+        }, four)->save<out: out> {
             case error e => {
                 return e
             }
             case v => 'exported'
         }
     } else if mode == 'step' then {
-        return match export_model<out: out>(func (x: f32[...]) => f32[...] {
+        return match model(func (x: f32[...]) => f32[...] {
             stepped(x)
-        }, four) {
+        }, four)->save<out: out> {
             case error e => {
                 return e
             }
             case v => 'exported'
         }
     } else if mode == 'negBoth' then {
-        return match export_model<out: out>(func (x: f32[...]) => f32[...] {
+        return match model(func (x: f32[...]) => f32[...] {
             negBoth(x)
-        }, six) {
+        }, six)->save<out: out> {
             case error e => {
                 return e
             }
             case v => 'exported'
         }
     } else if mode == 'posBoth' then {
-        return match export_model<out: out>(func (x: f32[...]) => f32[...] {
+        return match model(func (x: f32[...]) => f32[...] {
             posBoth(x)
-        }, six) {
+        }, six)->save<out: out> {
             case error e => {
                 return e
             }
             case v => 'exported'
         }
     } else if mode == 'negEnd' then {
-        return match export_model<out: out>(func (x: f32[...]) => f32[...] {
+        return match model(func (x: f32[...]) => f32[...] {
             negEnd(x)
-        }, four) {
+        }, four)->save<out: out> {
             case error e => {
                 return e
             }
             case v => 'exported'
         }
     } else if mode == 'posEnd' then {
-        return match export_model<out: out>(func (x: f32[...]) => f32[...] {
+        return match model(func (x: f32[...]) => f32[...] {
             posEnd(x)
-        }, four) {
+        }, four)->save<out: out> {
             case error e => {
                 return e
             }
             case v => 'exported'
         }
     } else if mode == 'negAll' then {
-        return match export_model<out: out>(func (x: f32[...]) => f32[...] {
+        return match model(func (x: f32[...]) => f32[...] {
             negAll(x)
-        }, six) {
+        }, six)->save<out: out> {
             case error e => {
                 return e
             }
             case v => 'exported'
         }
     } else if mode == 'posAll' then {
-        return match export_model<out: out>(func (x: f32[...]) => f32[...] {
+        return match model(func (x: f32[...]) => f32[...] {
             posAll(x)
-        }, six) {
+        }, six)->save<out: out> {
             case error e => {
                 return e
             }
             case v => 'exported'
         }
     } else if mode == 'negRank2' then {
-        return match export_model<out: out>(func (x: f32[...]) => f32[...] {
+        return match model(func (x: f32[...]) => f32[...] {
             negRank2(x)
-        }, eight) {
+        }, eight)->save<out: out> {
             case error e => {
                 return e
             }
             case v => 'exported'
         }
     } else if mode == 'posRank2' then {
-        return match export_model<out: out>(func (x: f32[...]) => f32[...] {
+        return match model(func (x: f32[...]) => f32[...] {
             posRank2(x)
-        }, eight) {
+        }, eight)->save<out: out> {
             case error e => {
                 return e
             }
             case v => 'exported'
         }
     } else if mode == 'sweep' then {
-        return match export_model<out: out>(func (x: f32[...]) => f32[...] {
+        return match model(func (x: f32[...]) => f32[...] {
             sweep(x)
-        }, four) {
+        }, four)->save<out: out> {
             case error e => {
                 return e
             }
             case v => 'exported'
         }
     } else if mode == 'negOne' then {
-        return match export_model<out: out>(func (x: f32[...]) => f32[...] {
+        return match model(func (x: f32[...]) => f32[...] {
             negOne(x)
-        }, six) {
+        }, six)->save<out: out> {
             case error e => {
                 return e
             }
             case v => 'exported'
         }
     } else if mode == 'posOne' then {
-        return match export_model<out: out>(func (x: f32[...]) => f32[...] {
+        return match model(func (x: f32[...]) => f32[...] {
             posOne(x)
-        }, six) {
+        }, six)->save<out: out> {
             case error e => {
                 return e
             }
             case v => 'exported'
         }
     } else {
-        return match export_model<out: out>(func (x: f32[...]) => f32[...] {
+        return match model(func (x: f32[...]) => f32[...] {
             both(x)
-        }, four) {
+        }, four)->save<out: out> {
             case error e => {
                 return e
             }

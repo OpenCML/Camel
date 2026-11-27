@@ -2,7 +2,7 @@
  * A variable declared, assigned and read directly in the exported function is only a name for a sequence of values: the export contains Mul, Add, Relu and no state.
  */
 import { get_env } from env
-import { export_model } from onnx
+import { model, save } from onnx
 import { reshape, relu } from tensor
 
 func forward(x: float[...]) => float[...] sync {
@@ -14,9 +14,9 @@ func forward(x: float[...]) => float[...] sync {
 
 func main() => string! sync {
     let x = reshape<[2, 2]>([1.0, -2.0, 3.0, 4.0])
-    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: float[...]) => float[...] {
+    return match model(func (x: float[...]) => float[...] {
         forward(x)
-    }, x) {
+    }, x)->save<out: get_env('ONNX_OUT') ?? ''> {
         case error e => {
             return e
         }

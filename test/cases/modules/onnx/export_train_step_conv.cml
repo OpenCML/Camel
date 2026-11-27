@@ -8,7 +8,7 @@
 import { with_grad } from autodiff
 import { get_env } from env
 import { conv2d, max_pool2d, sgd } from nn
-import { export_model } from onnx
+import { model, save } from onnx
 import { relu, mean, reshape, dim } from tensor
 
 type Cnn = {
@@ -128,7 +128,7 @@ func main() => string! sync {
         0.6,
         0.4
     ] as float[])
-    return match export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x)) {
+    return match model(step, (m, x))->save<out: get_env('ONNX_OUT') ?? ''> {
         case error e => {
             return e
         }

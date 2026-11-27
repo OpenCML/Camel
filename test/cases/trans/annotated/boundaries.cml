@@ -8,7 +8,7 @@
  * that writes no element type leaves it unstated, so `t[0]` had no type for `t[0] > 0.5`.
  */
 
-import { export_model } from onnx
+import { model, save } from onnx
 import { reshape, relu } from tensor
 
 func gate(t: f32[4]) => f32[4] {
