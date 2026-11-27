@@ -38,6 +38,15 @@ export func supported_operators() => string[]
 /// other source: only the translation knows those bytes.
 export type Model<F>
 
+/// Writes the ONNX model of `fn` applied to arguments like `example` to the file `out`, at the
+/// backend's default opset. The same translation `model` makes; it is this form's job to write it.
+/// @effect writes a file and reads the function's graph
+/// @fails error value `ExportUnsupported` when the graph cannot be translated, `IOError` when the file cannot be written
+/// @example export_model<out: "/tmp/model.onnx">(func (x: float) { x * 2.0 }, 2.0)
+#op('onnx:export_model')
+with <out: string, dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'>
+export func export_model::<F, E>(fn: F, example: E) => void! when is_function::<F>()
+
 /// Translates `fn` applied to arguments like `example` into an ONNX model, at the backend's
 /// default opset. `example` is one argument of a one-parameter `fn`, or a tuple with one example
 /// per parameter; the function's graph is translated after the generic passes, and a node the
