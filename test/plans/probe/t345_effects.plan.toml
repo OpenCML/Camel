@@ -1,0 +1,17 @@
+id = "probe.t345_effects"
+order = 972
+tier = "fast"
+tags = ["probe"]
+desc = "Step 0 of the blocks-as-scopes page: what the effect analysis says about the resource a block body makes."
+
+[defaults]
+kind = "behavior"
+case = "../../cases/probe/editview/body_last_expression_42.cml"
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "probe.t345_effects"
+desc = "The graph, with the function types' effect sets."
+args = ["${case}", "std::gir"]
