@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `internal/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：28 页
+## 现在在等作者：29 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -37,6 +37,7 @@
 | [`2026-11-27-should-opt-say-that-it-skipped-an-optimization`](2026-11-27-should-opt-say-that-it-skipped-an-optimization.cn.md) | 经 `std::opt` 跑的程序“少优化了一次”，要不要告诉它 |
 | [`2026-11-27-where-a-block-root-handle-comes-from`](2026-11-27-where-a-block-root-handle-comes-from.cn.md) | 块根那个句柄，编译器从哪拿它的类型与算子 |
 | [`2026-11-27-where-a-blocks-root-gets-the-module-that-declares-its-operator`](2026-11-27-where-a-blocks-root-gets-the-module-that-declares-its-operator.cn.md) | 块的根从哪里拿到「声明它那个算子的模块」 |
+| [`2026-11-27-who-erases-what-a-rule-dropped`](2026-11-27-who-erases-what-a-rule-dropped.cn.md) | 规则丢掉的操作数，谁把它从链上摘下来 |
 
 ## 生成器不会删的行：260 行（页已不在 `questions/` 里）
 

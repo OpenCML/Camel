@@ -5948,6 +5948,17 @@ Calls f for every element, for its effects; the calls have no order among them.
 
 - Example: `[1, 2]->unordered_foreach<func (x: int) { println(x) }>`
 
+#### `unordered_foreach`
+
+```camel
+unordered_foreach: <f: (item: int) => void> (r: Range) => void
+```
+
+Calls f for every integer r names, for its effects; the calls have no order among them, as
+`unordered_foreach` on the array the range names.
+
+- Example: `(0 .. 3)->unordered_foreach<func (x: int) { println(x) }>`
+
 #### `unordered_reduce`
 
 ```camel
