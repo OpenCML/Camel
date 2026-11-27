@@ -357,9 +357,6 @@ struct CallSpec {
     /// compiler appends the position of the call as one more, constant string argument: like
     /// Rust's `#[track_caller]`. `error(kind, message)` uses it.
     int8_t callSiteAtArity = -1;
-    /// The operator calls its function arguments and drops what they return (`foreach`): a
-    /// function written in place there whose value is a value nothing takes is refused.
-    bool discardsCallbackResult = false;
     /// The index of the with-argument, or of the ordinary argument, that is a format string
     /// (-1: none): when it is a constant, the compiler checks it against the other arguments.
     int8_t formatWithArg = -1;

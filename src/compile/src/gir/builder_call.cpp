@@ -213,6 +213,34 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
         return nodeTypeOf(inputNode);
     };
 
+    // A parameter that hands back nothing (`with <f: (item: int) => void>`) drops what the body of
+    // the function standing at it gives: that body's last statement is a value nothing takes
+    // (design principles 11.3). What says so is the parameter's type, not the place the argument
+    // was written in: the element function of `foreach` reaches the operator that calls it through
+    // the library's wrapper, where it is the wrapper's name and no longer the literal the program
+    // wrote beside the wrapper's call, so the call of the wrapper is asked too. A body whose last
+    // statement is an effect (a `println`, a write) gives no value and is left alone, as is the
+    // graph of a value that is not a function.
+    const auto rejectValueDroppedByParameter =
+        [this](FunctionType *signature, const std::vector<Argument> &arguments) -> void {
+        if (signature == nullptr) {
+            return;
+        }
+        for (size_t i = 0; i < arguments.size() && i < signature->withTypesCount(); ++i) {
+            Type *parameter = signature->withTypeAt(i);
+            if (parameter == nullptr || parameter->code() != TypeCode::Function ||
+                arguments[i].node == nullptr) {
+                continue;
+            }
+            if (!isVoidGraphExitType(tt::as_ptr<FunctionType>(parameter)->exitType())) {
+                continue;
+            }
+            if (const compile_graph_ptr_t body = functionValueGraphOf(arguments[i].node)) {
+                rejectDiscardedValue(bodyKeyOf(body.get()));
+            }
+        }
+    };
+
     FunctionType *argumentSignature =
         lambdaCalleeAfterArguments
             ? nullptr
@@ -1196,6 +1224,10 @@ refinedArg                = refineExtentNodeOf(
             currGraph_->addDependencyGraph(targetGraph);
             targetNode     = createFuncDataNode(targetGraph, false, true);
             targetFuncType = targetGraph->funcType();
+            // A generic function that takes a function through its `with` list (the library's
+            // `foreach` over a range) is resolved to its instance here, and the parameter's type
+            // is what says the body given to it drops a value (rejectValueDroppedByParameter).
+            rejectValueDroppedByParameter(targetFuncType, withInputs);
             // The instance is one per `constas` value, and the extents those values fixed are in
             // its type already; the dimensions of the arguments are not (the instance is shared by
             // the calls that differ in them), so they are bound here and the result is refined
@@ -1495,6 +1527,10 @@ refinedArg                = refineExtentNodeOf(
                 currGraph_->addDependencyGraph(targetGraph);
                 targetNode     = createFuncDataNode(targetGraph, false, true);
                 targetFuncType = targetGraph->funcType();
+                // The call of the wrapper a library declares is the call that reaches the
+                // operator taking the element function: the parameter's type is what says the
+                // body's value is dropped (rejectValueDroppedByParameter).
+                rejectValueDroppedByParameter(targetFuncType, withInputs);
             }
         } else if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
             auto ops = std::get<oper_group_ptr_t>(drefTarget);
@@ -2000,25 +2036,15 @@ refinedArg                = refineExtentNodeOf(
                     }
                 }
             }
-            // `foreach` drops what its element function gives: the value of the body of a
-            // function written in place here is a value nothing takes (design principles
-            // 11.3). A function named here may be used elsewhere, where its value counts.
-            // The operator says so itself (CallSpec::discardsCallbackResult).
-            const auto *callSpec =
-                camel::core::OperatorTable::instance().callSpec(targetOperator->uri());
-            if (callSpec != nullptr && callSpec->discardsCallbackResult) {
-                for (const Argument &input : withInputs) {
-                    if (input.expr == nullptr) {
-                        continue;
-                    }
-                    if (auto element = lambdaGraphs_.find(input.expr);
-                        element != lambdaGraphs_.end()) {
-                        rejectDiscardedValue(bodyKeyOf(element->second));
-                    }
-                }
-            }
+            // A parameter that hands back nothing drops the value the body of the function at it
+            // ends with (rejectValueDroppedByParameter; design principles 11.3).
+            rejectValueDroppedByParameter(
+                argumentSignature != nullptr ? argumentSignature : targetFuncType,
+                withInputs);
             // A constant format string is checked against the arguments it formats now, not
             // when the program runs (CallSpec::checkFormat; design principles 5.4).
+            const auto *callSpec =
+                camel::core::OperatorTable::instance().callSpec(targetOperator->uri());
             if (callSpec != nullptr && callSpec->checkFormat) {
                 const bool patternInWith = callSpec->formatWithArg >= 0;
                 const auto &patterns     = patternInWith ? withInputs : normInputs;
