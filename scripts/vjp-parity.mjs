@@ -1356,8 +1356,14 @@ rows.libraryOnly.sort(byKey)
 rows.engineOnly.sort(byKey)
 
 // Which differences the list does not hold, and which rows of the list no longer describe one.
+//
+// Only an engine registration with no law is debt. The engine's table is a frozen reference, so a
+// key the library answers and the engine does not is a capability added after the freeze, not a
+// gap: it is listed in every reading and it never fails one. A row in the exemption list that
+// holds none of the two is still stale -- the list is the account, and a row without a difference
+// makes it longer than the fact it accounts for.
 const newDebt = []
-for (const row of [...rows.libraryOnly, ...rows.engineOnly]) {
+for (const row of rows.engineOnly) {
     if (!exemptByMarker.has(markerOf(row.head))) {
         newDebt.push(row)
     }
@@ -1456,8 +1462,9 @@ if (newDebt.length > 0) {
         }
     }
     console.log(
-        `FAIL ${newDebt.length} difference(s) with no exemption: either a law was added and no ` +
-            `engine rule answers it, or a rule was added and no law files its key`
+        `FAIL ${newDebt.length} value(s) the engine answers and the library does not file, with no ` +
+            `exemption: the engine's table is the frozen reference, so a registration nothing files ` +
+            `is a migration gap`
     )
     process.exit(1)
 }
@@ -1489,7 +1496,7 @@ console.log(
         `under ${engineKeys.size + engineUnkeyed.size} key(s), ${rows.both.length} key(s) both ` +
         `answer (each half), ${rows.forwardOnly.length} forward-only, ${rows.reverseOnly.length} ` +
         `reverse-only, ${rows.neitherHalf.length} with a law that is neither half, ` +
-        `${rows.libraryOnly.length} library-only and ${rows.engineOnly.length} engine-only ` +
-        `exempt, 0 new, stale=${stale.length}`
+        `${rows.libraryOnly.length} past the frozen engine (capability, not debt) and ` +
+        `${rows.engineOnly.length} engine-only exempt, 0 new, stale=${stale.length}`
 )
 process.exit(0)

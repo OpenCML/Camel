@@ -465,6 +465,11 @@ export func trunc::<T>(x: T) => T when is_float::<T>() {
 /// prefix first), and false is below true.
 /// @example min(3, 5)    // 3
 /// @example min('b', 'a')    // 'a'
+///
+/// Its derivative is a choice, the mirror of `max`: `d(min(a, b))` is `da` where `a <= b` and `db`
+/// where it is not, a tie going to the left operand (`stdlib/rulesets/jvp.cml#jvp_min_d`).
+/// `with_grad` refuses it: the derivative engine's table is a frozen reference and this rule lives
+/// in the library -- `vjp` reads it, the engine does not.
 #impl(min_kernel)
 export func min::<T>(a: T, b: T) => T when is_ordered::<T>() {
     return match type T {
@@ -479,6 +484,11 @@ export func min::<T>(a: T, b: T) => T when is_ordered::<T>() {
 /// prefix first), and false is below true.
 /// @example max(3, 5)    // 5
 /// @example max('a', 'b')    // 'b'
+///
+/// Its derivative is a choice: `d(max(a, b))` is `da` where `a >= b` and `db` where it is not, a tie
+/// going to the left operand (`stdlib/rulesets/jvp.cml#jvp_max_d`, the rule the array width's
+/// `extremumVjp` writes). `with_grad` refuses it for the same reason: the engine's table is a
+/// frozen reference.
 #impl(max_kernel)
 export func max::<T>(a: T, b: T) => T when is_ordered::<T>() {
     return match type T {
@@ -499,10 +509,9 @@ export func clamp::<T>(x: T, lo: T, hi: T) => T when is_real::<T>() {
 /// and the smallest integer is its own absolute value (negation wraps, as it does in `-x`).
 ///
 /// On a float this is `max(x, -x)`, so a differentiated `abs` reaches `math:max_d` and not
-/// `math:abs_d`: the rule that would answer it is a choice between two values, and the scalar
-/// graph has no select/where to write one with (no bool-to-float conversion either). So
-/// `math:abs_d` holds no derivative rule, and a gradient that reaches it is refused by name
-/// instead of being answered with a number the array width's `absVjp` would not agree with.
+/// `math:abs_d`: the law that answers it is the one `max` carries, and it differentiates through
+/// `vjp`. `with_grad` still refuses it, because the derivative engine's table is a frozen
+/// reference and this rule lives in the library (`stdlib/rulesets/jvp.cml`).
 /// @example abs(-3)    // 3
 #impl(abs_kernel)
 export func abs::<T>(x: T) => T when is_real::<T>() {

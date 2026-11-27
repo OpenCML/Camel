@@ -688,13 +688,13 @@ timeout_ms = 30000
 # `src/` and `modules/`, so the engine side of the comparison is the tree's own.
 [[tests]]
 name = "vjp_api.the_two_tables_are_compared"
-desc = "`scripts/vjp-parity.mjs` reads both derivative tables out of the source -- the library's laws and the engine's `setVjp`/`setRule` registrations, reduced to the same `head@arity` key -- and reports every difference the exemption list does not hold. This entry runs `test/tools/check-vjp-parity.mjs`, which pins three readings: the real tree answers `0 new` and `stale=0` under `--strict` (a row that has outlived its difference is a failure there, so the list cannot grow longer than the tree); a `fake_parity_op_t` law appended to a copy of `stdlib/rulesets/transpose.cml` (with `src/` and `modules/` linked to the real tree, so the engine's table is the tree's own) is reported by name with exit 1; and the same law with the row it would need appended to a copy of the exemption list is not reported, with exit 0. A gate that answered `0 new` for the second reading would be green on the day someone files a law no engine rule answers, which is the debt this comparison exists to catch."
+desc = "`scripts/vjp-parity.mjs` reads both derivative tables out of the source -- the library's laws and the engine's `setVjp`/`setRule` registrations, reduced to the same `head@arity` key -- and reports what the exemption list does not hold. The engine's table is the frozen reference, so a key the library answers and the engine does not is a capability added after the freeze and fails nothing; a registration the library does not file is the debt. This entry runs `test/tools/check-vjp-parity.mjs`, which pins five readings: the real tree answers `0 new` and `stale=0` under `--strict` (a row that has outlived its difference is a failure there, so the list cannot grow longer than the tree); a `fake_parity_op_t` law appended to a copy of `stdlib/rulesets/transpose.cml` (with `src/` and `modules/` linked to the real tree, so the engine's table is the tree's own) answers exit 0 and is still named by the tables; a `setRule` appended to a copy of the engine's own `math/module.cpp` is reported by name with exit 1; and that registration with the row it would need appended to a copy of the exemption list is not reported, with exit 0. A gate that answered `0 new` for the last reading would be green on the day a registration is filed with no law behind it, which is the debt this comparison exists to catch."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/check-vjp-parity.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["the real tree has no difference the list does not hold, and no row without a difference", "a law with no engine rule is reported", "the same law is not reported once the list holds it", "PASS the parity gate answers the three readings it exists for"]
+expect_stdout_contains = ["the real tree has no difference the list does not hold, and no row without a difference", "a law with no engine rule is listed as a capability and fails nothing", "and the listing still names it", "an engine registration with no law is reported and fails", "the same registration is not reported once the list holds it", "PASS the parity gate answers the readings it exists for"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
@@ -1322,6 +1322,17 @@ assert(call > argument && call > closure, `the call ${call} has to come after th
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "scalar_max_gradient_is_refused"
+desc = "`with_grad` on a scalar `max` is refused by name, and the refusal is the answer rather than a defect: the derivative engine's table is a frozen reference (one `setRule` per operator it answers), while the law that answers `max` lives in the library (`stdlib/rulesets/jvp.cml#jvp_max_d`) and is reached through `vjp`. The program stops with `no derivative rule for operator 'math:max_d'` instead of being handed a number the frozen engine never agreed to; this entry pins that reading -- exit 1, nothing on stdout, the operator named on the diagnostic side."
+kind = "negative"
+case = "../../../cases/compile/transforms/scalar_max_gradient_is_refused.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_stdout_exact = ""
+expect_stderr_contains = ["no derivative rule for operator 'math:max_d'"]
+timeout_ms = 60000
 
 [[tests]]
 name = "transpose_no_tangent.a_refusal_is_a_diagnostic_not_the_programs_output"

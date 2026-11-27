@@ -1,0 +1,14 @@
+import rulesets.jvp
+import { with_grad } from autodiff
+import { max } from math
+
+with <w: float>
+func loss(x: float) => float {
+    return max(w, x)
+}
+
+func main() => int sync {
+    let (value, tangent) = with_grad(loss)<0.7>(0.2)
+    `value={:.12f} tangent={:.12f}`->format<value, tangent>->println
+    return 0
+}
