@@ -577,6 +577,44 @@ int runSelfCheck() {
     store.invalidate(nodeTag, asSpan(node2));
     check(store.size() > 0, "dropping one fact leaves the others");
 
+    // ---- A fact outlives the version of the graph it was read from ---------------------------
+    // The owner answers one identity and two revisions: the same graph, re-encoded around a node
+    // nobody touched. A fact of a kind that reports what it read holds across that version -- the
+    // store revalidates it instead of dropping it, because the node it read is unchanged
+    // (architecture, core abstractions 1: a node's number is stable on one version line).
+    const facts::KindId reportedKind = facts::registerKind<std::uint32_t>(facts::Kind<std::uint32_t>{
+        .key        = "check.reported",
+        .owner      = "check",
+        .scope      = facts::Scope::Node,
+        .dependence = facts::Dependence::Reported,
+        .compute =
+            [](std::span<const facts::Anchor> anchors, const facts::GraphAccess &, facts::ReadLog &log) {
+                log.node(anchors[0].node);
+                return std::optional<std::uint32_t>(anchors[0].node + 100);
+            },
+        .print = [](std::uint32_t value) { return std::to_string(value); },
+    });
+    ThreeNodeView firstView;
+    ThreeNodeView laterView;
+    CheckGraph    firstVersion(firstView, /*identity=*/1);
+    CheckGraph    laterVersion(laterView, /*identity=*/1);
+    bumpVersion(laterVersion);
+    // The owner versions nodes too, and this node's version did not move: that is the number the
+    // reported rule is checked against once the graph's revision has.
+    facts::GraphAccess versionedAccess = access;
+    versionedAccess.nodeVersion        = [](const g::Graph &, facts::NodeId) {
+        return std::uint64_t{7};
+    };
+    facts::Store versionedStore(versionedAccess);
+    const facts::Anchor takenAt{&firstVersion, 1};
+    check(
+        versionedStore.obtain<std::uint32_t>(reportedKind, takenAt) != nullptr,
+        "a reported-read fact is computed and kept on the version it was read from");
+    const facts::Anchor askedAt{&laterVersion, 1};
+    check(
+        versionedStore.probe(reportedKind, asSpan(askedAt)) == facts::Status::Revalidated,
+        "a fact about a node nobody touched is revalidated across a version of its graph");
+
     if (failures == 0) {
         std::cout << "facts self-check: passed\n";
         return 0;

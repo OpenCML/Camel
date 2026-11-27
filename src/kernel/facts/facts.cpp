@@ -124,13 +124,29 @@ std::vector<const graph::Graph *> graphsOf(std::span<const Anchor> anchors) {
     return graphs;
 }
 
-/// Whether two anchor lists name the same things, in the same order.
-bool sameAnchors(std::span<const Anchor> left, std::span<const Anchor> right) {
+/// The identity the store keys `graph` on, from the owner (`GraphAccess::identity`). 0 when the
+/// access states none: a store cannot invent an identity -- a pointer or a counter of its own would
+/// change when the graph is re-encoded, which is the defect the identity exists to remove -- so a
+/// graph it cannot name is a graph it cannot key, and the read says so (facts.h, `GraphAccess`).
+std::uint64_t identityOf(const GraphAccess &graphs, const graph::Graph &graph) {
+    return graphs.identity ? graphs.identity(graph) : 0;
+}
+
+/// Whether two anchor lists name the same things, in the same order: the same graph -- by its
+/// identity on its version line, not by the object that holds it -- at the same node. Two versions
+/// of one graph name the same anchor, which is what lets a fact taken on one version be found again
+/// and revalidated against another.
+bool sameAnchors(
+    std::span<const Anchor> left, std::span<const Anchor> right, const GraphAccess &graphs) {
     if (left.size() != right.size()) {
         return false;
     }
     for (size_t i = 0; i < left.size(); ++i) {
-        if (left[i].graph != right[i].graph || left[i].node != right[i].node) {
+        const std::uint64_t leftIdentity =
+            left[i].graph == nullptr ? 0 : identityOf(graphs, *left[i].graph);
+        const std::uint64_t rightIdentity =
+            right[i].graph == nullptr ? 0 : identityOf(graphs, *right[i].graph);
+        if (leftIdentity != rightIdentity || left[i].node != right[i].node) {
             return false;
         }
     }
@@ -197,14 +213,6 @@ anchorsOf(const KindInfo &kind, const graph::Graph &graph, const graph::GraphVie
         all.push_back({Anchor{&graph, kWholeGraph}});
     }
     return all;
-}
-
-/// The identity the store keys `graph` on, from the owner (`GraphAccess::identity`). 0 when the
-/// access states none: a store cannot invent an identity -- a pointer or a counter of its own would
-/// change when the graph is re-encoded, which is the defect the identity exists to remove -- so a
-/// graph it cannot name is a graph it cannot key, and the read says so (facts.h, `GraphAccess`).
-std::uint64_t identityOf(const GraphAccess &graphs, const graph::Graph &graph) {
-    return graphs.identity ? graphs.identity(graph) : 0;
 }
 
 /// The identity and revision of each anchored graph, one per distinct graph, in anchor order. The
@@ -651,7 +659,7 @@ Store::find(KindId kind, std::span<const Anchor> anchors, std::uint64_t target, 
     }
     auto &list = bucket->second;
     auto it    = std::find_if(list.begin(), list.end(), [&](const Entry &entry) {
-        return sameAnchors(entry.anchors, anchors);
+        return sameAnchors(entry.anchors, anchors, graphs_);
     });
     if (it == list.end()) {
         return nullptr;
@@ -741,7 +749,7 @@ void Store::putValue(
     std::lock_guard lock(mutex_);
     auto &list = entries_[Key{kind, identity, anchors[0].node}];
     auto it    = std::find_if(list.begin(), list.end(), [&](const Entry &known) {
-        return sameAnchors(known.anchors, anchors);
+        return sameAnchors(known.anchors, anchors, graphs_);
     });
     if (it == list.end()) {
         list.push_back(std::move(entry));
@@ -829,7 +837,7 @@ Store::obtainValue(KindId kind, std::span<const Anchor> anchors, std::uint64_t t
     std::lock_guard lock(mutex_);
     auto &list = entries_[Key{kind, identity, anchors[0].node}];
     auto it    = std::find_if(list.begin(), list.end(), [&](const Entry &known) {
-        return sameAnchors(known.anchors, anchors);
+        return sameAnchors(known.anchors, anchors, graphs_);
     });
     if (it == list.end()) {
         list.push_back(std::move(entry));
@@ -896,7 +904,7 @@ void Store::invalidate(KindId kind, std::span<const Anchor> anchors) {
     }
     auto &list = bucket->second;
     for (auto it = list.begin(); it != list.end();) {
-        if (sameAnchors(it->anchors, anchors)) {
+        if (sameAnchors(it->anchors, anchors, graphs_)) {
             clearSlot(graphs_, kind, it->anchors);
             it = list.erase(it);
         } else {
