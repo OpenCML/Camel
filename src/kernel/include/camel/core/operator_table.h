@@ -10,7 +10,11 @@
  *
  *   uri            ":op/add_l", "tensor:matmul"
  *   traits         what the operator's module declared about it (OperatorTraits)
- *   resolver       its type rule, re-run by passes that change what is known about arguments
+ *   type rule      **not** a field of this table: a type rule belongs to the context whose
+ *                  declarations wrote it (`Context::registerResolver`, `Context::resolverOf`), and
+ *                  two contexts can hold two rules for one operator. The entry keeps only the
+ *                  check (`checkResolver`): whether the rule a declaration registered is the one
+ *                  this operator's entry was told about.
  *   type folder    the value its result has whenever the argument types fix it
  *   semantics      the versioned record of what it computes (camel/core/operator_semantics.h):
  *                  its stable key "protocol:name@major.minor", its numeric semantics and
@@ -540,6 +544,18 @@ class OperatorTable {
     /// Whether the operator `uri` was declared to reuse an operand.
     bool reusesOperand(std::string_view uri) const;
 
+    /// Declares that the operator `uri` is a pass that reads tag facts (a node attribute, a numeric
+    /// permission, a tag's `read_by`): one fact, stated where the operator is registered. The tag
+    /// registry answers "is this written name a reader" from here (`camel/core/tags.h`, `isReader`),
+    /// so no list beside the table names the same passes a second time.
+    void declareReadsTags(std::string_view uri, bool reads = true);
+
+    /// Whether the operator `uri` was declared to read tag facts.
+    bool readsTags(std::string_view uri) const;
+
+    /// The operators declared to read tag facts, in the order their ids were seated.
+    std::vector<std::string_view> tagReadingOperators() const;
+
     // ---- What the result is, when it is not a value of the operator's own ---------------------
     //
     // The operator's result is a value one of its operands already holds instead of a value the
@@ -907,6 +923,9 @@ class OperatorTable {
         /// The operator may return its operand (declareReusesOperand): an elementwise operator
         /// that writes into an operand it owns, rather than allocating a result.
         bool reusesOperand = false;
+        /// The operator is a pass that reads tag facts (declareReadsTags): the tag registry's
+        /// `isReader` answers from here, and no separate list of readers is kept beside it.
+        bool readsTags = false;
         /// The operator answers a value an operand already holds (declareHandsOnOperandValue):
         /// the element read hands on the slot the array holds. `handsOnOnlyOutsideArrays` says
         /// that holds only when the result is not an array -- a row of a higher-rank value is a
