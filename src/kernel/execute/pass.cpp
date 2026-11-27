@@ -322,12 +322,34 @@ void registerModulePass(const std::string &path, PassDescriptor descriptor) {
     // below holds one entry per operator, not one per spelling.
     const camel::core::OperId id = camel::core::OperatorTable::instance().intern(path);
     auto &registry               = passImplementations();
+    bool alreadyRegistered       = false;
     {
         std::lock_guard lock(registry.mutex);
         if (static_cast<size_t>(id) >= registry.kernels.size()) {
             registry.kernels.resize(static_cast<size_t>(id) + 1);
         }
-        registry.kernels[id] = std::move(descriptor);
+        // One operator, one kernel: the first registration is the pass's fact, and a second one is
+        // not a second fact. A pass may register from a module's load path (`registerExtractPass`
+        // in `src/stdlib/rewrite/module.cpp`), which runs once per module instance, so a module
+        // that loads twice re-states the kernel it already contributed; that is ignored rather
+        // than fatal, because aborting here would put a mine in the loader for a case that is
+        // only the same fact said twice.
+        alreadyRegistered = registry.kernels[id].has_value();
+        if (!alreadyRegistered) {
+            registry.kernels[id] = std::move(descriptor);
+        }
+    }
+    if (alreadyRegistered) {
+        // A debug reading of the ignored registration, so a kernel that really is contended is
+        // visible while the question is being asked. Release says nothing: the kernel that stands
+        // is the same one either way.
+#ifndef NDEBUG
+        std::fprintf(
+            stderr,
+            "camel: pass kernel registered twice: %s (the first registration stands)\n",
+            path.c_str());
+#endif
+        return;
     }
     if (readsTags) {
         // The pass is a reader of tag facts, and it says so where the operator is registered: one
@@ -358,6 +380,14 @@ namespace {
 /// The pass a written name resolves to: the core's table, whose one entry `std::opt` is the default
 /// pipeline's name -- a choice rather than a spelling of another pass -- so no sub-pass of the
 /// optimizer is reachable under an old name.
+///
+/// **An alias is one kernel fallback, not a name rewrite.** The declaration stays the written
+/// name's: `findDescriptor` tries the name as written first and reaches this table only when that
+/// name has no kernel of its own, so `std::prl` answers with its own declaration (its parameters
+/// and applicability are its own) and the alias supplies only the kernel. Folding this table into
+/// `resolvePassOperator` -- resolving first, declaration second -- was measured: 388 of 2841 fast
+/// tests went red, every `.prl` and `.jit` variant among them, because those spellings then stopped
+/// at their own inapplicable declaration instead of falling through.
 std::string resolveAlias(const std::string &name) {
     if (auto it = passAliases.find(name); it != passAliases.end()) {
         return it->second;
