@@ -110,15 +110,7 @@ cast	engine-autodiff	the conversion the front end introduces (`:op/cast`); the d
 
 zeros_like	engine-autodiff	locally constant in its operand: the zero array is the same for every value
 ones_like	engine-autodiff	locally constant in its operand: the ones array is the same for every value
-numel	engine-autodiff	answers an integer: a discrete value's derivative is zero by definition
-shape	engine-autodiff	answers an integer list: a discrete value's derivative is zero by definition
 one_hot	engine-autodiff	its input is a label: locally constant, the rows do not move with it
-strict_eq	engine-autodiff	a comparison: a boolean has no tangent space to carry
-strict_neq	engine-autodiff	a comparison: a boolean has no tangent space to carry
-ge	engine-autodiff	a comparison: a boolean has no tangent space to carry
-gt	engine-autodiff	a comparison: a boolean has no tangent space to carry
-le	engine-autodiff	a comparison: a boolean has no tangent space to carry
-lt	engine-autodiff	a comparison: a boolean has no tangent space to carry
 i32	engine-autodiff	the conversion's destination is `i32`, a discrete type with no tangent space
 int	engine-autodiff	the conversion's destination is `int`, a discrete type with no tangent space
 

@@ -36,6 +36,8 @@
 /// part computable now" and "the part computable later" is the cut between those two components --
 /// not a position among the parameters.
 /// @example is_same::<Tangent<float>, float>()    // true
+import { is_same } from types
+
 export type Tangent<T>
 
 

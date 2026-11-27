@@ -1305,6 +1305,7 @@ const rows = {
     neitherHalf: [],
     libraryOnly: [],
     engineOnly: [],
+    coveredByRule: [],
 }
 for (const [key, entry] of libraryKeys) {
     if (engineKeys.has(key)) {
@@ -1355,6 +1356,188 @@ for (const bucket of [rows.both, rows.forwardOnly, rows.reverseOnly, rows.neithe
 rows.libraryOnly.sort(byKey)
 rows.engineOnly.sort(byKey)
 
+// ---- an answer with no tangent space needs no law ----------------------------------------------
+//
+// The forward transform copies a node and asks whether the copy's type has a tangent space before it
+// looks a rule up (`src/compile/.../jvp.cpp`, the copy-then-look-up order), and
+// `tangentspace.cpp#tangentSpaceOf` answers "no space" exactly where
+// `DerivativeRegistry::isDiscrete` says so -- `derivative.cpp#isDiscrete` spells that as Int32,
+// Int64 and Bool. An operator answering one of those types is differentiated by that one general
+// step: there is no tangent to carry, and a law for it would have nothing to say. A key whose every
+// registration answers such a type is therefore **covered by the rule**, not debt.
+//
+// `DISCRETE` is that type list and nothing else. Which operator answers which type is read from the
+// tree: `OpDef.resultDoc` for a module's operators, the closing argument of the core's
+// `StaticFuncTypeResolver::create(...)` for a `:op/` one, and the `#op(...)` declaration line for a
+// library operator. A key whose type cannot be read stays in `engineOnly` and says why, because
+// "unread" is not "covered".
+const DISCRETE = new Set(['Int32', 'Int64', 'Bool', 'i32', 'int', 'i64', 'bool'])
+const discreteOf = (declared) => {
+    if (typeof declared !== 'string') {
+        return null
+    }
+    const token = declared.trim().match(/[A-Za-z_][A-Za-z0-9_]*/)
+    return token !== null && DISCRETE.has(token[0]) ? token[0] : null
+}
+const resultTypes = new Map() // operator URI -> the type its declaration states
+{
+    const note = (uri, declared) => {
+        if (uri !== undefined && declared !== undefined && declared !== '' && !resultTypes.has(uri)) {
+            resultTypes.set(uri, declared)
+        }
+    }
+    const published = moduleProtocols()
+    for (const file of cppFiles(ROOT)) {
+        const text = fs.readFileSync(file, 'utf8')
+        const relative = path.relative(ROOT, file).split(path.sep).join('/')
+        // The protocol a file's operators are published under: its own call, else the one its
+        // module publishes (`src/stdlib/<name>`), which is where a file that only returns a list
+        // learns its namespace.
+        let protocol = published.byFile.get(relative)
+        if (protocol === undefined) {
+            const module = relative.split('/').slice(0, 3).join('/')
+            const publishedByModule = published.byModule.get(module)
+            if (publishedByModule !== undefined && publishedByModule.size === 1) {
+                protocol = [...publishedByModule][0]
+            }
+        }
+        if (protocol !== undefined) {
+            for (const block of text.matchAll(/OpDef\{([\s\S]*?)\}\s*\)/g)) {
+                const body = block[1]
+                const declared = body.match(/\.resultDoc\s*=\s*"([^"]*)"/)
+                if (declared === null) {
+                    continue
+                }
+                const name = body.match(/\.name\s*=\s*"([^"]+)"/)
+                const exported = [...body.matchAll(/\.exports\s*=\s*\{([^}]*)\}/g)]
+                const names =
+                    name !== null
+                        ? [name[1]]
+                        : exported.flatMap((list) => [...list[1].matchAll(/"([^"]+)"/g)].map((one) => one[1]))
+                for (const one of names) {
+                    note(`${protocol}:${one}`, declared[1])
+                }
+            }
+        }
+        // The core's operators are declared as a URI beside a type resolver whose last argument is
+        // the answer: `{":op/ge_d", StaticFuncTypeResolver::create(<params>, Type::Bool())}`.
+        for (const resolver of text.matchAll(
+            /"(:op\/[A-Za-z0-9_]+)"\s*,\s*StaticFuncTypeResolver::create\(([\s\S]*?)\)\s*,\s*\n?\s*\}/g
+        )) {
+            const types = [...resolver[2].matchAll(/Type::([A-Za-z0-9_]+)\(\)/g)].map((one) => one[1])
+            if (types.length > 0) {
+                note(resolver[1], types[types.length - 1])
+            }
+        }
+    }
+    // A macro that publishes one URI per type width (`CAMEL_HALF_COMPARE` writes the f16 and bf16
+    // rows for one stem) states the answer once, in the macro: the rows it expands to answer the
+    // type the body names, and the invocation names the stem.
+    for (const file of cppFiles(ROOT)) {
+        const text = fs.readFileSync(file, 'utf8').replace(/\\\r?\n/g, ' ')
+        const macros = new Map() // name -> { suffixes, declared }
+        for (const definition of text.matchAll(/#define\s+([A-Za-z_][A-Za-z0-9_]*)\(([A-Za-z_][A-Za-z0-9_]*)\)([\s\S]*?)(?=\n(?!#)|$)/g)) {
+            const body = definition[3]
+            const stem = definition[2]
+            const suffixes = [...body.matchAll(new RegExp(`":op/"\\s*${stem}\\s*"(_[a-z0-9]+)"`, 'g'))].map(
+                (one) => one[1]
+            )
+            const types = [...body.matchAll(/Type::([A-Za-z0-9_]+)\(\)/g)].map((one) => one[1])
+            if (suffixes.length > 0 && types.length > 0) {
+                macros.set(definition[1], { suffixes, declared: types[types.length - 1] })
+            }
+        }
+        for (const [name, macro] of macros) {
+            for (const call of text.matchAll(new RegExp(`\\b${name}\\("([A-Za-z0-9_]+)"\\)`, 'g'))) {
+                for (const suffix of macro.suffixes) {
+                    note(`:op/${call[1]}${suffix}`, macro.declared)
+                }
+            }
+        }
+    }
+    // A helper that builds an `OpDef` (`compareDef<...>("ge", ...)`) states the answer once in its
+    // own body and takes the name as an argument, so the rows it builds are read from the helper and
+    // the calls name them.
+    for (const file of cppFiles(ROOT)) {
+        const text = fs.readFileSync(file, 'utf8')
+        const helpers = new Map() // helper name -> the type its body declares
+        for (const definition of text.matchAll(
+            /^[A-Za-z_][A-Za-z0-9_:<>, \t\*&]*\s([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*\{([\s\S]*?)\n\}/gm
+        )) {
+            const declared = definition[3].match(/\.resultDoc\s*=\s*"([^"]*)"/)
+            if (declared !== null) {
+                helpers.set(definition[1], declared[1])
+            }
+        }
+        if (helpers.size === 0) {
+            continue
+        }
+        const relative = path.relative(ROOT, file).split(path.sep).join('/')
+        let protocol = published.byFile.get(relative)
+        if (protocol === undefined) {
+            const publishedByModule = published.byModule.get(relative.split('/').slice(0, 3).join('/'))
+            if (publishedByModule !== undefined && publishedByModule.size === 1) {
+                protocol = [...publishedByModule][0]
+            }
+        }
+        if (protocol === undefined) {
+            continue
+        }
+        for (const [helper, declared] of helpers) {
+            for (const call of text.matchAll(
+                new RegExp(`\\b${helper}\\s*(?:<[^>]*>)?\\s*\\(\\s*"([A-Za-z0-9_]+)"`, 'g')
+            )) {
+                note(`${protocol}:${call[1]}`, declared)
+            }
+        }
+    }
+    // A library operator states its answer on the declaration the annotation introduces.
+    for (const file of fs.readdirSync(path.join(ROOT, 'src', 'stdlib'), { recursive: true })) {
+        const full = path.join(ROOT, 'src', 'stdlib', file.toString())
+        if (!/\.cml$/.test(full)) {
+            continue
+        }
+        const lines = fs.readFileSync(full, 'utf8').split('\n')
+        for (let at = 0; at < lines.length; at += 1) {
+            const annotation = lines[at].match(/#op\(\s*'([^']+)'\s*\)/)
+            if (annotation === null) {
+                continue
+            }
+            for (let ahead = at; ahead < Math.min(at + 5, lines.length); ahead += 1) {
+                const declaration = lines[ahead].match(/export func[^(]*\([^)]*\)\s*=>\s*([^!{\n]+)/)
+                if (declaration !== null) {
+                    note(annotation[1], declaration[1].trim())
+                    break
+                }
+            }
+        }
+    }
+}
+// Which keys the general step covers, and for the rest, the registrations whose type could not be
+// read -- printed, because an unread key must not look like a covered one.
+const unreadTypes = []
+{
+    const stays = []
+    for (const row of rows.engineOnly) {
+        const declared = row.registrations.map((registration) => resultTypes.get(registration.uri))
+        const missing = row.registrations.filter((registration) => !resultTypes.has(registration.uri))
+        if (missing.length > 0) {
+            row.unread = missing.map((registration) => registration.uri)
+            unreadTypes.push(row)
+            stays.push(row)
+            continue
+        }
+        if (declared.every((one) => discreteOf(one) !== null)) {
+            rows.coveredByRule.push({ ...row, results: declared })
+            continue
+        }
+        row.results = declared
+        stays.push(row)
+    }
+    rows.engineOnly = stays.sort(byKey)
+    rows.coveredByRule.sort(byKey)
+}
+
 // Which differences the list does not hold, and which rows of the list no longer describe one.
 //
 // Only an engine registration with no law is debt. The engine's table is a frozen reference, so a
@@ -1383,6 +1566,7 @@ if (JSON_MODE) {
                 neitherHalf: rows.neitherHalf.map((row) => ({ key: row.key })),
                 libraryOnly: rows.libraryOnly,
                 engineOnly: rows.engineOnly,
+                coveredByRule: rows.coveredByRule.map((row) => ({ key: row.key, results: row.results })),
                 newDebt: newDebt.map((row) => row.key),
                 stale: stale.map((row) => row.marker),
                 staleCount: stale.length,
@@ -1422,6 +1606,15 @@ if (TABLES) {
         }
         console.log('')
     }
+    // A key here needs no law: the general step that drops a value with no tangent space covers it.
+    console.log(`covered by the rule that drops a value with no tangent space: ${rows.coveredByRule.length}`)
+    for (const row of rows.coveredByRule) {
+        console.log(`  ${row.key}  answers ${row.results.join(' / ')}`);
+        for (const registration of row.registrations) {
+            console.log(`      ${registration.uri}: ${at(registration)}`);
+        }
+    }
+    console.log('')
     console.log(`the library answers and the engine does not: ${rows.libraryOnly.length}`)
     for (const row of rows.libraryOnly) {
         const exempt = exemptByMarker.get(row.head)
@@ -1497,6 +1690,7 @@ console.log(
         `answer (each half), ${rows.forwardOnly.length} forward-only, ${rows.reverseOnly.length} ` +
         `reverse-only, ${rows.neitherHalf.length} with a law that is neither half, ` +
         `${rows.libraryOnly.length} past the frozen engine (capability, not debt) and ` +
-        `${rows.engineOnly.length} engine-only exempt, 0 new, stale=${stale.length}`
+        `${rows.engineOnly.length} engine-only exempt, ${rows.coveredByRule.length} covered by the ` +
+        `no-tangent step, 0 new, stale=${stale.length}`
 )
 process.exit(0)
