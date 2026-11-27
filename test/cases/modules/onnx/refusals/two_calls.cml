@@ -3,18 +3,18 @@
  * onnx::export_model, at the second call (line 14).
  */
 
-import { model, save } from onnx
+import { export_model } from onnx
 import { reshape } from tensor
 
 func main() => int sync {
     let x = reshape<[2]>([1.0, 2.0])
-    let a = model(func (t: float[...]) => float[...] {
+    let a = export_model<out: 'tmp/test/onnx/refusal_a.onnx'>(func (t: float[...]) => float[...] {
         t * 2.0
-    }, x)->save<out: 'tmp/test/onnx/refusal_a.onnx'>
+    }, x)
     println(1)
-    let b = model(func (t: float[...]) => float[...] {
+    let b = export_model<out: 'tmp/test/onnx/refusal_b.onnx'>(func (t: float[...]) => float[...] {
         t * 3.0
-    }, x)->save<out: 'tmp/test/onnx/refusal_b.onnx'>
+    }, x)
     match a {
         case error e => sync {
             println(e)

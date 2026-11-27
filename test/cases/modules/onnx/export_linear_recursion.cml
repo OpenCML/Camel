@@ -5,7 +5,7 @@
  * the result in reverse order. None of them comes from autodiff.
  */
 import { get_env } from env
-import { model, save } from onnx
+import { export_model } from onnx
 import { reshape, sum, tanh } from tensor
 
 // The result of the call is added to.
@@ -33,12 +33,12 @@ func fold2(v: f32[...], w: f32[...]) => f32[...] {
 func main() => string! sync {
     let w = reshape<[2, 2]>([0.5, -0.25, 0.1, 0.3] as f32[])
     let x = reshape<[2, 2]>([1.0, 2.0, 0.5, -1.0] as f32[])
-    return match model(
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(
         func (x: f32[...], w: f32[...]) => (f32[...], f32[...], f32[...]) {
             (pile(x), fold(0, int(float(sum(x * x)) * 0.5), x, w), fold2(x, w))
         },
         (x, w)
-    )->save<out: get_env('ONNX_OUT') ?? ''> {
+    ) {
         case error e => {
             return e
         }

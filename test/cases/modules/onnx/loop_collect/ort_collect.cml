@@ -7,7 +7,7 @@
  * input -- shape and values. The model is exported when ONNX_OUT is set.
  */
 import { get_env } from env
-import { model, save } from onnx
+import { export_model } from onnx
 import { load_npy, save_npy } from tensor
 
 func build(x: f32[?]) => int[] {
@@ -20,9 +20,9 @@ func main() => string! sync {
     save_npy(xs, 'y.npy')
     let out = get_env('ONNX_OUT') ?? ''
     return if out == '' then '0'
-    else match model<dynamic_axes: [0]>(func (x: f32[?]) => int[] {
+    else match export_model<out: out, dynamic_axes: [0]>(func (x: f32[?]) => int[] {
         build(x)
-    }, (x))->save<out: out> {
+    }, (x)) {
         case error e => {
             return e
         }

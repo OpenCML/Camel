@@ -6,7 +6,7 @@
  * The model leaves that dimension for the run to decide.
  */
 import { get_env } from env
-import { model, save } from onnx
+import { export_model } from onnx
 import { sum } from tensor
 
 func build(x: f32[4]) => (int[], int) {
@@ -18,9 +18,9 @@ func main() => string! sync {
     let (xs, k) = build(x)
     println(len(xs))
     println(k)
-    return match model(func (x: f32[4]) => (int[], int) {
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[4]) => (int[], int) {
         build(x)
-    }, (x))->save<out: get_env('ONNX_OUT') ?? ''> {
+    }, (x)) {
         case error e => {
             return e
         }

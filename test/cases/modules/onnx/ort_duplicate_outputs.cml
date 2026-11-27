@@ -13,7 +13,7 @@
  * with as many outputs as the function returns, and return the values the function computes.
  */
 
-import { model, save } from onnx
+import { export_model } from onnx
 import { reshape, sum, tanh } from tensor
 
 type Run = { state: f32[...], steps: int }
@@ -65,17 +65,17 @@ func report(r1: void!, r2: void!, r3: void!, r4: void!) => string! {
 
 func main() => string! sync {
     let ex = reshape<[2, 2]>([1.0, -2.0, 0.5, 1.5] as f32[])
-    let r1 = model(func (x: f32[...]) => (f32[...], f32[...]) {
+    let r1 = export_model<out: 'twice.onnx'>(func (x: f32[...]) => (f32[...], f32[...]) {
         twice(x)
-    }, ex)->save<out: 'twice.onnx'>
-    let r2 = model(func (x: f32[...]) => (Run, Run) {
+    }, ex)
+    let r2 = export_model<out: 'repeated.onnx'>(func (x: f32[...]) => (Run, Run) {
         repeated(x, 2)
-    }, ex)->save<out: 'repeated.onnx'>
-    let r3 = model(func (x: f32[...]) => (float, float) {
+    }, ex)
+    let r3 = export_model<out: 'constants.onnx'>(func (x: f32[...]) => (float, float) {
         constants(x)
-    }, ex)->save<out: 'constants.onnx'>
-    let r4 = model(func (x: f32[...]) => (float, float) {
+    }, ex)
+    let r4 = export_model<out: 'computed.onnx'>(func (x: f32[...]) => (float, float) {
         computed(x)
-    }, ex)->save<out: 'computed.onnx'>
+    }, ex)
     return report(r1, r2, r3, r4)
 }

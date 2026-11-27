@@ -9,15 +9,15 @@
  */
 
 import { get_env } from env
-import { model, save } from onnx
+import { export_model } from onnx
 import { next_key, normal } from random
 import { reshape } from tensor
 
 func main() => int sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
-    return match model(func (t: float[...]) => float[...] {
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (t: float[...]) => float[...] {
         t + next_key()->normal::<f32><shape: [2, 2]>
-    }, x)->save<out: get_env('ONNX_OUT') ?? ''> {
+    }, x) {
         case error e => sync {
             println(e)
             return 1

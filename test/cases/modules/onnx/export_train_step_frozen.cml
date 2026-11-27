@@ -10,7 +10,7 @@ import { with_grad } from autodiff
 import { stop_gradient } from laws
 import { get_env } from env
 import { sgd } from nn
-import { model, save } from onnx
+import { export_model } from onnx
 import { relu, mean, reshape } from tensor
 
 type Mlp = { w1: float[...], b1: float[...], w2: float[...], b2: float[...] }
@@ -35,7 +35,7 @@ func main() => string! sync {
         b2: reshape<[1]>([0.2])
     }
     let x = reshape<[2, 2]>([1.0, 2.0, -1.0, 0.5])
-    return match model(step, (m, x))->save<out: get_env('ONNX_OUT') ?? ''> {
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x)) {
         case error e => {
             return e
         }
