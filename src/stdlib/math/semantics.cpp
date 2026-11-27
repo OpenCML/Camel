@@ -287,13 +287,13 @@ void declareElementaryFunctions() {
     declare(
         "math:abs_i",
         exactInteger(
-            "|x|: the sign cleared; the smallest integer has no positive counterpart, so its "
-            "absolute value is not defined (docs/stdlib-reference.md)"));
+            "|x|: the sign cleared; the smallest integer is its own absolute value, because the "
+            "negation wraps, as it does in `-x`"));
     declare(
         "math:abs_l",
         exactInteger(
-            "|x|: the sign cleared; the smallest integer has no positive counterpart, so its "
-            "absolute value is not defined (docs/stdlib-reference.md)"));
+            "|x|: the sign cleared; the smallest integer is its own absolute value, because the "
+            "negation wraps, as it does in `-x`"));
     declare("math:min_i", exactInteger("the smaller of two integers (equal values are the same)"));
     declare("math:min_l", exactInteger("the smaller of two integers (equal values are the same)"));
     declare("math:max_i", exactInteger("the larger of two integers (equal values are the same)"));
