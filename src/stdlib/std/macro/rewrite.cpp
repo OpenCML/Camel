@@ -77,6 +77,10 @@ bool applyMacroRewrite(
 
     auto &transaction               = session.edit(candidate.runtimeGraph);
     auto &draft                     = transaction.edit();
+    // The rewrite is one `replace` of that graph (8.1): the value it materializes and the bridge it
+    // may put beside it are recorded once, with the regions they touched, and the low-level writes
+    // under this boundary fold into it instead of each recording on its own.
+    camel::runtime::GraphDraft::NamedEdit edit(draft, camel::runtime::EditKind::Replace);
     const gc_node_ref_t draftNodeId = draft.draftIdOfSourceRef(candidate.nodeRef);
     if (draftNodeId == camel::runtime::kInvalidNodeRef || !draft.alive(draftNodeId)) {
         return false;

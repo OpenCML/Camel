@@ -986,6 +986,11 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                 nextGraph->name());
             auto &transaction = session.edit(nextGraph);
             auto &draft       = transaction.edit();
+            // The rewrites of this graph are one `inline` edit of it (8.1): the gates and the
+            // operands it rewires fold into that record instead of each noting itself.
+            camel::runtime::GraphDraft::NamedEdit inlineEdit(
+                draft,
+                camel::runtime::EditKind::Inline);
             std::vector<gc_node_ref_t> funcNodes;
             std::vector<gc_node_ref_t> callNodes;
             funcNodes.reserve(draft.nodeCount());
