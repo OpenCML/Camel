@@ -1359,7 +1359,6 @@ b3edaa80eba9abbb ok test/cases/compile/native/para_arity.cml
 5e472d7e4b9869ad ok test/cases/compile/native/para_unordered_pure_result.cml
 0319797f2bded41f ok test/cases/compile/native/para_unordered_reduce_callback_arity.cml
 7561cea77ce38d15 ok test/cases/compile/native/para_unordered_type.cml
-3e2a6f27d54c10f0 ok test/cases/compile/native/pass_shaped_absent.cml
 693a1aed16254e52 ok test/cases/compile/native/private.cml
 75b0060d23722118 ok test/cases/compile/native/private_import.cml
 b030331496d24214 ok test/cases/compile/native/private_module.cml
