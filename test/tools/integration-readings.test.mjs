@@ -5,7 +5,10 @@
  * What the pre-push hook asks of a push to `integration`: every merge commit in the pushed range
  * carries a `Lane-Reading:` trailer (`Lane-Reading: docs-only` for a documentation-only merge),
  * and a change to a path the build reads arrives built -- a commit at or above it, before the tip,
- * is recorded under `<git common dir>/camel-built/`.
+ * is recorded under `<git common dir>/camel-built/`, and so is a reading of the plans the batch
+ * touched with no red the newest promotion does not list (`camel-read/<sha>`, a line `new=0`).
+ * A record that says `new=` with anything else refuses the push; a range that changes no build
+ * input needs neither record.
  *
  * The real `scripts/hooks/pre-push` is run over a throwaway repository. Three pushes: two merges
  * that both carry the trailer (allowed, one of them `docs-only`), the same two with the trailer
@@ -13,7 +16,9 @@
  * commit on top (refused by the shape rule). The trailer is read from the commit's own message,
  * so a sentence that merely mentions a reading does not count. Then the build rule: a merge that adds
  * a file under `src/` is refused while nothing records a build, allowed once its commit is recorded,
- * and still allowed with a documentation merge on top of it that was not built itself.
+ * and still allowed with a documentation merge on top of it that was not built itself. The reading
+ * rule is the same walk: refused with a build record and no reading, refused with a reading that
+ * has new reds, allowed with `new=0`, and a documentation-only range is allowed with neither.
  *
  * Exit: 0 when every check holds, 1 when one does not.
  */
@@ -146,17 +151,67 @@ check(
 const builtDir = path.join(path.resolve(code.dir, git(code.dir, ['rev-parse', '--git-common-dir'])), 'camel-built');
 fs.mkdirSync(builtDir, { recursive: true });
 fs.writeFileSync(path.join(builtDir, codeMerge), 'Release\n');
+const buildOnly = pushIntegration(code.dir, shell, codeMerge, code.tip);
+check(
+    'a built merge that changes a build input is still refused without a reading, and the refusal says how to produce one',
+    buildOnly.status === 1 && buildOnly.out.includes(codeMerge) && buildOnly.out.includes('no new red') && buildOnly.out.includes('merge-batch') && !buildOnly.out.includes('no commit from there to the tip was built'),
+    buildOnly.out,
+);
+const readDir = path.join(path.resolve(code.dir, git(code.dir, ['rev-parse', '--git-common-dir'])), 'camel-read');
+fs.mkdirSync(readDir, { recursive: true });
+fs.writeFileSync(path.join(readDir, codeMerge), 'plans=test/plans/smoke\nreds=4\nbaseline=2026-01-01-promotion-9-reds.tsv\nnew=2\n');
+const redRecord = pushIntegration(code.dir, shell, codeMerge, code.tip);
+check(
+    'a reading record with new reds is refused, and the refusal names the commit and the count',
+    redRecord.status === 1 && redRecord.out.includes(codeMerge) && redRecord.out.includes('new=2'),
+    redRecord.out,
+);
+fs.writeFileSync(path.join(readDir, codeMerge), 'plans=test/plans/smoke\nreds=4\nbaseline=2026-01-01-promotion-9-reds.tsv\nnew=0\n');
 const built = pushIntegration(code.dir, shell, codeMerge, code.tip);
-check('the same push is allowed once the build of that merge is recorded', built.status === 0, built.out);
+check('the same push is allowed once the build and a reading with new=0 of that merge are recorded', built.status === 0, built.out);
 git(code.dir, ['checkout', '--quiet', '-b', 'lane/page', codeMerge]);
 fs.writeFileSync(path.join(code.dir, 'page.md'), 'a page\n');
 commit(code.dir, 'lane page');
 git(code.dir, ['checkout', '--quiet', 'integration']);
 const pageMerge = merge(code.dir, 'lane/page', 'Merge lane/page\n\n- a page\n\nLane-Reading: docs-only');
 const onTop = pushIntegration(code.dir, shell, pageMerge, code.tip);
-check('a documentation merge on top of a built merge needs no build of its own', onTop.status === 0, onTop.out);
+check('a documentation merge on top of a built and read merge needs neither of its own', onTop.status === 0, onTop.out);
 
-for (const one of [allPresent, missing, code]) fs.rmSync(one.dir, { recursive: true, force: true });
+// Lane merges that change a build input and carry no record at all: neither a build nor a reading.
+const bare = build('Merge lane/two\n\n- lane two\n\nLane-Reading: plan x green');
+git(bare.dir, ['checkout', '--quiet', '-b', 'lane/more-code', bare.second]);
+fs.mkdirSync(path.join(bare.dir, 'src'), { recursive: true });
+fs.writeFileSync(path.join(bare.dir, 'src', 'more.cpp'), 'int more() { return 2; }\n');
+commit(bare.dir, 'lane more code');
+git(bare.dir, ['checkout', '--quiet', 'integration']);
+const bareMerge = merge(bare.dir, 'lane/more-code', 'Merge lane/more-code\n\n- more code\n\nLane-Reading: plan x green');
+const bareBuiltDir = path.join(path.resolve(bare.dir, git(bare.dir, ['rev-parse', '--git-common-dir'])), 'camel-built');
+fs.mkdirSync(bareBuiltDir, { recursive: true });
+const noReading = pushIntegration(bare.dir, shell, bareMerge, bare.tip);
+check('lane merges that change a build input with no record of either kind are refused', noReading.status === 1 && noReading.out.includes(bareMerge) && noReading.out.includes('src/more.cpp'), noReading.out);
+fs.writeFileSync(path.join(bareBuiltDir, bareMerge), 'Release\n');
+const builtNoReading = pushIntegration(bare.dir, shell, bareMerge, bare.tip);
+check('the build record alone does not stand for the reading', builtNoReading.status === 1 && builtNoReading.out.includes('no new red'), builtNoReading.out);
+
+// A reading record on the tip stands for the merges under it, as the build record does: the lane
+// merges beneath it are accepted without records of their own.
+fs.writeFileSync(path.join(bare.dir, 'page.md'), 'a page\n');
+git(bare.dir, ['checkout', '--quiet', '-b', 'lane/more-page', bareMerge]);
+commit(bare.dir, 'lane more page');
+git(bare.dir, ['checkout', '--quiet', 'integration']);
+const pageOnBare = merge(bare.dir, 'lane/more-page', 'Merge lane/more-page\n\n- a page\n\nLane-Reading: docs-only');
+const bareReadDir = path.join(path.resolve(bare.dir, git(bare.dir, ['rev-parse', '--git-common-dir'])), 'camel-read');
+fs.mkdirSync(bareReadDir, { recursive: true });
+fs.writeFileSync(path.join(bareReadDir, pageOnBare), 'plans=test/plans/smoke\nreds=0\nbaseline=x\nnew=0\n');
+const readAtTip = pushIntegration(bare.dir, shell, pageOnBare, bare.tip);
+check('a reading with new=0 at the tip stands for the build-input merges under it', readAtTip.status === 0, readAtTip.out);
+
+// A range that changes documents only needs neither record.
+const docs = build('Merge lane/two\n\n- lane two\n\nLane-Reading: docs-only');
+const docsOnly = pushIntegration(docs.dir, shell, docs.second, docs.tip);
+check('a range that changes no build input is allowed with no record of either kind', docsOnly.status === 0, docsOnly.out);
+
+for (const one of [allPresent, missing, code, bare, docs]) fs.rmSync(one.dir, { recursive: true, force: true });
 
 const failed = checks.filter((one) => !one.holds);
 for (const one of failed) {

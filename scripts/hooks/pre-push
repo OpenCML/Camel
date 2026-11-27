@@ -227,6 +227,14 @@ fi
 # and refused at a commit that changes a path the build reads before any recorded one is met; the
 # records and pages written on top of a built merge need no build of their own. The paths the build
 # reads are the ones its stamp hashes (scripts/common.js: BUILD_INFO_ROOTS, BUILD_INFO_ROOT_FILES).
+#
+# The same walk asks for a reading. A built tip says nothing about the plans, and a lane's own
+# reading was taken on the lane's branch, so scripts/merge-batch.mjs runs the plans the batch
+# touched on the built tip and records `<git common dir>/camel-read/<sha>` (`new=0`) when none of
+# their reds is absent from the newest promotion's red table. The push is accepted at the first
+# commit with such a record, on the build's own terms: a change to a build input meets a record
+# first or the push is refused. A record that says `new=` anything but 0 refuses the push where it
+# is met. A range that changes no build input needs neither record.
 check_integration_built() {
     # `--git-common-dir` answers relative to the current directory when it is not absolute; the
     # absolute form is made here rather than asked of git, because `--path-format` needs git 2.31
@@ -262,8 +270,19 @@ check_integration_built() {
             echo "pre-push: refusing to push $local_ref to $integration_ref: the commits in $remote_sha..$local_sha could not be listed." >&2
             exit 1
         }
+        built_seen=''
+        read_seen=''
         for commit in $commits; do
-            [ ! -f "$common/camel-built/$commit" ] || continue 2
+            [ -z "$built_seen" ] && [ -f "$common/camel-built/$commit" ] && built_seen=1
+            if [ -z "$read_seen" ] && [ -f "$common/camel-read/$commit" ]; then
+                if ! grep -q '^new=0[[:space:]]*$' "$common/camel-read/$commit" 2>/dev/null; then
+                    echo "pre-push: refusing to push $local_ref to $integration_ref: the reading of $commit has reds the newest promotion does not list ($(grep '^new=' "$common/camel-read/$commit" 2>/dev/null | head -n 1))." >&2
+                    echo "pre-push: a batch with new reds is not pushed; the seat decides which lane brought them (scripts/merge-batch.mjs prints them)." >&2
+                    exit 1
+                fi
+                read_seen=1
+            fi
+            [ -z "$built_seen" ] || [ -z "$read_seen" ] || continue 2
             reads=$(git diff --name-only "$commit^1" "$commit" 2>/dev/null | node --input-type=module -e '
 import { pathToFileURL } from "url"
 import fs from "fs"
@@ -276,9 +295,17 @@ console.log(hit ?? "")
                 exit 1
             }
             if [ -n "$reads" ]; then
-                echo "pre-push: refusing to push $local_ref to $integration_ref: $commit changes $reads, which the build reads, and no commit from there to the tip was built." >&2
-                echo "pre-push:   $commit $(git log -n 1 --format=%s "$commit")" >&2
-                echo "pre-push: build the tip with internal/tools/camel-remote.ps1 on a clean tree (it records the build), then push." >&2
+                if [ -z "$built_seen" ]; then
+                    echo "pre-push: refusing to push $local_ref to $integration_ref: $commit changes $reads, which the build reads, and no commit from there to the tip was built." >&2
+                    echo "pre-push:   $commit $(git log -n 1 --format=%s "$commit")" >&2
+                    echo "pre-push: build the tip with internal/tools/camel-remote.ps1 on a clean tree (it records the build), then push." >&2
+                fi
+                if [ -z "$read_seen" ]; then
+                    echo "pre-push: refusing to push $local_ref to $integration_ref: $commit changes $reads, which the build reads, and no commit from there to the tip has a reading with no new red." >&2
+                    echo "pre-push:   $commit $(git log -n 1 --format=%s "$commit")" >&2
+                    echo "pre-push: a lane's own reading does not stand for the merged tip. Run scripts/merge-batch.mjs, which runs the plans the batch touched on the built tip," >&2
+                    echo "pre-push: compares their reds with the newest promotion and records camel-read/<sha> when none is new; then push." >&2
+                fi
                 exit 1
             fi
         done

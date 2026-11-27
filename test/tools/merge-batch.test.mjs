@@ -15,6 +15,12 @@
  * (the base, the full batch, two prefix probes, the rebuilt result); and, over a base that already
  * carries the breaking file, exit 4 with nothing dropped and nothing pushed.
  *
+ * The reading of the touched plans runs over a second remote with a stub selector and a stub plan
+ * run: a red that the newest promotion table lists (in either of its row shapes) lets the batch
+ * through and leaves `camel-read/<sha>` with `new=0`; a red that it does not list, or that only an
+ * older table lists, is printed with its plan, exits 5, pushes nothing and leaves no record. A batch
+ * that changes no path the build reads is not read (the first remote's lanes).
+ *
  * Exit: 0 when every check holds, 1 when one does not.
  */
 import fs from 'node:fs';
@@ -280,6 +286,149 @@ check(
     redBase.out,
 );
 check('a red base costs the batch build and one build of the base (2 builds)', redBase.builds === 2, `${redBase.builds} builds`);
+
+// --- the reading of the touched plans on the built tip ----------------------------
+// A second remote whose tip carries a stub plan selector (scripts/test.js), two red tables (the
+// newest by promotion number is the baseline, one of its rows in the hand-written shape) and a lane
+// that adds a file under src/, which the build reads. The build is green; the plan run is a stub that
+// writes a summary.json from a scenario file, so what the tool does with the reds is the variable.
+const readRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'merge-batch-read-'));
+const readRemote = path.join(readRoot, 'remote.git');
+const readMaker = path.join(readRoot, 'maker');
+const readSeat = path.join(readRoot, 'seat');
+const selectLog = path.join(readRoot, 'select.log');
+const readLog = path.join(readRoot, 'read.log');
+const scenario = path.join(readRoot, 'scenario.json');
+const readStub = path.join(readRoot, 'stub-read.mjs');
+fs.writeFileSync(
+    readStub,
+    `import fs from 'node:fs';\n` +
+        `import path from 'node:path';\n` +
+        `const [seat, plans] = process.argv.slice(2);\n` +
+        `fs.appendFileSync(${JSON.stringify(readLog)}, plans + '\\n');\n` +
+        `const rows = JSON.parse(fs.readFileSync(${JSON.stringify(scenario)}, 'utf8'));\n` +
+        `const out = path.join(seat, 'test', 'results', 'fetched');\n` +
+        `fs.mkdirSync(out, { recursive: true });\n` +
+        `fs.writeFileSync(path.join(out, 'summary.json'), JSON.stringify({ test_timings: rows }));\n` +
+        `process.exit(rows.some((r) => r.status !== 'pass') ? 1 : 0);\n`,
+);
+execFileSync('git', ['init', '--quiet', '--bare', '--initial-branch=integration', readRemote]);
+execFileSync('git', ['init', '--quiet', '--initial-branch=integration', readMaker]);
+identity(readMaker);
+git(readMaker, ['remote', 'add', 'origin', readRemote]);
+write(
+    readMaker,
+    'scripts/test.js',
+    `import fs from 'node:fs';\n` +
+        `fs.appendFileSync(${JSON.stringify(selectLog)}, process.argv.slice(2).join(' ') + ' base=' + process.env.CAMEL_TEST_BASE + '\\n');\n` +
+        `console.log('[INFO] --changed: 1 changed file(s) select 2 plan(s)');\n` +
+        `console.log(process.cwd() + '/test/plans/smoke');\n` +
+        `console.log(process.cwd() + '/test/plans/feat/compile');\n`,
+);
+write(readMaker, '.gitignore', 'test/results/\n');
+write(readMaker, 'internal/reports/2026-01-01-promotion-2-reds.tsv', '# older\nplan_a\tonly_in_older\n');
+write(
+    readMaker,
+    'internal/reports/2026-01-02-promotion-3-reds.tsv',
+    '# newest\nplan_a\tknown_red\nlegacy_red\ttest/plans/feat/compile.plan.toml\tfast\t\n',
+);
+write(readMaker, 'internal/reports/2026-01-02-promotion-3-reds-extra.tsv', 'plan_a\tnot_a_table\n');
+const readBase = commit(readMaker, 'the tip with a selector and red tables');
+git(readMaker, ['push', '--quiet', 'origin', 'integration']);
+git(readMaker, ['checkout', '--quiet', '-b', 'lane/code', readBase]);
+write(readMaker, 'src/unit.cpp', 'int unit() { return 1; }\n');
+commit(readMaker, 'add a unit the build reads');
+git(readMaker, ['push', '--quiet', 'origin', 'lane/code']);
+execFileSync('git', ['clone', '--quiet', '-c', 'core.autocrlf=false', readRemote, readSeat]);
+identity(readSeat);
+git(readSeat, ['fetch', '--quiet', 'origin', 'lane/code:lane/code']);
+
+function runRead(rows, extra = []) {
+    fs.writeFileSync(scenario, JSON.stringify(rows));
+    for (const file of [readLog, selectLog]) fs.rmSync(file, { force: true });
+    const result = spawnSync(
+        process.execPath,
+        [
+            tool, '--seat', readSeat, '--lane', 'lane/code=adds a unit; plan smoke green',
+            '--build', 'node -e "process.exit(0)"',
+            '--read', `node "${readStub}" "{seat}" {plans}`,
+            '--base', 'origin/integration', ...extra,
+        ],
+        { encoding: 'utf8', timeout: 120000 },
+    );
+    const out = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+    return { status: result.status ?? -1, out };
+}
+
+const row = (plan, test, status, tier = 'fast', plan_path = 'test/plans/feat/compile.plan.toml') => ({ plan, test, status, tier, plan_path });
+const common = path.resolve(readSeat, git(readSeat, ['rev-parse', '--git-common-dir']));
+const remoteTip = () => git(readRemote, ['rev-parse', 'integration']);
+
+// The reds are all in the newest table (one under each of its row shapes): the batch is pushed.
+const known = runRead(
+    [row('plan_a', 'known_red', 'fail'), row('plan_b', 'legacy_red', 'fail'), row('plan_a', 'fine', 'pass'), row('plan_a', 'skipped', 'skip')],
+    ['--push'],
+);
+const knownTip = known.out.split('\n').find((one) => one.startsWith('  tip '))?.trim().split(/\s+/)[1];
+check('reds that are all in the newest promotion table do not stop the batch: exit 0 and pushed', known.status === 0 && knownTip && remoteTip() === knownTip, known.out);
+check(
+    'the plans are the selector\'s, relative to the seat, and the selector is asked against the integration tip the batch started from',
+    fs.readFileSync(readLog, 'utf8').trim() === 'test/plans/smoke,test/plans/feat/compile' &&
+        fs.readFileSync(selectLog, 'utf8').trim() === `--changed --list base=${readBase}`,
+    `${fs.existsSync(readLog) ? fs.readFileSync(readLog, 'utf8') : ''}${fs.existsSync(selectLog) ? fs.readFileSync(selectLog, 'utf8') : ''}`,
+);
+const record = knownTip && fs.existsSync(path.join(common, 'camel-read', knownTip)) ? fs.readFileSync(path.join(common, 'camel-read', knownTip), 'utf8') : '';
+check(
+    'the reading record is written for the tip: plans, red count, the newest table as baseline, new=0',
+    record.includes('plans=test/plans/smoke,test/plans/feat/compile\n') &&
+        record.includes('reds=2\n') &&
+        record.includes('baseline=2026-01-02-promotion-3-reds.tsv\n') &&
+        record.includes('tier=fast\nnew=0\n'),
+    record,
+);
+
+// One red the newest table does not list, and one that only the older table lists: both are new.
+// The tool pushes nothing, writes no record, prints each with its plan, and exits 5.
+const heldBefore = remoteTip();
+fs.rmSync(path.join(common, 'camel-read'), { recursive: true, force: true });
+const held = runRead(
+    [row('plan_a', 'known_red', 'fail'), row('plan_a', 'brand_new', 'fail'), row('plan_a', 'only_in_older', 'fail'), row('plan_a', 'fine', 'pass')],
+    ['--base', readBase, '--no-fetch'],
+);
+check('a red the newest table does not list stops the tool with its own exit code (5)', held.status === 5, held.out);
+check(
+    'every new red is printed with its plan, one per line, and a known red is not',
+    held.out.includes('new red  plan_a  brand_new\n') && held.out.includes('new red  plan_a  only_in_older\n') && !held.out.includes('new red  plan_a  known_red'),
+    held.out,
+);
+check(
+    'a batch with new reds pushes nothing and leaves no reading record',
+    remoteTip() === heldBefore && !fs.existsSync(path.join(common, 'camel-read')) && /pushed\s+no \(new reds\)/.test(held.out),
+    held.out,
+);
+
+// A plan file named as a target runs its slow cases too, and the table is measured on the fast tier:
+// a slow-tier red the table does not list is not compared, and a fast-tier one is.
+fs.rmSync(path.join(common, 'camel-read'), { recursive: true, force: true });
+const slow = runRead(
+    [row('plan_a', 'known_red', 'fail'), row('plan_a', 'slow_new', 'fail', 'slow'), row('plan_a', 'slow_ok', 'pass', 'slow')],
+    ['--base', readBase, '--no-fetch'],
+);
+const slowTip = slow.out.split('\n').find((one) => one.startsWith('  tip '))?.trim().split(/\s+/)[1];
+const slowRecord = slowTip && fs.existsSync(path.join(common, 'camel-read', slowTip)) ? fs.readFileSync(path.join(common, 'camel-read', slowTip), 'utf8') : '';
+check(
+    'a slow-tier red that the table does not list is not a new red: exit 0, and the record counts only the fast tier',
+    slow.status === 0 && !slow.out.includes('new red') && slowRecord.includes('reds=1\n') && slowRecord.includes('tier=fast\n'),
+    `${slow.out}${slowRecord}`,
+);
+const mixed = runRead([row('plan_a', 'slow_new', 'fail', 'slow'), row('plan_a', 'fast_new', 'fail', 'fast')], ['--base', readBase, '--no-fetch']);
+check(
+    'a fast-tier red that the table does not list is new beside a slow one, and only it is named',
+    mixed.status === 5 && mixed.out.includes('new red  plan_a  fast_new\n') && !mixed.out.includes('slow_new'),
+    mixed.out,
+);
+
+fs.rmSync(readRoot, { recursive: true, force: true });
 
 if (!process.env.KEEP_TMP) fs.rmSync(root, { recursive: true, force: true });
 
