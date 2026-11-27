@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * Compile-side Graph -> GCGraph export entrypoints.
+ * Compile-side graph -> frozen graph export entrypoints.
  *
  * Runtime graph materialization is a compile-side responsibility. Keep the
  * API here rather than on `Graph` itself so the mutable compile graph object

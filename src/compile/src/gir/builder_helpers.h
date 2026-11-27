@@ -290,7 +290,7 @@ inline bool walksBefore(const node_handle_t &left, const node_handle_t &right) {
 }
 
 /// The same order for the tables keyed by the graph itself: a graph's identity is the epoch of the
-/// draft it builds (`GraphDraft::epoch`), never the address of its builder.
+/// draft it builds (the draft's `epoch`), never the address of its builder.
 inline bool walksBeforeGraph(const DraftGraphBuilder *left, const DraftGraphBuilder *right) {
     if (left == nullptr || right == nullptr) {
         return left != nullptr;

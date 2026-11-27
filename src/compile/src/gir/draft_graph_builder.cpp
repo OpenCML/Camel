@@ -42,6 +42,10 @@ struct DraftRegistration {
     uint64_t epoch             = 0;
 };
 
+/// A draft in this registry is only an identity, never a type: what the table answers is which
+/// builder a handle's address belongs to, and the address is all it is asked. The key keeps its
+/// own type -- `const runtime::GraphDraft *` -- so a pointer of another type cannot be handed to
+/// the table, and that check stays in the compiler rather than in a convention about addresses.
 std::unordered_map<const runtime::GraphDraft *, DraftRegistration> &draftOwners() {
     static std::unordered_map<const runtime::GraphDraft *, DraftRegistration> owners;
     return owners;
