@@ -14,6 +14,8 @@
 #include "half.h"
 #include "numeric.h"
 
+using camel::standalone::intAbs;
+
 namespace mm = camel::core::mm;
 using namespace camel::core::context;
 using namespace camel::core::type;
