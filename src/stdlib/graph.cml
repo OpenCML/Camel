@@ -462,6 +462,19 @@ export func inline::<G>(at: Node, fn: G) => Node when is_function::<G>()
 /// @example inline_call(n)
 export func inline_call(at: Node) => Node
 
+/// Whether the call `at` names the graph it is being edited in -- a recursive call, the one
+/// `inline_call` refuses: `callee(at)` is that same graph. A pass that walks the calls of a draft
+/// reads this before it asks for a splice, so a call it selects is a call the operator takes; the
+/// read and the operator answer one question about one node, from the same place.
+///
+/// Every other node answers `false`: a node that is not a call, a call whose callee is not known
+/// (through a parameter, or a closure still being assembled), and a node of a published graph name
+/// no graph an edit holds, so the answer is no. Those calls are refused by `inline_call`, and this
+/// read does not refuse a second time.
+/// @example-fragment n is a call of the surrounding draft
+/// @example callee_is_self(n)
+export func callee_is_self(at: Node) => bool
+
 /// Collects a group of the graph's nodes into a function of its own and puts a call of it where the
 /// value the group handed on was read: `inline`'s reverse (design 7 and 15.3). The nodes the group
 /// reads from outside it become that function's parameters, in the order they are found, and the one

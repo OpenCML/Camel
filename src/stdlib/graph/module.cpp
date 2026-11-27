@@ -242,6 +242,9 @@ class GraphModule final : public BuiltinModule {
                 {"outline", false},
                 {"add_param", false},
                 {"graph_of", true},
+                // The read beside the edits: whether a call is of the graph being edited, the
+                // question `inline_call` refuses a recursive call over. It changes no draft.
+                {"callee_is_self", true},
                 {"add_constant", false},
             });
         // What an edit touches (docs/design/graph-editing/README.cn.md 15.3): the draft, whose

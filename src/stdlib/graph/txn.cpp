@@ -1019,6 +1019,32 @@ slot_t inlineCallKernel(ArgsView &, ArgsView &norm, Context &) {
         Handle::createInTransaction(transaction, valueExit, at->draft(), mm::autoSpace()));
 }
 
+/// `callee_is_self(t, at)`: whether the call `at` names the graph it is being edited in -- the
+/// recursive call `inline_call` refuses. It asks the question `spliceCallInDraft` asks before that
+/// refusal (`calleeGraphOf` against the draft's own id), as a read and without an edit, so a pass
+/// that walks the calls of a draft leaves such a call as it is instead of asking for a splice that
+/// would fault.
+///
+/// Every other node answers `false` and none of them refuses: a node that is not a call, a call
+/// whose callee is not known (through a parameter, or a closure still being assembled), and a node
+/// of a published graph all name no graph that is being edited, so the answer to the question the
+/// operator asks is no. `inline_call` is where those calls are refused; this read is not a second
+/// place for the same refusal, and a pass reads it as "leave this one alone" or "expand it".
+slot_t calleeIsSelfKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *at = norm.get<Handle *>(0);
+    if (at->transaction() == nullptr) {
+        return toSlot(false);
+    }
+    auto &draft                                         = at->transaction()->graph();
+    const camel::runtime::DraftNodeHeader *const header = draft.header(at->index());
+    if (header == nullptr || !draft.alive(at->index()) ||
+        header->kind != camel::runtime::GCNodeKind::Func) {
+        return toSlot(false);
+    }
+    const camel::runtime::GCGraph *callee = draft.calleeGraphOf(at->index());
+    return toSlot(callee != nullptr && callee->id() == draft.id());
+}
+
 /// `outline(t, ns)`: the group `ns` of one graph becomes a graph of its own and a call of it takes
 /// the place of the value the group handed on; that call is what the operator answers. It is
 /// `inline`'s reverse (docs/design/graph-editing/README.cn.md 7, 15.3), and the graph it makes is a
@@ -1238,6 +1264,7 @@ const std::vector<TxnOp> &txnOps() {
         {"order", orderKernel},
         {"inline", inlineKernel},
         {"inline_call", inlineCallKernel},
+        {"callee_is_self", calleeIsSelfKernel},
         {"outline", outlineKernel},
         {"add_param", addParamKernel},
     };

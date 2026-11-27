@@ -28,8 +28,8 @@
  * folding. No other number is computed here.
  */
 
-import { flatten, all, any, drop } from array
-import { Node, Graph, NodeKind, Region, RegionKind, graphs_of, graphs, nodes, inputs, with_inputs, value_users, kind, op, op_name, callee, may_be_recomputed, may_fault, may_be_rearranged, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, region_kind, region_parent, permissions, tags, constant, open, replace, erase, eval, commit, abort, inline_call } from graph
+import { flatten, all, any, drop, flat_map, unique } from array
+import { Node, Graph, NodeKind, Region, RegionKind, graphs_of, graphs, nodes, inputs, with_inputs, value_users, kind, op, op_name, callee, callee_is_self, may_be_recomputed, may_fault, may_be_rearranged, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, region_kind, region_parent, permissions, tags, constant, open, replace, erase, eval, commit, abort, inline_call } from graph
 import { saturate as saturate_rules } from rewrite
 import { algebra as algebra_laws, distribution, simplify } from rules
 import { is_function } from types
@@ -394,16 +394,19 @@ export func saturate::<F>(f: F) => F! when is_function::<F>() {
 // (InlineRewriteConfig, src/stdlib/std/cxx/opt/include/camel/passes/opt/config.h). The C++ engine
 // reads four things this module has no read for, and this pass does without them:
 //
-//   unaligned 1. the call graph's components: which functions recurse, which reach a recursion;
+//   unaligned 1. the call graph's components: which functions recurse. Whether the callee recurses is
+//               read (`recurses`, a walk of the callees), and such a call is left as it is; the C++
+//               engine also reads *where* the cycle is and inlines inside one, which this pass does
+//               not do -- both sides of a recursive pair keep their call to the other;
 //   unaligned 2. whether a call is the head of a branch arm (`isDraftBranchArmHead`);
 //   unaligned 3. the inline history: whether a call lies in a copy inlined from its own callee;
 //   unaligned 4. how many direct calls each graph has, which the duplication budget is about.
 //
 // So the rules below are the ones that can be read: a callee is small, the copy fits the caller and
-// what is left of the budget, and a call of the graph being edited is left alone (a recursion; the
-// operator refuses it). Where the C++ engine would also inline a non-small callee called once, or a
-// callee that returns a closure, this pass keeps the call. The program means the same; it is only
-// less inlined, and the difference is listed here rather than approximated.
+// what is left of the budget, and a call of the graph being edited is left alone (`callee_is_self`;
+// `inline_call` refuses it). Where the C++ engine would also inline a non-small callee called once,
+// or a callee that returns a closure, this pass keeps the call. The program means the same; it is
+// only less inlined, and the difference is listed here rather than approximated.
 
 // What a copy of `g` carries into its caller: every node but the constants and the parameters,
 // which the caller already has. This is what one expansion costs the growth budget (the C++ engine's
@@ -432,13 +435,42 @@ func cost_of_call(n: Node) => int {
     }
 }
 
-// Whether the pass expands this call: its callee is a graph of its own (not the graph being edited),
-// that graph is small (`smallSubgraphMaxComputeNodes`, 8), and the copy fits the caller's cap
-// (`maxOwnerNodes`, 4096) and what is left of the budget.
+// The graphs the calls of `g` name, each once: the call graph's edges out of one graph.
+func callees_of(g: Graph) => Graph[] {
+    return nodes(g)
+        ->flat_map<func (n: Node) => Graph[] {
+            return match callee(n) {
+                case null => []
+                case c => [c]
+            }
+        }>
+        ->unique
+}
+
+// Whether `target` is reached from `g` by the graphs its calls name. `seen` holds the graphs already
+// walked, so a cycle in the call graph ends the walk instead of going round it.
+func reaches(g: Graph, target: Graph, seen: Graph[]) => bool {
+    return if g == target then true else if seen->any<func (s: Graph) => bool { s == g }> then false else callees_of(g)->any<func (c: Graph) => bool { reaches(c, target, concat(seen, [g])) }>
+}
+
+// Whether the graph `g` reaches itself: whether its function recurses, directly or through other
+// functions. This is the C++ engine's first rule (`InlineRewriteConfig`, "which functions recurse"):
+// a call whose callee recurses is left as it is. Without it the pass would expand `down` into `main`,
+// the copy would bring `down(n - 1)` into `main`, and that call would be expandable again -- the
+// caller would grow to the whole growth budget.
+func recurses(g: Graph) => bool {
+    return callees_of(g)->any<func (c: Graph) => bool { reaches(c, g, [g]) }>
+}
+
+// Whether the pass expands this call: its callee is a graph of its own (`callee_is_self` is false:
+// a recursive call names the graph being edited, and `inline_call` would refuse it), that graph does
+// not recurse (`recurses`: the C++ engine declines the callers of a recursive function, not only the
+// call inside it), it is small (`smallSubgraphMaxComputeNodes`, 8), and the copy fits the caller's
+// cap (`maxOwnerNodes`, 4096) and what is left of the budget.
 func expandable(g: Graph, n: Node, remaining: int) => bool {
     return match callee(n) {
         case null => false
-        case c => c != g && compute_size(c) <= 8 && copy_cost(c) <= remaining && len(nodes(g)) + copy_cost(c) <= 4096
+        case c => !callee_is_self(n) && !recurses(c) && compute_size(c) <= 8 && copy_cost(c) <= remaining && len(nodes(g)) + copy_cost(c) <= 4096
     }
 }
 
