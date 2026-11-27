@@ -4113,7 +4113,7 @@ class Builder {
     /// take a `Range` as written; asking again with the array the conversion makes is how such a
     /// rule is found (builder_call.cpp, the retry after a failed resolution). Positions whose
     /// declared parameter is not an array are left as written: a type variable, or a parameter
-    /// with no shape stated, keeps the range a value (the ruling on conversion by expected type).
+    /// with no shape stated, keeps the range a value (design principles 5.4, ranges are values).
     /// Returns `normTypes` itself, the same vector, when no position changes.
     camel::core::type::type_vec_t
     rangeEnteredTypes(const oper_group_ptr_t &ops, const camel::core::type::type_vec_t &normTypes);
