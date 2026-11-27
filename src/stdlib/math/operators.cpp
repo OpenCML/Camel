@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 #include "operators.h"
-#include "half.h"
-#include "numeric.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
@@ -12,6 +10,11 @@
 #include "camel/core/rtdata/complex.h"
 #include "camel/core/rtdata/half.h"
 #include "camel/core/rtdata/string.h"
+#include "camel/standalone/num.h"
+#include "half.h"
+#include "numeric.h"
+
+using camel::standalone::intAbs;
 
 namespace mm = camel::core::mm;
 using namespace camel::core::context;
@@ -93,9 +96,9 @@ slot_t __math_abs_f6__(ArgsView &, ArgsView &norm, Context &) { return halfAbs<F
 slot_t __math_abs__(ArgsView &with, ArgsView &norm, Context &ctx) {
     switch (norm.code(0)) {
     case TypeCode::Int32:
-        return toSlot(std::abs(norm.get<Int32>(0)));
+        return toSlot(intAbs(norm.get<Int32>(0)));
     case TypeCode::Int64:
-        return toSlot(std::abs(norm.get<Int64>(0)));
+        return toSlot(intAbs(norm.get<Int64>(0)));
     case TypeCode::Float32:
         return toSlot(std::fabs(norm.get<Float32>(0)));
     case TypeCode::Float64:
