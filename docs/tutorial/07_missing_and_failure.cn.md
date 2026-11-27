@@ -127,6 +127,8 @@ warning[SemanticDiag::UnusedFallibleValue]: This value has type 'int!' and nothi
 
 [`examples/07_fault.cml`](examples/07_fault.cml)：
 
+<!-- camel-snippet: counter-example: 这个程序是故意写错的，它带着故障停下，图遍历无法把它建完；下面的文本块是一次运行的输出，不是构建的输出 -->
+
 ```cml
 // A fault is not an error value: reading past the end ends the program, with a position.
 // Run: camel docs/tutorial/examples/07_fault.cml

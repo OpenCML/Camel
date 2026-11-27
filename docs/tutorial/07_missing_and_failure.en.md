@@ -132,6 +132,8 @@ position, and `!!` cannot catch them. Here is `xs[5]` on a three-element array:
 
 [`examples/07_fault.cml`](examples/07_fault.cml):
 
+<!-- camel-snippet: counter-example: the program is deliberately wrong and stops with a fault, so no graph pass can finish it; the text block is one run's output, not a build's -->
+
 ```cml
 // A fault is not an error value: reading past the end ends the program, with a position.
 // Run: camel docs/tutorial/examples/07_fault.cml
