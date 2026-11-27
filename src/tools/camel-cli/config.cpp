@@ -898,6 +898,23 @@ bool parseArgs(int argc, char *argv[]) {
          opt_values("input", targetFiles) %
              "input file (optional if --input given; at least one required)");
 
+    // The subcommands, in the one table the three places that need them read: the word the command
+    // line is read by (below), the grammar group each one adds, and the usage line `--help` prints.
+    // A name added here is a subcommand in all three places at once.
+    struct Subcommand {
+        const char *name;  // the word, as the first argument of the command line
+        Command command;   // what the run is doing, once that word is the first argument
+        const char *usage; // the line `--help` prints for it
+    };
+
+    const Subcommand kSubcommands[] = {
+        {"docs", Command::Info, "camel docs [<module>...]"},
+        {"about", Command::Info, "camel about"},
+        {"zen", Command::Info, "camel zen"},
+        {"explain", Command::Info, "camel explain <name or code>"},
+        {"check", Command::Check, "camel check [options] <file>"},
+        {"inspect", Command::Inspect, "camel inspect [options] <file>"},
+    };
     // The information commands are subcommands, not options: they are not a setting of a run.
     // Each is its own group, so the first word of the command line decides which one it is.
     auto infoFlags =
@@ -906,22 +923,13 @@ bool parseArgs(int argc, char *argv[]) {
          option("-h", "--help").set(showHelp).set(selectedCommand, Command::Info) %
              "show this help message");
     auto docsCommand =
-        (command("docs").set(showDocs).set(selectedCommand, Command::Info) %
-             "show the documentation of a module",
-         opt_values("module", docsModules) % "module whose documentation is shown (default: all)");
-    auto aboutCommand = command("about").set(showAbout).set(selectedCommand, Command::Info) %
-                        "show copyright and related information";
-    auto zenCommand =
-        command("zen").set(showZen).set(selectedCommand, Command::Info) % "show the Zen of Camel";
-    auto explainCommand =
-        (command("explain").set(selectedCommand, Command::Info) %
-             "describe a diagnostic by its name or code",
-         (value("name or code", Diag::explain) % "the diagnostic to describe"));
+        opt_values("module", docsModules) % "module whose documentation is shown (default: all)";
+    clipp::group aboutCommand;
+    clipp::group zenCommand;
+    auto explainCommand = value("name or code", Diag::explain) % "the diagnostic to describe";
 
     auto check =
-        (command("check").set(selectedCommand, Command::Check) %
-             "check the code without running it (exit code 1 when an error is found)",
-         option("-i", "--lexical-only").set(lexical) %
+        (option("-i", "--lexical-only").set(lexical) %
              "lexical analysis only: report lexical errors and stop before parsing",
          option("-s", "--syntax-only").set(syntaxOnly) %
              "lexical and syntax analysis only: stop before names and types are checked",
@@ -934,8 +942,7 @@ bool parseArgs(int argc, char *argv[]) {
          values("input", targetFiles) % "input file");
 
     auto inspect =
-        (command("inspect").set(selectedCommand, Command::Inspect) % "inspect the code",
-         joinable(
+        (joinable(
              option("-t", "-T").set(dumpTokens) % "dump tokens",
              option("-s", "-S").set(dumpCST) % "dump concrete syntax tree",
              option("-a", "-A").set(dumpAST) % "dump abstract syntax tree",
@@ -989,16 +996,97 @@ bool parseArgs(int argc, char *argv[]) {
          globalOps,
          values("input", targetFiles) % "input file");
 
+    // The word is read before the grammar is built, so the groups are alternatives only where the
+    // command line has no word: a group that loses its command would otherwise fall back to a plain
+    // run, and its settings would be read as the ones of a run.
+    // A subcommand is the first word of the command line and only that: it is not a setting a run
+    // carries, so a word written after an option is refused with the sentence that says so instead
+    // of falling through to a run that then wants an input file.
+    const char *word = argc > 1 ? argv[1] : nullptr;
+    bool named       = false;
+    for (const Subcommand &sub : kSubcommands) {
+        if (word != nullptr && std::string_view(word) == sub.name) {
+            named           = true;
+            selectedCommand = sub.command;
+            break;
+        }
+    }
+    if (!named) {
+        word = nullptr;
+        for (int i = 2; i < argc; ++i) {
+            for (const Subcommand &sub : kSubcommands) {
+                if (std::string_view(argv[i]) == sub.name) {
+                    std::cerr << "Error: the subcommand '" << sub.name
+                              << "' is written first: 'camel " << sub.name
+                              << " <arguments>' takes no setting of a run before it." << std::endl;
+                    exitCode = 1;
+                    return false;
+                }
+            }
+        }
+    }
+
+    if (word != nullptr && std::string_view(word) == kSubcommands[0].name) {
+        showDocs = true;
+    } else if (word != nullptr && std::string_view(word) == kSubcommands[1].name) {
+        showAbout = true;
+    } else if (word != nullptr && std::string_view(word) == kSubcommands[2].name) {
+        showZen = true;
+    }
+
+    // `--help` lists what the command line can be: the run's settings and each subcommand's line,
+    // both taken from the table above.
     auto cli = docsCommand | aboutCommand | zenCommand | explainCommand | run | infoFlags | check |
                inspect;
+    // The subcommands a reader can use are printed from the same table their names are read from,
+    // so a name added there is a name `--help` lists, with the line the table carries.
+    const auto subcommandUsage = [&kSubcommands] {
+        std::string lines;
+        for (const Subcommand &sub : kSubcommands) {
+            lines += "\t";
+            lines += sub.usage;
+            lines += '\n';
+        }
+        return lines;
+    };
     startupMark("construct");
 
     std::vector<char *> args = takeWarningArguments(argc, argv);
+    if (word != nullptr && args.size() > 1) {
+        args.erase(args.begin() + 1); // the word is the command; what it governs follows it
+    }
     argc                     = static_cast<int>(args.size());
     argv                     = args.data();
     startupMark("warnings");
 
-    const parsing_result parsed = parse(argc, argv, cli);
+    // The grammar that reads the line is the one the word picked: a subcommand's group holds its
+    // own settings, and a line without a word is a run's.
+    const parsing_result parsed = [&]() -> parsing_result {
+        if (word != nullptr) {
+            if (std::string_view(word) == kSubcommands[0].name) {
+                return parse(argc, argv, docsCommand | infoFlags);
+            }
+            if (std::string_view(word) == kSubcommands[1].name) {
+                return parse(argc, argv, infoFlags); // bout takes no argument of its own
+            }
+            if (std::string_view(word) == kSubcommands[2].name) {
+                return parse(argc, argv, infoFlags); // zen takes no argument of its own
+            }
+            if (std::string_view(word) == kSubcommands[3].name) {
+                // The name is the argument the word introduced, so it is read here and the parser
+                // is left with the flags: a diagnostic name is never a setting of the parser.
+                if (argc > 1) {
+                    Diag::explain = argv[1];
+                }
+                return parse(1, argv, infoFlags);
+            }
+            if (std::string_view(word) == kSubcommands[4].name) {
+                return parse(argc, argv, check);
+            }
+            return parse(argc, argv, inspect);
+        }
+        return parse(argc, argv, run | infoFlags);
+    }();
     if (!parsed) {
         // Name what did not parse (an unknown option, a missing value, a conflict) before the
         // usage: a command line that cannot be honoured is an error, not a run with a default.
@@ -1012,6 +1100,7 @@ bool parseArgs(int argc, char *argv[]) {
         cout << "Usage: " << endl;
         cout << "\tcamel [options] [<target file>]  (run: need --input or positional)\n";
         cout << usage_lines(cli, "camel") << endl;
+        cout << subcommandUsage();
         cout << kWarningOptionsHelp;
         exitCode = 1;
         return false;
@@ -1048,6 +1137,7 @@ bool parseArgs(int argc, char *argv[]) {
 
     if (showHelp) {
         cout << make_man_page(cli, "camel");
+        cout << subcommandUsage();
         cout << kWarningOptionsHelp;
         cout << kMeasurementOptionsHelp;
     }
