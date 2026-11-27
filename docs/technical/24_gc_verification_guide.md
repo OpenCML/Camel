@@ -89,15 +89,15 @@ Use these controls for deterministic GC validation:
 | `--gc-check moves` | Log object movement in the young-copying path. |
 | `--gc generational` | Run the generational collector: young objects are copied. The older `CAMEL_GC_ENABLE_YOUNG_COPYING` is not read and changes nothing. |
 | `--gc-check poison` | Safepoint poisoning: every safepoint moves every young object and poisons where it was (`36_gc_handle_rules.md` section 8). Implies the generational collector. |
-| `--gc-promotion-age N` | Minor collections an object survives before promotion (1 to 15, default 4). |
-| `--gc-large-threshold-kb N`, `--gc-nursery-mb N` | Size above which an object is born old (default 4 KB with mark-sweep, 64 KB generational), and the size of the birth space (default 4 MB). |
-| `--gc-heap-limit-mb N` | Limit on what the elder and large-object spaces hold; reaching it is `RuntimeDiag::MemoryExhausted` (`docs/cli.md`, "The collector"). |
+| `--gc promotion_age= N` | Minor collections an object survives before promotion (1 to 15, default 4). |
+| `--gc large_threshold_kb= N`, `--gc nursery_mb= N` | Size above which an object is born old (default 4 KB with mark-sweep, 64 KB generational), and the size of the birth space (default 4 MB). |
+| `--gc heap_limit_mb= N` | Limit on what the elder and large-object spaces hold; reaching it is `RuntimeDiag::MemoryExhausted` (`docs/cli.md`, "The collector"). |
 | `--gc-check config` | Print the effective GC diagnostic configuration to stderr at allocator initialization. |
-| `--gc-large-budget-mb N` | Floor (MB) of the large-object allocation between collections, and of the block bytes promoted to the elder space that ask for a major collection; default 4. It is in force only while the growth setting gives less. Not a diagnostic switch: it tunes production pacing. |
-| `--gc-growth-percent N` | Large-object allocation between collections, and promoted block bytes between major collections, in percent of the volume the last sweep left alive; default 100 (the space doubles). Lower: less garbage held, more collections, in proportion. Not a diagnostic switch: it tunes production pacing. |
+| `--gc large_budget_mb= N` | Floor (MB) of the large-object allocation between collections, and of the block bytes promoted to the elder space that ask for a major collection; default 4. It is in force only while the growth setting gives less. Not a diagnostic switch: it tunes production pacing. |
+| `--gc growth_percent= N` | Large-object allocation between collections, and promoted block bytes between major collections, in percent of the volume the last sweep left alive; default 100 (the space doubles). Lower: less garbage held, more collections, in proportion. Not a diagnostic switch: it tunes production pacing. |
 | `std::profile gc_stats=1|2` | Print the allocator's pacing statistics to stderr at exit (1), and one line per major collection (2). Also prints the occupancy of the graph, permanent and meta spaces (`[camel] spaces: ...`). |
-| `--graph-space-limit-mb N`, `--perm-space-limit-mb N`, `--meta-space-limit-mb N` | Total (MB) the graph, permanent or meta space may reserve; default 256 each. Not diagnostic switches: they bound the size of the compiled program. Reaching one is `RuntimeDiag::MemoryExhausted`. |
-| `--space-segment-kb N` | First segment (KB) of the graph, permanent and meta spaces (default 64, 32 and 16 MB). A test control: small segments make the spaces grow with small programs. |
+| `--spaces graph_mb= N`, `--spaces perm_mb= N`, `--spaces meta_mb= N` | Total (MB) the graph, permanent or meta space may reserve; default 256 each. Not diagnostic switches: they bound the size of the compiled program. Reaching one is `RuntimeDiag::MemoryExhausted`. |
+| `--spaces segment_kb= N` | First segment (KB) of the graph, permanent and meta spaces (default 64, 32 and 16 MB). A test control: small segments make the spaces grow with small programs. |
 
 GC stress is a diagnostic mode: it asks the allocator to request collections at deterministic
 allocation or safepoint intervals so missed roots, missing barriers, and relocation bugs fail
@@ -124,7 +124,7 @@ pass boundary.
 | Collection stress | `--gc-stress safepoint=1` (and `_ALLOC=N`), `--gc-stress kind=major` | a value that no root reaches: it is freed and its memory reused |
 | Moving stress | the same with `--gc generational` with `--gc-stress kind=minor` or `both`, `--gc-check verify=both` | a root that is not updated; with the default promotion age objects stop moving after four collections, so a raw pointer that is held for longer than that is not found |
 | Safepoint poisoning | `--gc-check poison` | a raw pointer kept across any safepoint: nothing is promoted by age, every safepoint moves everything young, and the old addresses read as an unmapped page until the space has been walked once. This is the mode to run a new operator or scheduler change under |
-| Tenuring stress | `--gc generational` with `--gc-promotion-age 1 --gc-stress safepoint=1 --gc-stress kind=minor --gc-check verify=both` | a missing write barrier: everything is old after one collection, and the verifier reports an old object that points at a young one without being remembered |
+| Tenuring stress | `--gc generational` with `--gc promotion_age= 1 --gc-stress safepoint=1 --gc-stress kind=minor --gc-check verify=both` | a missing write barrier: everything is old after one collection, and the verifier reports an old object that points at a young one without being remembered |
 
 The first two existed before the handle rules; they left two gaps that poisoning closes: an
 object that had been promoted no longer moved, and the address an object moved away from kept

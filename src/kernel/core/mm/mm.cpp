@@ -35,14 +35,14 @@ std::string lowerAscii(std::string value) {
 std::atomic<int> selectedCollectorMode{-1};
 std::atomic<bool> autoSpaceCreated{false};
 
-// --gc-* and --space-segment-kb: the sizing and the checks the command line chose before the
+// --gc and --spaces: the sizing and the checks the command line chose before the
 // auto space existed. A number nobody set is 0, which the sizing reads as "the default".
 AllocatorSizing selectedSizing{};
 AllocatorChecks selectedChecks{};
 std::atomic<bool> sizingSelected{false};
 std::atomic<bool> checksSelected{false};
 
-// --block-limit: what the command line chose before the block space existed (0: the default).
+// --spaces block_mb: what the command line chose before the block space existed (0: the default).
 std::atomic<size_t> selectedBlockLimitBytes{0};
 std::atomic<bool> blockSpaceCreated{false};
 
@@ -75,7 +75,7 @@ size_t largeObjectBudget() {
 }
 
 // Growth of the large-object space between two collections, in percent of what the last sweep
-// left (--gc-growth-percent).
+// left (--gc growth_percent).
 size_t largeObjectGrowthPercent() {
     const size_t percent = selectedSizing.growthPercent;
     return percent != 0 ? percent : 100;
@@ -228,12 +228,12 @@ GenerationalAllocatorWithGC &autoSpace() {
         // Safepoint poisoning is a mode of the moving collector, so it turns it on.
         const bool youngCopying = collectorMode() == CollectorMode::Generational;
         autoSpaceCreated.store(true, std::memory_order_release);
-        // The birth space (--gc-nursery-mb, default 4). Untouched pages cost nothing, so the
+        // The birth space (--gc nursery_mb, default 4). Untouched pages cost nothing, so the
         // mark-sweep collector, which does not use it, does not pay for it.
         const size_t nurseryMb = selectedSizing.nurseryMb;
         const size_t nurseryBytes =
             std::clamp<size_t>(nurseryMb != 0 ? nurseryMb : 4, 1, 1024) * MB;
-        // What counts as a large object (--gc-large-threshold-kb). Large objects get a
+        // What counts as a large object (--gc large_threshold_kb). Large objects get a
         // block of their own and never move. With mark-sweep the threshold is 4 KB. With the
         // generational collector it is 64 KB: an object born outside the birth space is old
         // from birth, and an array of a few thousand elements that dies young would keep
@@ -251,12 +251,14 @@ GenerationalAllocatorWithGC &autoSpace() {
                 .havenSize    = debug.poisonAtSafepoints ? nurseryBytes : nurseryBytes / 4,
                 .elderGenSize = 32 * MB,
                 // Minor collections an object survives before it is promoted
-                // (--gc-promotion-age, 1 to 15; 1 promotes at the first one, which is the
+                // (--gc promotion_age, 1 to 15; 1 promotes at the first one, which is the
                 // setting that shows missing write barriers).
                 .promotionAgeThreshold = std::clamp<size_t>(
-                    selectedSizing.promotionAge != 0 ? selectedSizing.promotionAge : 4, 1, 15),
+                    selectedSizing.promotionAge != 0 ? selectedSizing.promotionAge : 4,
+                    1,
+                    15),
                 .largeObjThreshold = largeThreshold,
-                // Large-object bytes between collections (--gc-large-budget-mb overrides).
+                // Large-object bytes between collections (--gc large_budget_mb overrides).
                 .largeObjCollectionBudget = largeObjectBudget(),
                 .largeObjGrowthPercent    = largeObjectGrowthPercent(),
                 .minorGCTriggerRatio      = 0.9f,
@@ -286,7 +288,7 @@ GenerationalAllocatorWithGC &autoSpace() {
 
 namespace {
 
-/// The limit of a space in bytes: what the command line chose (`--graph-space-limit-mb` and the
+/// The limit of a space in bytes: what the command line chose (`--spaces graph_mb` and the
 /// like), or the default when it chose nothing.
 struct SpaceLimit {
     size_t fromOption;    // megabytes; 0 is the default
@@ -304,7 +306,7 @@ GrowableSpaceConfig spaceConfig(
     config.name       = name;
     config.holds      = holds;
     config.limitBytes = spaceLimitMb(limit, defaultLimitBytes);
-    // --space-segment-kb sets the first segment of every growable space. It is a test
+    // --spaces segment_kb sets the first segment of every growable space. It is a test
     // control: with small segments a small program makes the spaces grow, so growth can be
     // exercised under heap verification and collection stress.
     if (const size_t kilobytes = selectedSizing.spaceSegmentKb; kilobytes != 0) {
@@ -335,7 +337,7 @@ GrowableFreeListAllocator &metaSpace() {
         "constants and function objects of the graphs being compiled",
         16 * MB,
         kDefaultMetaSpaceLimitBytes,
-        {selectedSizing.metaSpaceLimitMb, "--meta-space-limit-mb"}));
+        {selectedSizing.metaSpaceLimitMb, "--spaces meta_mb"}));
     return *allocator;
 }
 
@@ -346,7 +348,7 @@ GrowableFreeListAllocator &graphSpace() {
         "runtime graphs",
         64 * MB,
         kDefaultGraphSpaceLimitBytes,
-        {selectedSizing.graphSpaceLimitMb, "--graph-space-limit-mb"}));
+        {selectedSizing.graphSpaceLimitMb, "--spaces graph_mb"}));
     return *allocator;
 }
 
@@ -360,14 +362,14 @@ GrowableFreeListAllocator &blockSpace() {
         // process legitimately needs hundreds of megabytes, and the space gives memory back as soon
         // as the last owner goes, so its limit only has to catch a runaway allocation. Its default
         // is therefore of the same order as the collected heap, not the 256 MB of the program
-        // spaces; --block-limit raises it before the space exists.
+        // spaces; --spaces block_mb raises it before the space exists.
         const size_t selected = selectedBlockLimitBytes.load(std::memory_order_acquire);
         GrowableSpaceConfig config = spaceConfig(
             "block",
             "data blocks",
             8 * MB,
             selected != 0 ? selected : kDefaultBlockSpaceLimitBytes,
-            {0, "--block-limit"});
+            {0, "--spaces block_mb"});
         config.sizesFromHeaders = true;
         blockSpaceCreated.store(true, std::memory_order_release);
         return config;
@@ -382,7 +384,7 @@ GrowableBumpAllocator &permSpace() {
         "types and layouts",
         32 * MB,
         kDefaultPermSpaceLimitBytes,
-        {selectedSizing.permSpaceLimitMb, "--perm-space-limit-mb"}));
+        {selectedSizing.permSpaceLimitMb, "--spaces perm_mb"}));
     return *allocator;
 }
 
