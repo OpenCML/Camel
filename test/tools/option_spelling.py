@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Holds what the command line says about a space after a comma.
 
 An option that reads `key=value` words (`--gc`, `--spaces`, `--gc-stress`, `--gc-check`) is
