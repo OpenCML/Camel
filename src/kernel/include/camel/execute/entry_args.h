@@ -13,8 +13,8 @@
  *
  *   - A scheduling pass needs every parameter bound; the pass driver refuses to run an entry
  *     graph that still has ports and names them (RuntimeDiag::EntryArgumentMissing).
- *   - A translation pass decides for itself what a remaining port means (onnx::export makes it
- *     an input of the model).
+ *   - A translation pass decides for itself what a remaining port means (onnx::export_model makes
+ * it an input of the model).
  *
  * How the text of a value is read depends on the declared type of the parameter:
  *   int / i32 / float / f32 /    the literal itself (`3`, `0.5`, `true`, any text), read at the

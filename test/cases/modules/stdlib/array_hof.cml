@@ -51,7 +51,7 @@ func main() => int sync {
     println(xs->flat_map<func (x: int) {
         [x, x * 10]
     }>->len, [1, 2, 3]->flat_map<func (x: int) {
-        0 .. x
+        to_array(0 .. x)
     }>)
     println(words->flat_map<func (w: string) {
         [w, to_lower(w)]

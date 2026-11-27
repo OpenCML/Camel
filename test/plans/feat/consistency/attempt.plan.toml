@@ -124,7 +124,7 @@ desc = "Under std::jit the straight-line callee is compiled as frameless code, a
 kind = "behavior"
 backends = false
 case = "../../../cases/consistency/attempt/compiled.cml"
-args = ["--gc-check", "poison", "--gc", "mark-sweep", "-vv", "${case}", "std::jit"]
+args = ["--gc-check", "poison", "--gc", "kind=mark-sweep", "-vv", "${case}", "std::jit"]
 expect_output_contains = ["compiled & cached graph 'quot' as frameless code", "compiled & cached graph 'depth' as frameless code"]
 
 [[tests]]
@@ -470,11 +470,11 @@ tier = "slow"
 
 [[tests]]
 name = "attempt.refuse.onnx"
-desc = "onnx::export refuses the operator, at the `attempt`, and names it."
+desc = "onnx::export_model refuses the operator, at the `attempt`, and names it."
 kind = "negative"
 backends = false
 case = "../../../cases/consistency/attempt/refuse_translate.cml"
-args = ["${case}", 'onnx::export out="${test_tmp}/attempt_refused.onnx"', "std::nop"]
+args = ["${case}", 'onnx::export_model out="${test_tmp}/attempt_refused.onnx"', "std::nop"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_line = 10

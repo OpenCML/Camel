@@ -333,12 +333,12 @@ A program is processed by the sequence of passes on the command line: `camel fil
 | `std::opt`, `std::cxx::inline`, `std::cxx::fold`, `std::cxx::cse`, `std::cxx::dce`, `std::opt` | Optimisation |
 | `std::rgir`, `std::gir` | Print the graph (DOT format) without running it |
 | `std::stats` | Prints statistics of the graph and passes the graph on unchanged |
-| `onnx::export`, `std::cpp` | Translate to an ONNX model, to C++ source |
+| `onnx::export_model`, `std::cpp` | Translate to an ONNX model, to C++ source |
 
 - **The language does not restrict the order of passes, and the order can affect the result.** Passes modify the graph and may have side effects; "the same behaviour under any sequence of passes" is not a property of the language.
 - A scheduling pass executes the program and answers with the residual graph or an empty one; passes written after one that answered with an empty graph do not run (there is a warning `RuntimeDiag::PassesNeverRun`). A rewriting pass and a translation pass both hand a graph on, so the passes after them still run. `std::nop` is the scheduling pass that produces no effect. When the graph is still there after the passes written, the default pass runs next.
 - The source-level rules (`var`/`let`, `sync`) constrain how the compiler builds the graph; once the graph has been obtained, these rules no longer constrain later passes. The optimisation passes of the standard library aim not to change the result of the program; this is a quality requirement on those passes, ensured by tests.
-- When a pass of some module (such as `onnx::export`) is written on the command line, the compiler loads that module automatically.
+- When a pass of some module (such as `onnx::export_model`) is written on the command line, the compiler loads that module automatically.
 
 ## 4.8 Order in higher-order operators
 

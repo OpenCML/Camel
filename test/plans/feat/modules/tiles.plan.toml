@@ -7,7 +7,7 @@ tags = ["feat", "modules", "tiles"]
 name = "compiled_region_fresh_inputs"
 kind = "behavior"
 case = "../../../cases/modules/tiles/compiled_region.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--devices", "cpu", "--gc", "generational", "${case}", "tiles::test_outline_compiled", "${backend}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--devices", "cpu", "--gc", "kind=generational", "${case}", "tiles::test_outline_compiled", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 2\n[4.0, 16.0, 36.0]\n[2.0, 4.0, 6.0]\n[8.0, 10.0, 12.0]\n[64.0, 100.0, 144.0]\n[4.0, 16.0, 36.0]\n"
@@ -37,7 +37,7 @@ timeout_ms = 180000
 name = "compiled_region_tuple_and_embedded_axis"
 kind = "behavior"
 case = "../../../cases/modules/tiles/region_execution.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--devices", "cpu", "--gc", "generational", "${case}", "tiles::test_outline_compiled", "${backend}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--devices", "cpu", "--gc", "kind=generational", "${case}", "tiles::test_outline_compiled", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 5\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
@@ -47,7 +47,7 @@ timeout_ms = 180000
 name = "compiled_region_parallel"
 kind = "behavior"
 case = "../../../cases/modules/tiles/native_parallel.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--devices", "cpu", "--gc", "generational", "${case}", "tiles::test_outline_compiled", "std::prl bytecode=false"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--devices", "cpu", "--gc", "kind=generational", "${case}", "tiles::test_outline_compiled", "std::prl bytecode=false"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 2\n23296.0\n"
 timeout_ms = 180000
@@ -391,7 +391,7 @@ timeout_ms = 10000
 name = "host_resident_region_execution"
 kind = "behavior"
 case = "../../../cases/modules/tiles/region_execution.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "generational", "${case}", "tiles::test_outline_host_resident", "${backend}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "tiles::test_outline_host_resident", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
@@ -402,7 +402,7 @@ timeout_ms = 180000
 name = "outlined_region_execution"
 kind = "behavior"
 case = "../../../cases/modules/tiles/region_execution.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "generational", "${case}", "tiles::test_outline", "${backend}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "tiles::test_outline", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 5\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
@@ -412,7 +412,7 @@ timeout_ms = 10000
 name = "native_region_invocation"
 kind = "behavior"
 case = "../../../cases/modules/tiles/region_execution.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "generational", "${case}", "tiles::test_outline_native", "${backend}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "tiles::test_outline_native", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 5\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
@@ -422,7 +422,7 @@ timeout_ms = 10000
 name = "native_region_invocation.jit_hot"
 kind = "behavior"
 case = "../../../cases/modules/tiles/region_execution.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "generational", "${case}", "tiles::test_outline_native", "std::jit hot_threshold=0"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "tiles::test_outline_native", "std::jit hot_threshold=0"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 5\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 10000
@@ -431,7 +431,7 @@ timeout_ms = 10000
 name = "host_resident_parallel"
 kind = "behavior"
 case = "../../../cases/modules/tiles/native_parallel.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "generational", "${case}", "tiles::test_outline_host_resident", "std::prl bytecode=false"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "tiles::test_outline_host_resident", "std::prl bytecode=false"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 2\n23296.0\n"
@@ -441,7 +441,7 @@ timeout_ms = 10000
 name = "native_parallel"
 kind = "behavior"
 case = "../../../cases/modules/tiles/native_parallel.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "generational", "${case}", "tiles::test_outline_native", "std::prl"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "tiles::test_outline_native", "std::prl"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 2\n23296.0\n"
 timeout_ms = 10000
@@ -450,7 +450,7 @@ timeout_ms = 10000
 name = "native_parallel.scheduler"
 kind = "behavior"
 case = "../../../cases/modules/tiles/native_parallel.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "generational", "${case}", "tiles::test_outline_native", "std::prl bytecode=false"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "tiles::test_outline_native", "std::prl bytecode=false"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 2\n23296.0\n"
 timeout_ms = 10000
@@ -459,7 +459,7 @@ timeout_ms = 10000
 name = "native_parallel.linear"
 kind = "behavior"
 case = "../../../cases/modules/tiles/native_parallel.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "generational", "${case}", "tiles::test_outline_native", "std::prl linear=true"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "tiles::test_outline_native", "std::prl linear=true"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 2\n23296.0\n"
 timeout_ms = 10000
@@ -468,7 +468,7 @@ timeout_ms = 10000
 name = "gpu_preference.no_device"
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_fallback.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "generational", "${case}", "${backend}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit_hot_threshold0", "prl"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
@@ -788,7 +788,7 @@ timeout_ms = 30000
 name = "preferred_resident_execution"
 kind = "behavior"
 case = "../../../cases/modules/tiles/region_execution.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "generational", "${case}", "tiles::test_outline_preferred", "${backend}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "tiles::test_outline_preferred", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
@@ -799,7 +799,7 @@ timeout_ms = 180000
 name = "public_region_pass"
 kind = "behavior"
 case = "../../../cases/modules/tiles/public_pass.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "generational", "${case}", "tiles::compile", "${backend}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "tiles::compile", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
@@ -1114,7 +1114,7 @@ name = "gpu_scope.write_outside_a_sync_block_runs_and_is_not_warned"
 desc = "A write to a resource outside the program is used by the region it is written in (design principles 3.1): a `println` written in a `#gpu` function body that is not a sync block runs, and nothing is reported for it -- the warning that named a statement which does not run went with the region roots. What stays demand-driven is a read. The reading belongs to the program and not to the device, so it holds whether the scope is cut into segments or not -- this entry is the run without `tiles::compile`, and it is red when the print stops running or when a warning is reported for it. The one diagnostic the program does report is the tag's, which the run without the pass carries."
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_scope_unused_effect.cml"
-args = ["--output-format", "json", "${case}", "std::nvm"]
+args = ["--diag-format", "json", "${case}", "std::nvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -1132,7 +1132,7 @@ name = "gpu_scope.write_outside_a_sync_block_runs_through_the_pass"
 desc = "The same program through `tiles::compile` (`--devices cpu`, so no transfer is written): the scope is cut into segments, the statements of a segment become a call, and the write written outside a sync block still runs and is still not reported at all. A segment's replaced statements hand their orderings to the call that replaces them; that handover keeps the program's order, and the write's own region is what runs it. Red when the pass stops running the write, when it starts reporting it, or when it changes the program's line."
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_scope_unused_effect.cml"
-args = ["--devices", "cpu", "--output-format", "json", "${case}", "tiles::compile", "std::nvm"]
+args = ["--devices", "cpu", "--diag-format", "json", "${case}", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
 verify_script = """

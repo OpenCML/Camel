@@ -19,7 +19,7 @@ func main() => int sync {
     
     seed(s)
     'Generating {} shuffled integers...'->format<n>->println
-    let arr = (0 .. n)->shuffle<next_key()>
+    let arr = to_array(0 .. n)->shuffle<next_key()>
     
     'Sorting {} independent blocks with {} items each...'->format<blocks, block_size>->println
     let start = now()

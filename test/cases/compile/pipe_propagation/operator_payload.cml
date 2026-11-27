@@ -1,0 +1,14 @@
+// A built-in operator is an overload set like any other, so the pipe asks it with the value as
+// it is first and takes the value apart only when none takes it (design principles 3.9). `len`
+// declares `(x: Bytes)`; `Bytes!` is not a `Bytes`, and `len::<A>` whose `when` is
+// `is_array::<A>()` does not hold for `Bytes!`, so none takes the wrapped value: the pipe peels
+// the failure and calls the `Bytes` declaration, and the result is an `int!` that carries the
+// error of the value it came from.
+func missing() => Bytes! {
+    return error('Missing', 'the file is not there')
+}
+
+func main() => int sync {
+    println(missing()->len !! -1)
+    return 0
+}

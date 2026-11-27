@@ -164,8 +164,8 @@ slot_t __enum_field__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return value->get(index);
 }
 
-const std::vector<oper_group_ptr_t> &getEnumOperatorGroups() {
-    static const std::vector<oper_group_ptr_t> groups = {
+std::vector<oper_group_ptr_t> getEnumOperatorGroups() {
+    const std::vector<oper_group_ptr_t> groups = {
         OperatorGroup::create(
             "__enum_make__",
             {{":enum/make",

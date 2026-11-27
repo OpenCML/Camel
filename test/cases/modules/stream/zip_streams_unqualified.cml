@@ -1,0 +1,12 @@
+/// `zip` is a name two layers declare: `stream`'s takes two streams, and the prelude's takes
+/// arrays `when ...is_array::<A>()`. This program imports the module's and calls it with two
+/// streams, so the prelude's condition is false for these arguments: a declaration whose `when`
+/// does not hold is not one of the call's overloads (design principles 4.4), and the name is the
+/// module's (10.2). The call is the one `stream`'s example writes.
+import { zip, from_array, collect } from stream
+
+func main() => int sync {
+    let pairs = zip(from_array([1, 2]), from_array(['a', 'b', 'c']))->collect
+    println(pairs)
+    return 0
+}

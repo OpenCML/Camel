@@ -764,8 +764,8 @@ module_ptr_t GlobalsBuiltinModule::create(context_ptr_t ctx) {
     return std::make_shared<GlobalsBuiltinModule>(ctx);
 }
 
-const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
-    static const std::vector<oper_group_ptr_t> groups = {
+std::vector<oper_group_ptr_t> getGlobalOperatorGroups() {
+    const std::vector<oper_group_ptr_t> groups = {
         // ======= Type conversions =======
         // The rules of `i32` are the declarations of stdlib/prelude.cml.
         OperatorGroup::create("i32", {}),
@@ -803,8 +803,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(x: T) => string",
-                        [](const type_vec_t &, const type_vec_t &norm)
-                            -> optional<Type *> {
+                        [](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
                             if (!isConcreteValueType(norm[0])) {
                                 return nullopt;
                             }
@@ -824,8 +823,9 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(value: T) => var T",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> { return TupleType::cell(norm[0]->widened()); }),
+                        [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
+                            return TupleType::cell(norm[0]->widened());
+                        }),
                 },
             }),
         OperatorGroup::create(
@@ -856,8 +856,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(variable: var T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
+                        [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
                             if (valueTypeOf(norm[0]) == norm[0]) {
                                 return nullopt; // not a variable
                             }
@@ -867,11 +866,14 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             }),
 
         // The cell a call wrote, taken after the call (Builder::valueVersionOf): the version a
-        // read takes when the call that wrote the variable is a call through a function value, whose
+        // read takes when the call that wrote the variable is a call through a function value,
+        // whose
         // captured writes are known at run time and not here. The second argument is that call; it
         // may be any value, `void` included, because this operator reads nothing of it -- the edge
-        // is the whole of what it asks -- and the result is the cell itself, so the read above it is
-        // a read of the variable as it stands after the call (docs/design-principles.cn.md 3.1, 3.5).
+        // is the whole of what it asks -- and the result is the cell itself, so the read above it
+        // is
+        // a read of the variable as it stands after the call
+        // (docs/design-principles.cn.md 3.1, 3.5).
         OperatorGroup::create(
             "__var_after__",
             {
@@ -880,8 +882,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "(variable: var T, after: any) => var T",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
+                        [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
                             (void)with;
                             // The second argument is the call, and this operator reads nothing of
                             // it: any value it has (a `void` call, or one that returns something
@@ -906,8 +907,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(variable: var T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
+                        [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
                             if (valueTypeOf(norm[0]) == norm[0]) {
                                 return nullopt; // not a variable
                             }
@@ -927,8 +927,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {true}}},
                         "(var variable: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
+                        [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
                             return norm[0];
@@ -943,8 +942,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {true, false}}},
                         "(var self: T[], value: T[]) => var T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
+                        [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array || !norm[0]->equals(norm[1]))
                                 return nullopt;
                             return TupleType::cell(norm[0]);
@@ -1005,8 +1003,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {true, false}}},
                         "(var self: T, other: T) => var T",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
+                        [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
                             // The target keeps its declared type; the value only has to fit it.
                             if (!norm[0]->assignableFrom(norm[1])) {
                                 return nullopt;
@@ -1423,8 +1420,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "(a: T, b: T) => bool, T an array, tuple or struct of comparable parts",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
+                        [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
                             // By content (design principles 4.2): both sides of one type,
                             // an array, a tuple or a struct, every part of which is itself
                             // comparable (no function value). A primitive has its own entry above,
@@ -1462,8 +1458,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "(a: T, b: T) => bool, T an array, tuple or struct of comparable parts",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
+                        [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
                             // By content (design principles 4.2): both sides of one type,
                             // an array, a tuple or a struct, every part of which is itself
                             // comparable (no function value). A primitive has its own entry above,
@@ -1960,7 +1955,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             {
                 {
                     ":op/idx_arr",
-// `t[i]` (design principles 5.4): the position the second word names on the
+                    // `t[i]` (design principles 5.4): the position the second word names on the
                     // dimension the third word names, 0 -- the first dimension -- when the call
                     // writes no third word. A position drops that dimension, so the result is
                     // the value's type one dimension fewer (indexPositionResultType).
@@ -1976,14 +1971,15 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             DynamicFuncTypeResolver::create(
                                 {{0, {}}, {-1, {}}},
                                 "(arr: T[], index: int, axis: int) => T",
-                                [](const type_vec_t &with, const type_vec_t &norm)
-                                    -> optional<Type *> {
+                                [](const type_vec_t &with,
+                                   const type_vec_t &norm) -> optional<Type *> {
                                     (void)with;
                                     // A caller that holds no constants: the axis is the run's,
                                     // and only the rank and the element type are the call's own.
                                     return indexPositionResultType(norm, {});
                                 }),
-                            [](const type_vec_t &with, const type_vec_t &norm,
+                            [](const type_vec_t &with,
+                               const type_vec_t &norm,
                                static_args_t statics) -> optional<Type *> {
                                 (void)with;
                                 return indexPositionResultType(norm, statics);
@@ -1992,7 +1988,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
                 {
                     ":op/idx_take",
-// `t[idx]` with an int array takes the positions the indices name, in that
+                    // `t[idx]` with an int array takes the positions the indices name, in that
                     // order, along the dimension the third word names, 0 -- the first dimension
                     // -- when the call writes no third word (design principles 5.4; the `take`
                     // its function form names). Its length on that dimension is the length the
@@ -2005,8 +2001,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         DynamicFuncTypeResolver::create(
                             {{0, {}}, {-1, {}}},
                             "(arr: T[], indices: int[], axis: int) => T[]",
-                            [](const type_vec_t &with, const type_vec_t &norm)
-                                -> optional<Type *> {
+                            [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
                                 (void)with;
                                 // A caller that holds no constants: the axis is the run's, and
                                 // only the rank, the element type and the number of positions
@@ -2024,8 +2019,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "(str: string, index: int) => string",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
+                        [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::String ||
                                 norm[1]->code() != TypeCode::Int64)
                                 return nullopt;
@@ -2107,7 +2101,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
         // The rules of `len` are the declarations of stdlib/prelude.cml.
         OperatorGroup::create("len", {}),
         // `extent_of::<A>()`: the extents an array type writes down, as an `int[]`
-        // (`float[2, 3]` -> `[2, 3]`). A fact of the type argument and of nothing else, which is why
+        // (`float[2, 3]` -> `[2, 3]`). A fact of the type argument and of nothing else, which is
+        // why
         // a type that leaves an extent open is refused where the call is instantiated rather than
         // answered from a value: `float[]` states one dimension and no length, and `float[..]`
         // states neither the rank nor a length. The rule is
@@ -2123,7 +2118,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     extentOfResolver(),
                 },
             }),
-// `copy::<T>(x: T): T`, a second name of a mutable value (plan 2.3, steps 1 and 2). The
+        // `copy::<T>(x: T): T`, a second name of a mutable value (plan 2.3, steps 1 and 2). The
         // group is empty on purpose and its rule is the declaration of `lib/std/prelude.cml`, the
         // way `len` and `zip` are declared there: the signature is the declaration's own, one
         // overload for every type, and the operator's kernel is `operators/copy.cpp`.
@@ -2131,11 +2126,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
         // The other three shapes of plan 2.3, declared the same way and for the same reason. Their
         // compile-time parameters are the node's own -- a conversion's target is the call's result
         // type, a construction's kind is the type it makes and its field order is the call's, and a
-        // member read's position or name is the operator's `with` argument -- so a record keyed by URI
+        // member read's position or name is the operator's `with` argument -- so a record keyed by
+        // URI
         // carries them after all, as the `with` arguments of the call rather than as payload. Their
         // kernels are `operators/cast.cpp` (conversion) and `operators/struct.cpp` (construction,
         // access).
-        // The names are the URI's own tail, which is the name `camel inspect --ops` reports for them
+        // The names are the URI's own tail, which is the name `camel inspect --ops` reports for
+        // them
         // (`copy` / `:op/copy`) and what `--verify-ops` compares a declaration with.
         OperatorGroup::create("cast", {}),
         // Entering (design principles 5.1, "entering is not a conversion"): declared in the same
@@ -2169,8 +2166,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "<> (s: string) => string[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
+                        [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
                             if (!with.empty() || norm.size() != 1 ||
                                 norm[0]->code() != TypeCode::String) {
                                 return nullopt;
@@ -2232,7 +2228,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                     // the run's, and only the rank and the element type are known.
                                     return coreSliceSubscriptResultType(norm, {});
                                 }),
-                            [](const type_vec_t &, const type_vec_t &norm, static_args_t statics) -> optional<Type *> {
+                            [](const type_vec_t &, const type_vec_t &norm, static_args_t statics)
+                                -> optional<Type *> {
                                 return coreSliceSubscriptResultType(norm, statics);
                             }),
                         staticSliceRejection),
@@ -2262,8 +2259,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(arr: T[]) => T[]",
-                        [](const type_vec_t &, const type_vec_t &norm)
-                            -> optional<Type *> {
+                        [](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
                             return norm[0];
@@ -2284,8 +2280,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {1, {false}}},
                         "<value: T> (xs: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
+                        [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
                             const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
@@ -2323,8 +2318,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "(lhs: (arg1: T1, arg2: T2, ...) => R, rhs: (arg: R) => U) => U",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
+                        [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Function)
                                 return nullopt;
                             if (norm[1]->code() != TypeCode::Function)
@@ -2357,8 +2351,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {5, {false, false, false, false, false}}},
                         "(hint: int, cap: int, elements: int, peak: int, s: T..) => void",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
+                        [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
                             if (norm.size() != 5) {
                                 return nullopt;
                             }
@@ -2387,9 +2380,14 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
     std::call_once(derivativesRegistered, [] { registerBuiltinDerivatives(); });
     // The operators over Map and Set (design principles 11.3). Those named like a group of
     // this module (`len`, `contains`, `__idx__`, `__eq__`, `__neq__`) are further overloads
-    // of it: one group is exported per name, the existing overloads first.
-    std::vector<oper_group_ptr_t> collectionGroups = getCollectionOperatorGroups();
-    for (const auto &group : getGlobalOperatorGroups()) {
+    // of it: one group is exported per name, the existing overloads first. The groups are this
+    // context's own: a group carries the signatures the declarations of this context wrote, so it
+    // cannot be a group another context built -- one made once per process would keep the first
+    // context's types and hand them to the next context, and the rule would then name a nominal
+    // type no module of that context declared.
+    const std::vector<oper_group_ptr_t> globalGroups = getGlobalOperatorGroups();
+    std::vector<oper_group_ptr_t> collectionGroups   = getCollectionOperatorGroups();
+    for (const auto &group : globalGroups) {
         const auto extra = std::find_if(
             collectionGroups.begin(),
             collectionGroups.end(),
@@ -2422,7 +2420,7 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
     for (const auto &[strict, whole] :
          {std::pair<const char *, const char *>{"__strict_eq__", "__eq__"},
           std::pair<const char *, const char *>{"__strict_neq__", "__neq__"}}) {
-        const auto &groups = getGlobalOperatorGroups();
+        const auto &groups = globalGroups;
         const auto from    = std::find_if(groups.begin(), groups.end(), [&](const auto &group) {
             return group->name() == whole;
         });

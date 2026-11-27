@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Export of a function whose state is a `var` handed to a called function, checked on ONNX Runtime.
 
-The model is exported twice (by the operator in a default run, and by the pass onnx::export after
+The model is exported twice (by the operator in a default run, and by the pass onnx::export_model after
 std::macro std::opt); each file must pass onnx.checker and give tanh(x)*2 and s+tanh(x)
 for two inputs. A change of the inliner once made the exporter refuse this program."""
 import os
@@ -42,13 +42,13 @@ def main() -> int:
         env = dict(os.environ, CAMEL_HOME=str(HOME))
         for label, passes, var in [
             ("operator", [], "EXPORT_VAR_PARAMETER_OUT"),
-            ("pass", ["std::macro", "std::opt", "onnx::export"], "EXPORT_VAR_PARAMETER_OUT"),
+            ("pass", ["std::macro", "std::opt", "onnx::export_model"], "EXPORT_VAR_PARAMETER_OUT"),
         ]:
             out = Path(tmp) / f"{label}.onnx"
             run_env = dict(env, EXPORT_VAR_PARAMETER_OUT=str(Path(tmp) / "unused.onnx"))
             run_env[var] = str(out)
             # The pass names the file by its parameter; the operator's program reads the variable.
-            passes = [f'onnx::export out="{out.as_posix()}"' if p == "onnx::export" else p for p in passes]
+            passes = [f'onnx::export_model out="{out.as_posix()}"' if p == "onnx::export_model" else p for p in passes]
             proc = subprocess.run([str(CAMEL), str(CASE), *passes], env=run_env, capture_output=True, text=True, timeout=120)
             if proc.returncode != 0 or not out.exists():
                 print(f"{label}: export failed ({proc.returncode}): {proc.stdout.strip()[:400]} {proc.stderr.strip()[:400]}")

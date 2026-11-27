@@ -21,7 +21,7 @@ Outcomes of a cell:
                      with passes, which cannot be)
   NOT_RUN            not run because MAX_CRASHES cells of the program had already crashed
 
-Reused from benchmarks/pipeline: how camel is invoked (`--output-format json`) and how its
+Reused from benchmarks/pipeline: how camel is invoked (`--diag-format json`) and how its
 diagnostics array is split from the program's own output (run.split_diagnostics), what counts
 as a located diagnostic (classify.located, classify.errors_of), and the fixed and frozen random
 pipeline sets (pipelines.FIXED, pipelines.random_pipelines) for `--matrix frozen`. That
@@ -126,7 +126,7 @@ def run_cell(source_path: Path, passes: List[str], env_values: dict, expected: L
     env = dict(os.environ)
     env.setdefault("CAMEL_HOME", str(Path(exe).resolve().parents[1]))
     env.update(env_values)
-    cmd = [exe, "--output-format", "json", source_path.name, *passes]
+    cmd = [exe, "--diag-format", "json", source_path.name, *passes]
     try:
         proc = subprocess.run(cmd, cwd=source_path.parent, env=env, stdin=subprocess.DEVNULL,
                               capture_output=True, timeout=timeout)

@@ -7,7 +7,7 @@
 The command
 
     camel --timeit std::nvm/5 test/cases/perf/gc/alloc_small.cml --arg reps=200000 \
-          --output-format json
+          --diag-format json
 
 was seen to end in an access violation (`0xC0000005`, exit code 3221225477) twice in about thirty
 `--timeit` calls of the performance baseline (section 6). The same
@@ -22,12 +22,12 @@ number of iterations that were run is printed too, so a rate can be given for ei
 
     python3 test/tools/timeitloop/timeitloop.py                    # until the first failure
     python3 test/tools/timeitloop/timeitloop.py --runs 500 --count # the rate over 500 processes
-    python3 test/tools/timeitloop/timeitloop.py --runs 100 --gc both --jobs 8
+    python3 test/tools/timeitloop/timeitloop.py --runs 100 --gc kind=both --jobs 8
 
 The command is run the way `test/tools/perfbaseline/baseline.py` runs it: with stdout and stderr
 as pipes, from the repository root, with the binary at `out/latest/bin/camel`. Nothing about the
 process or its environment is special; `--gc` passes `--gc` to the child, as `gcbench.py` does,
-and with `--gc both` the two collectors alternate from one process to the next (mark-sweep,
+and with `--gc kind=both` the two collectors alternate from one process to the next (mark-sweep,
 generational, ...) so that both see the same drift of a machine that is busy with other work.
 
 The `perf.gc.timeit_cycles` tests of `test/plans/perf/gc.plan.toml` run the same loop inside the
@@ -104,7 +104,7 @@ def main():
         options.case,
         "--arg",
         options.arg,
-        "--output-format",
+        "--diag-format",
         "json",
     ]
     command = os.path.basename(binary) + " " + " ".join(args)

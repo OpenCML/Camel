@@ -59,7 +59,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "cli.plan_arg_domain_refused"
-desc = "A plan naming a run option value the CLI does not take (`--gc-check verify=1`) is refused at load with a [PLAN ERROR] naming plan:line, the test and the legal values, and the run starts nothing; a legal compound value (`alloc=3,safepoint=1,kind=major`, `poison,verify=both`, `--gc mark-sweep`) and a pass parameter (`std::opt safe_fp=true`) are still accepted."
+desc = "A plan naming a run option value the CLI does not take (`--gc-check verify=1`) is refused at load with a [PLAN ERROR] naming plan:line, the test and the legal values, and the run starts nothing; a legal compound value (`alloc=3,safepoint=1,kind=major`, `poison,verify=both`, `--gc kind=mark-sweep`) and a pass parameter (`std::opt safe_fp=true`) are still accepted."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/tools/cli/arg_domain_refused.mjs"

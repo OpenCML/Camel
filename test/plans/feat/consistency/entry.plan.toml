@@ -103,7 +103,7 @@ assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.s
 name = "entry.error_from_operator"
 desc = "An error made by an operator has no position: the report is located at main and says which operator made it (rich text format)."
 case = "../../../cases/consistency/entry/error_from_operator.cml"
-args = ["--error-format", "text", "--color", "never", "${case}", "${backend}"]
+args = ["--diag-format", "text", "--color", "never", "${case}", "${backend}"]
 backends_agree = ["exit_code", "stdout_normalized", "stderr_normalized"]
 expect_exit = 1
 expect_stderr_contains = ["error[RuntimeDiag::UnhandledError]: An error value reached the exit of 'main' without being handled: ParseError: '12abc' is not an integer.", "error_from_operator.cml:6:1", "note: the error was made by <parse_int>, which records no position"]
@@ -113,9 +113,9 @@ assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.s
 
 [[tests]]
 name = "entry.error_json"
-desc = "--error-format json: the unhandled error is one JSON array on standard error, with the 0-based position of the error."
+desc = "--diag-format json: the unhandled error is one JSON array on standard error, with the 0-based position of the error."
 case = "../../../cases/consistency/entry/error_thrown.cml"
-args = ["--error-format", "json", "${case}", "${backend}"]
+args = ["--diag-format", "json", "${case}", "${backend}"]
 backends_agree = ["exit_code", "stdout_normalized", "stderr_normalized"]
 expect_exit = 1
 verify_script = """

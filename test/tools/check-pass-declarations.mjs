@@ -25,12 +25,12 @@
  *     one level up, over the modules themselves, with each side asserted non-empty for the same
  *     reason: a module that contributes no pass (`ckpt` registers operators and resources only)
  *     declares none, and that is the bijection's empty case, not a module to skip;
- *   * every alias resolves: a core alias names a declared pass, and a module alias names a pass
- *     the same module registered;
+ *   * every alias resolves: a core alias names a declared pass, and resolution tries the written
+ *     name first, so an alias never shadows a declaration;
  *   * every C++ parameter list left is a test-only pass or the Camel pass whose declaration is
  *     its own `with` list; the list is pinned, so a new one cannot appear quietly.
  *
- *   node test/tools/check-pass-declarations.mjs           check the declarations, kernels and aliases
+ *   node test/tools/check-pass-declarations.mjs           check the declarations and kernels
  *   node test/tools/check-pass-declarations.mjs --names   print the declared pass names, one per
  *                                                         line, and decide nothing
  */
@@ -373,7 +373,6 @@ for (const entry of fs.readdirSync(LIBRARY)) {
 // Every alias resolves, and every registration is declared.
 let aliasCount = 0
 const registrations = new Set()
-const aliases = []
 for (const root of SOURCE_ROOTS) {
     for (const file of files(path.join(REPO_ROOT, root))) {
         if (!file.endsWith('.cpp')) {
@@ -400,17 +399,6 @@ for (const root of SOURCE_ROOTS) {
             }
             registrations.add(value)
         }
-        for (const match of text.matchAll(
-            /registerPassAlias\(\s*"([^"]+)"\s*,\s*([A-Za-z_][A-Za-z0-9_]*|"[^"]+")\s*\)/g
-        )) {
-            let target = match[2]
-            if (target.startsWith('"')) {
-                target = target.slice(1, -1)
-            } else if (constants.has(target)) {
-                target = constants.get(target)
-            }
-            aliases.push({ relative, alias: match[1], target })
-        }
     }
 }
 const corePaths = new Set(implementations.map((name) => `std::${name}`))
@@ -434,16 +422,15 @@ const corePaths = new Set(implementations.map((name) => `std::${name}`))
         }
     }
 }
-const knownPasses = new Set([...corePaths, ...registrations])
-for (const { relative, alias, target } of aliases) {
-    aliasCount += 1
-    if (!knownPasses.has(target)) {
-        problems.push(`${relative}: the alias '${alias}' names '${target}', which is no pass`)
-    }
-}
 // Test-only passes are registered by the module but declared nowhere: they exist to be named by
-// a test's pipeline and are not part of a module's language surface.
+// a test's pipeline and are not part of a module's language surface. A test pass's name need not
+// begin with `test_` -- `tensor::echo` is the parameter echo of the pipeline tests -- so the ones
+// whose name does not say so are named here once, where the guard asks.
+const TEST_ONLY_PASSES = new Set(['tensor::echo'])
 const isTestOnly = (path) => {
+    if (TEST_ONLY_PASSES.has(path)) {
+        return true
+    }
     const separator = path.indexOf('::')
     const funcName = path.slice(separator + 2)
     return path.slice(0, separator) === 'test' || funcName.startsWith('test_')
@@ -539,7 +526,7 @@ for (const path of moduleDeclarations) {
 // passes, and the Camel pass whose declaration is its own `with` list. A built-in pass's
 // parameters are its module's `.cml` declaration.
 const CPP_PARAMETERS = new Map([
-    ['src/stdlib/tensor/passes/fuse.cpp', 4], // tensor::test_echo, test-only
+    ['src/stdlib/tensor/passes/fuse.cpp', 4], // tensor::echo, test-only
     ['src/stdlib/test/params.cpp', 5], // test::params, test-only
     // Not a second declaration: built from the Camel function's `with` list, which is the
     // pass's declaration.

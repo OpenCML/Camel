@@ -52,10 +52,10 @@
 #   build     take tokens for a build (`CAMEL_BUILD_TOKENS`, default 8), then run the command
 #   status    print the pool as it is now
 #   self-test check the plan admission against a pool of its own (needs `flock` and `/proc/locks`)
-#   install   idempotent: put this script at its installed path and record
-#             `<version> <sha256 of these bytes>` beside it, print `installed <version> (<digest>) at
-#             <time>`. It refuses a checkout with uncommitted changes to this file: the version would
-#             name bytes the commit does not contain.
+#   install   idempotent: put this script and the pool's taker (`host-tokens.sh`) in the install
+#             directory and record `<version> <sha256 of this script> <sha256 of the taker>` beside
+#             them, print `installed <version> (...) at <time>`. It refuses a checkout with uncommitted
+#             changes to either file: the version would name bytes the commit does not contain.
 #
 # Usage from a generated run.sh:
 #   CAMEL_JOBS=16 "${CAMEL_RUN:=<home>/camel-work/bin/camel-run}" plan --lane "$name" --branch "$branch" -- \
@@ -85,6 +85,20 @@ digest_of() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1; }
 
 self_sha() { sha_of; }
 
+# The taker of the same version as this script. A checkout keeps it at `internal/tools/host-tokens.sh`,
+# one directory above this file; an install keeps it beside the installed copy, because `install`
+# copies the two together and records both. Which layout this is follows from the same question
+# `version_check` asks: git can name a checkout's version and cannot name an install's.
+taker_path() {
+    local dir
+    dir=$(dirname "$SELF")
+    if [ -n "$(sha_of)" ]; then
+        printf '%s/../host-tokens.sh' "$dir"
+    else
+        printf '%s/host-tokens.sh' "$dir"
+    fi
+}
+
 # What version these bytes are, said only when it can be said truthfully; `VERSION` is the one name
 # every message uses afterwards.
 #
@@ -96,7 +110,7 @@ self_sha() { sha_of; }
 # digest is the digest the record was written for. A disagreement exits with both digests, because
 # "install did not keep up" is the finding, and "unknown version" would hide it.
 version_check() {
-    local dir have recorded want mine
+    local dir have recorded want want_taker mine mine_taker taker
     VERSION=''
     dir=$(dirname "$SELF")
     have=$(sha_of)
@@ -109,12 +123,21 @@ version_check() {
     fi
     recorded=$(awk 'NR == 1 { print $1 }' "$VERSION_FILE" 2>/dev/null)
     want=$(awk 'NR == 1 { print $2 }' "$VERSION_FILE" 2>/dev/null)
+    want_taker=$(awk 'NR == 1 { print $3 }' "$VERSION_FILE" 2>/dev/null)
     mine=$(digest_of "$SELF")
-    if [ -z "$recorded" ] || [ -z "$want" ] || [ -z "$mine" ]; then
-        die "the install record $VERSION_FILE cannot name these bytes: it holds '${recorded:-}' '${want:-}' and $SELF has no digest of its own. Reinstall with a version that writes both (camel-run.sh install)"
+    taker=$(taker_path)
+    mine_taker=$(digest_of "$taker")
+    if [ -z "$recorded" ] || [ -z "$want" ] || [ -z "$want_taker" ] || [ -z "$mine" ]; then
+        die "the install record $VERSION_FILE cannot name these bytes: it holds '${recorded:-}' '${want:-}' '${want_taker:-}' and $SELF has no digest of its own. Reinstall with a version that records this script and its taker (camel-run.sh install)"
     fi
     if [ "$mine" != "$want" ]; then
-        die "install did not keep up: $VERSION_FILE says $recorded, written for bytes $want, but $SELF is $mine. Reinstall from that checkout (camel-run.sh install); these bytes have no version until then, and a run will not take a slot on a version nobody can name"
+        die "install did not keep up: $VERSION_FILE says $recorded, written for bytes $want, but $SELF is $mine. Reinstall from that checkout (camel-run.sh install); these bytes have no version until then, and a run will not take a token on a version nobody can name"
+    fi
+    if [ -z "$mine_taker" ]; then
+        die "the install is incomplete: $taker is missing, and a run needs the taker of the version it is. Reinstall from a checkout (camel-run.sh install), which copies both"
+    fi
+    if [ "$mine_taker" != "$want_taker" ]; then
+        die "install did not keep up: $VERSION_FILE says $recorded, written for a taker $want_taker, but $taker is $mine_taker. Reinstall from that checkout (camel-run.sh install)"
     fi
     VERSION="$recorded"
 }
@@ -214,7 +237,7 @@ cmd_plan() {
         echo 'tokensPeak: 0'
         exec "$@"
     fi
-    taker="$(dirname "$SELF")/host-tokens.sh"
+    taker=$(taker_path)
     [ -x "$taker" ] || die "token pool present but $taker is missing: refusing to run outside the pool"
     marker=$(mktemp "${TMPDIR:-/tmp}/camel-run-plan.XXXXXX") || die "cannot make a marker file"
     rm -f "$marker"
@@ -261,7 +284,7 @@ cmd_build() {
     # The pool's own taker does the waiting; it reports who holds what, and the tokens come back when
     # this process exits whatever the build does.
     local taker
-    taker="$(dirname "$SELF")/host-tokens.sh"
+    taker=$(taker_path)
     [ -x "$taker" ] || die "token pool present but $taker is missing: refusing to build outside the pool"
     # `tokensWanted`, not `tokensPeak`: the peak is what the pool recorded while this build was
     # running, and a line printed before the tokens are taken is a claim about the future.
@@ -287,25 +310,36 @@ cmd_status() {
 cmd_install() {
     # Idempotent: running it twice changes nothing after the first time, and it says so either way.
     mkdir -p "$INSTALL_DIR" || die "cannot create $INSTALL_DIR"
-    local here sha digest same=0
+    local here sha digest taker taker_digest changed=0 src dst
     here=$(cd "$(dirname "$SELF")" && pwd)
     sha=$(self_sha)
     [ -z "$sha" ] && die "cannot name this script's version; install from a checkout of origin/integration"
+    taker=$(taker_path)
+    [ -f "$taker" ] || die "the checkout at $here has no taker at $taker, so the install would be a script that cannot take a token. Install from a full checkout"
     # The record names the bytes, so it may only be written for bytes its checkout actually holds. A
     # copy edited on the way in would install under a commit it is not -- which is the one thing the
     # record exists to prevent, and the reason `version_check` compares digests at all.
-    if [ -n "$(git -C "$here" status --porcelain --untracked-files=no -- "$SELF" 2>/dev/null)" ]; then
-        die "the checkout at $here has uncommitted changes to this file, so $sha would name bytes that commit does not contain. Commit them, then install"
+    if [ -n "$(git -C "$here" status --porcelain --untracked-files=no -- "$SELF" "$taker" 2>/dev/null)" ]; then
+        die "the checkout at $here has uncommitted changes to this script or its taker, so $sha would name bytes that commit does not contain. Commit them, then install"
     fi
     digest=$(digest_of "$SELF")
-    [ -z "$digest" ] && die "cannot compute a digest of $SELF, so the record could not be checked. Refusing to install"
-    if [ -f "$INSTALLED" ] && cmp -s "$SELF" "$INSTALLED"; then same=1; fi
-    if [ "$same" = 0 ]; then
-        cp "$SELF" "$INSTALLED.tmp" && chmod 755 "$INSTALLED.tmp" && mv "$INSTALLED.tmp" "$INSTALLED" || die "install failed"
+    taker_digest=$(digest_of "$taker")
+    if [ -z "$digest" ] || [ -z "$taker_digest" ]; then
+        die "cannot compute a digest of $SELF or $taker, so the record could not be checked. Refusing to install"
     fi
-    # `<version> <sha256 of those bytes>`: the version, and the bytes it is a version of.
-    printf '%s %s\n' "$sha" "$digest" > "$VERSION_FILE"
-    echo "installed $sha ($digest) at $(date -u +%Y-%m-%dT%H:%M:%SZ) (from $here; $([ "$same" = 1 ] && echo 'unchanged' || echo 'replaced'))"
+    # The script and its taker travel together: a run resolves the taker beside the installed copy,
+    # and a taker of another version would admit runs by rules this version does not hold. `mv` over
+    # the destination replaces whatever is there, a link included, with a file of these bytes.
+    for src in "$SELF" "$taker"; do
+        if [ "$src" = "$SELF" ]; then dst="$INSTALLED"; else dst="$INSTALL_DIR/host-tokens.sh"; fi
+        if [ -f "$dst" ] && [ ! -L "$dst" ] && cmp -s "$src" "$dst"; then continue; fi
+        cp "$src" "$dst.tmp" && chmod 755 "$dst.tmp" && mv -f "$dst.tmp" "$dst" || die "install failed at $dst"
+        changed=$((changed + 1))
+    done
+    # `<version> <sha256 of this script> <sha256 of its taker>`: the version, and the bytes it is a
+    # version of.
+    printf '%s %s %s\n' "$sha" "$digest" "$taker_digest" > "$VERSION_FILE"
+    echo "installed $sha (camel-run $digest, host-tokens.sh $taker_digest) at $(date -u +%Y-%m-%dT%H:%M:%SZ) (from $here; $([ "$changed" = 0 ] && echo 'unchanged' || echo "$changed file(s) replaced"))"
 }
 
 # The plan admission, against a pool of this test's own (four tokens in a temporary directory, so
@@ -325,12 +359,15 @@ cmd_self_test() {
         echo 'skip  camel-run self-test: /proc/locks is not readable here (the pool reads held tokens from it); run it on the build host'
         return 0
     fi
-    taker="$(dirname "$SELF")/host-tokens.sh"
+    taker=$(taker_path)
     [ -x "$taker" ] || die "self-test needs $taker"
     version_check
     root=$(mktemp -d "${TMPDIR:-/tmp}/camel-run-selftest.XXXXXX") || die "cannot make a test directory"
     export CAMEL_TOKEN_DIR="$root/pool" CAMEL_TOKENS=4 CAMEL_LANE=selftest CAMEL_TOKEN_WAIT_S=120
     POOL_DIR="$root/pool"
+    # The test measures its own pool, so a cover it inherited does not apply to it (see the same line
+    # in host-tokens.sh's self-test): inside a plan run every take would otherwise take nothing.
+    unset CAMEL_TOKENS_COVERED CAMEL_TOKENS_HELD CAMEL_TAKE_LABEL
     "$taker" show >/dev/null 2>&1
 
     # Wait until the pool shows PATTERN, at most about 30 s.
@@ -359,8 +396,10 @@ cmd_self_test() {
     esac
     settle 'free=4 held=0' && echo 'ok    the tokens are back when the run ends' || { echo "FAIL  tokens not back after a run: $out"; bad=$((bad + 1)); }
 
-    # 2. a short pool: three of four held elsewhere, a run asking for three gets the one that is free
-    ( "$taker" take 3 >/dev/null; exec sleep 60 ) &
+    # 2. a short pool: three of four held elsewhere, a run asking for three gets the one that is free.
+    #    The holders are `run N -- sleep`: a token lives as long as the process that took it, so a
+    #    separate `take` process would give its tokens back the moment it exits and hold nothing.
+    "$taker" run 3 -- sleep 60 >/dev/null 2>&1 &
     sleeper=$!
     settle 'free=1 held=3'
     out=$(CAMEL_JOBS=3 "$SELF" plan -- bash -c 'echo "in:$CAMEL_JOBS"' 2>&1)
@@ -370,7 +409,7 @@ cmd_self_test() {
     esac
 
     # 3. nothing free: the wait runs out, which is exit 4 with state=noslot, and the command never ran
-    ( "$taker" take 1 >/dev/null; exec sleep 60 ) &
+    "$taker" run 1 -- sleep 60 >/dev/null 2>&1 &
     pids="$sleeper $!"
     settle 'free=0 held=4'
     out=$(CAMEL_TOKEN_WAIT_S=2 CAMEL_JOBS=2 "$SELF" plan -- bash -c 'echo ran-the-command' 2>&1)
@@ -383,7 +422,10 @@ cmd_self_test() {
         *ran-the-command*) echo 'FAIL  the command ran without a token'; bad=$((bad + 1)) ;;
         *) [ "$code" = 4 ] && echo 'ok    a plan run that gets no token says state=noslot, exits 4, and does not run the command' ;;
     esac
-    for i in $pids; do kill -9 "$i" 2>/dev/null; done
+    # The holder's command inherits its tokens, so the whole tree goes.
+    for sleeper in $pids; do
+        for i in $(tree_of "$sleeper" | sort -rn); do kill -9 "$i" 2>/dev/null; done
+    done
     wait 2>/dev/null
     settle 'free=4 held=0' || { echo "FAIL  the test's own holders did not release: $out"; bad=$((bad + 1)); }
 
@@ -404,8 +446,37 @@ cmd_self_test() {
         echo "FAIL  a killed plan run kept its tokens: $out"; bad=$((bad + 1))
     fi
 
+    local checks=6
+    # 6. an install carries its taker: the installed copy resolves `host-tokens.sh` beside itself and
+    #    its record holds both digests, and a taker changed after the install is refused by name.
+    #    Only a checkout can install, so the installed copy skips this.
+    if [ -n "$(sha_of)" ]; then
+        checks=$((checks + 2))
+        out=$(CAMEL_RUN_HOME="$root/bin" bash "$SELF" install 2>&1 && CAMEL_RUN_HOME="$root/bin" bash "$root/bin/camel-run" status 2>&1)
+        code=$?
+        case "$code:$out" in
+            0:*'CAMEL_RUN '*)
+                if [ -f "$root/bin/host-tokens.sh" ] && [ "$(awk 'NR == 1 { print NF }' "$root/bin/camel-run.sha")" = 3 ]; then
+                    echo 'ok    an install copies the taker beside the script and records both digests'
+                else
+                    echo "FAIL  the install left no taker or a record without its digest: $(ls "$root/bin" 2>&1)"; bad=$((bad + 1))
+                fi
+                ;;
+            *) echo "FAIL  an install from this checkout: exit $code: $out"; bad=$((bad + 1)) ;;
+        esac
+        echo '# changed after the install' >> "$root/bin/host-tokens.sh"
+        out=$(CAMEL_RUN_HOME="$root/bin" bash "$root/bin/camel-run" status 2>&1)
+        code=$?
+        case "$code:$out" in
+            3:*'written for a taker'*) echo 'ok    an installed copy refuses a taker that is not the one its record names' ;;
+            *) echo "FAIL  a changed taker was not refused: exit $code: $out"; bad=$((bad + 1)) ;;
+        esac
+    else
+        echo 'skip  the install checks: this copy is not in a checkout, and only a checkout can install'
+    fi
+
     rm -rf "$root"
-    if [ "$bad" -eq 0 ]; then echo 'selftest: 6 checks, 0 failed'; return 0; fi
+    if [ "$bad" -eq 0 ]; then echo "selftest: $checks checks, 0 failed"; return 0; fi
     echo "selftest: $bad failed"; return 1
 }
 

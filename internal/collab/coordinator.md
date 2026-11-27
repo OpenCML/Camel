@@ -149,6 +149,21 @@ node 20.20.2；docker 可用
 分支：`main`（发布）、`develop`（集成）、`fsh-dev`（作者的文档/设计/任务书）。合并一律 `--no-ff`，
 永不 rebase、永不 force-push `main`。
 
+**文档工作树（`D:\Projects\Camel-wt\docs`）的两条操作口径（2026-11-27 实测）：**
+
+```
+· 同步用 **rebase**，不用 merge：这条分支从不作为远端分支存在，只 `push HEAD:integration`；
+  用 merge 同步会在 integration 上留下一笔 "Merge remote-tracking branch 'origin/integration' into docs/…"，
+  主语说的不是被合进来的内容（违反 §5「合并提交要概括合进来的内容」）。rebase 后 `ahead/behind` 干净、历史是一条直线
+· 推送走 **HTTPS**：本机 `origin` 是 SSH，`ssh.github.com:443` 直连会 `Connection timed out`（握手前失败，
+  后面那两行 "correct access rights" 只是 git 的通用提示，不是凭据问题）
+  ⇒ `git push https://github.com/OpenCML/Camel.git HEAD:integration`
+  ⇒ 推前核 `origin/integration..HEAD` 的**唯一文件集合**只有 `internal/**`、`docs/**`、`agents/**`、`AGENTS.md`
+· **推完立即报一句**（本轮唯一一次推送）；合并批次在飞时不推
+· **回执落行只有推上去才算落账**：插件读主检出/develop 侧的 `internal/backlog.md`，
+  行写在未推的 docs 分支上，插件会一直报「回执了 taken 但不在 backlog 里」
+```
+
 ## 4. 构建与测试：只走 `camel-remote.ps1`
 
 ```powershell
@@ -168,6 +183,12 @@ pwsh -NoProfile -File ... -Path <wt> -Clean                        # 收尾：�
 - **主机上的并行度由令牌数决定，不由约定决定。** 预算是令牌（一个 worker 进程一枚），计划、检查、构建共用一个池子；计划与构建一样，启动时按它要的宽度（`-Jobs`，至多 16）拿现有的令牌、至少一枚，用拿到的数跑，结束或被杀时还回——没有测试槽，也没有为合并位保留的份额，合并位与大家同样排队；每份运行登记带 `jobs`、`buildJobs`、`overlapping`、`loadAtStart`/`loadAtEnd`——读数自己说明它是怎么跑的，"两条同时跑、各自红"与"一条跑时红"因此分得开。构建与计划都没有固定槽：启动时拿到几枚令牌就几枚。锁与池子都在 `internal/tools/host-tokens.sh`，约定页（`agents/dispatch.md` §6）只指路。
 - 禁止在 agent 提示里写 `cmake --build`、`npm run build`、`node scripts/test.js`；不要跑
   stress / progen / GC-stress / PyTorch 重测试。
+
+**合并位的 `scripts/merge-batch.mjs` 在本机必须 `--no-fetch`（2026-11-27 实测）：**工具自带的那一步 `git fetch origin`
+走 SSH，本机到 `ssh.github.com:443` 握手前就超时 ⇒ 整批根本起不来。合并位先用
+`git fetch https://github.com/OpenCML/Camel.git '+refs/heads/*:refs/remotes/origin/*' --prune` 刷共享 ref，
+再 `node scripts/merge-batch.mjs --no-fetch --base origin/integration …`。**只有 `origin/integration` 这一个 ref 是合并的判据**，
+刷它的路径不受限制（HTTPS 可用），但要**在起批前刷一次**——否则你合的是自己本地那份旧尖端，推送会被拒或把别人挤掉。
 
 ## 5. 一个任务的完整生命周期
 

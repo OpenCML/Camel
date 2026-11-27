@@ -29,7 +29,7 @@ name = "process_state.two_contexts_nvm"
 desc = "A second Context beside the running one registers its own root set instead of taking the running one's over, a registration taken back removes only its own entry, and the second context's own entry goes back when its scope ends (held=1: the scope is its only owner, so it is destroyed there and released reads 1): the allocator holds 1 runtimeGraphRoots entry before, 2 while both contexts exist and 1 after the scope, own 1 -> 0 is the pass's own registration, the running program's graph survives the major collection taken in between, and the back end prints the program's line -- before the fix that line read contexts-1c2contexts-1c3, its string constants swept as unreachable."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/contexts.cml"
-args = ["--gc", "generational", "${case}", "test::contexts", "${run_nvm}"]
+args = ["--gc", "kind=generational", "${case}", "test::contexts", "${run_nvm}"]
 expect_exit = 0
 expect_stdout_contains = ["CONTEXTS before=1 second=2 held=1 released=1 own=1 own_released=0 alive=1", "contexts-1-2-3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -40,7 +40,7 @@ name = "process_state.two_contexts_fvm"
 desc = "The same reading on the bytecode back end: the registrations are the allocator's, not a back end's."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/contexts.cml"
-args = ["--gc", "generational", "${case}", "test::contexts", "${run_fvm}"]
+args = ["--gc", "kind=generational", "${case}", "test::contexts", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["CONTEXTS before=1 second=2 held=1 released=1 own=1 own_released=0 alive=1", "contexts-1-2-3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -88,7 +88,7 @@ name = "process_state.stw_sleep_leaves_its_region"
 desc = "A worker asleep for 2.5 s does not stop the world: `gave_up=0` on the gate's statistics line while five workers allocate 150 MB and ask for collections, and the program finishes with all seven elements (before the fix gave_up>=1 and one collection after another was refused for as long as the sleep lasted)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_prl_blocked_worker.cml"
-args = ["--gc", "generational", "-t", "2", "--arg", "millis=2500", "--arg", "rounds=4000", "${case}", "${run_prl}", "gc_stats=1"]
+args = ["--gc", "kind=generational", "-t", "2", "--arg", "millis=2500", "--arg", "rounds=4000", "${case}", "${run_prl}", "gc_stats=1"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -112,7 +112,7 @@ name = "process_state.stw_give_up_escalates"
 desc = "The refusal path itself, asked for with `blocking_leaves=false`: the waiting worker holds its region, the churning workers' collections are refused again and again, and the gate reports it once it repeats -- `gave_up>=3` and a `[taskflow] gc: no collection for N polls in a row ...` line naming the wait, the flows, the resident megabytes and the reason of the collection it could not serve. Before the fix this line did not exist at all: the refusal was counted and shown only under the gate's trace switch."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_prl_blocked_worker.cml"
-args = ["--gc", "generational", "-t", "2", "--arg", "millis=2500", "--arg", "rounds=4000", "${case}", "${run_prl}", "gc_stats=1", "blocking_leaves=false"]
+args = ["--gc", "kind=generational", "-t", "2", "--arg", "millis=2500", "--arg", "rounds=4000", "${case}", "${run_prl}", "gc_stats=1", "blocking_leaves=false"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {

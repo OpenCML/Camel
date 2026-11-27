@@ -2,16 +2,16 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * onnx::export: the ONNX exporter as the last pass of a pipeline.
+ * onnx::export_model: the ONNX exporter as the last pass of a pipeline.
  *
- *   camel m.cml std::macro std::opt onnx::export
+ *   camel m.cml std::macro std::opt onnx::export_model
  *
  * The export request is the program's own `onnx.export_model(fn, example,
  * path[, dynamic_axes[, target]])` call: the pass looks for it in the entry
  * graph the preceding passes left, where its arguments must be constants (the
  * function, with constant captures; the example values; the options). The
  * output path may instead be given as the pass's parameter `out`,
- * `onnx::export out="model.onnx"`, which overrides the call's path argument.
+ * `onnx::export_model out="model.onnx"`, which overrides the call's path argument.
  *
  * The pass translates the function's graph as the preceding passes left it
  * (exporter.h, translateFunction). It does not expand macros, devirtualize,
@@ -59,7 +59,7 @@ class OnnxExportPass : public GraphTranslatePass {
     bool prepStats_ = false;
 };
 
-/// Registers the onnx module's passes (onnx::export) with the pass registry.
+/// Registers the onnx module's passes (onnx::export_model) with the pass registry.
 void registerOnnxPasses();
 
 } // namespace camel::onnx::passes

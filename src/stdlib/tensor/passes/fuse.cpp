@@ -244,7 +244,7 @@ class ParamEchoTestPass : public GraphIRPass {
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override {
         os << std::format(
-            "test_echo: n={} ratio={} label={} flag={}\n",
+            "echo: n={} ratio={} label={} flag={}\n",
             args_.getInt("n"),
             args_.getFloat("ratio"),
             args_.getString("label"),
@@ -268,8 +268,7 @@ void registerParamEchoTestPass() {
     descriptor.make = [](const core::context::context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<ParamEchoTestPass>(ctx, args);
     };
-    registerModulePass("tensor::test_echo", std::move(descriptor));
-    registerPassAlias("tensor::echo", "tensor::test_echo");
+    registerModulePass("tensor::echo", std::move(descriptor));
 }
 
 } // namespace

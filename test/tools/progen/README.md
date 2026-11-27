@@ -227,7 +227,7 @@ the rewrite sequence it was found with and under `std::cxx::inline`, `std::opt`,
 ## What is not covered
 
 - Tensors and every module (`tensor`, `nn`, `autodiff`, `onnx`, `fs`, `json`, `re`, ...); the
-  module passes `tensor::fuse` and `onnx::export`; the C++ translation.
+  module passes `tensor::fuse` and `onnx::export_model`; the C++ translation.
 - Effect order under parallelism: no effect is generated where the order is open (effects
   outside sync blocks, element functions of `map` / `filter` that print, `para` operators).
   `std::prl` is in the matrix, but only on programs whose output is determined.

@@ -134,15 +134,20 @@ prepare() {
 
 # Who holds a token file now. `/proc/locks` is the reading: it is the kernel's table of held locks,
 # so a process that opened the file and did not lock it is not in it, and a process that released it
-# is gone from it. `fuser` cannot tell those two from a holder, which is how an open descriptor was
-# read as "the old lock is held" on 2026-11-24 (internal/tools/README.md). It is used only when
-# /proc/locks cannot be read at all, and then the reading says so rather than passing itself off.
+# is gone from it. `fuser` cannot tell those two from a holder: it reads an open descriptor as a held
+# lock (internal/tools/README.md). It is used only when /proc/locks cannot be read at all, and then
+# the reading says so rather than passing itself off.
 read_holder_mode() {
     if [ -r /proc/locks ]; then echo /proc/locks; else echo fuser; fi
 }
 
+# `holders_of INDEX TABLE`: TABLE is one copy of /proc/locks, taken by the caller in one builtin read
+# for the whole listing. Reading the file costs as much as the kernel takes to regenerate the table,
+# and a `read` loop straight on it regenerates it for every line, so on a host with a few hundred
+# locks a walk per token turned a listing of the pool into a minute; `count_held` reads it once
+# for the same reason.
 holders_of() {
-    local file ino i pid
+    local file ino locks="$2"
     file=$(token_path "$1")
     if [ -r /proc/locks ]; then
         ino=$(stat -c %i "$file" 2>/dev/null) || return 0
@@ -152,7 +157,7 @@ holders_of() {
         while read -r _ type _ _ lpid where _ _; do
             [ "$type" = 'FLOCK' ] || continue
             [ "${where##*:}" = "$ino" ] && echo "$lpid"
-        done < /proc/locks
+        done <<< "$locks"
     else
         fuser "$file" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' | sort -u || true
     fi
@@ -211,9 +216,11 @@ show() {
     free=0
     held=0
     echo "pool: $TOKEN_DIR size=$POOL_SIZE lane=$LANE reading=$(read_holder_mode)"
+    local table=''
+    [ -r /proc/locks ] && table="$(< /proc/locks)" 2>/dev/null
     i=1
     while [ "$i" -le "$POOL_SIZE" ]; do
-        pids=$(holders_of "$i")
+        pids=$(holders_of "$i" "$table")
         if [ -z "$pids" ]; then
             free=$((free + 1))
         else
@@ -343,6 +350,9 @@ take_up_to() {
     fi
     echo "host-tokens: running at $ACQ_N of $want worker(s) (lane=$LANE, $((ACQ_MS / 1000))s to take them)"
     echo "${CAMEL_TAKE_LABEL:-HOST_BUILD_JOBS}=$ACQ_N"
+    # The label names this one report line, so the command does not inherit it: a taker started
+    # anywhere below (a build inside a plan run, a self-test run as a case) reports under its own.
+    unset CAMEL_TAKE_LABEL
     export CAMEL_TOKENS_HELD="$ACQ_N"
     export CMAKE_BUILD_PARALLEL_LEVEL="$ACQ_N"
     "$@"
@@ -467,6 +477,10 @@ self_test() {
     export CAMEL_LANE=selftest
     POOL_SIZE=3
     export CAMEL_TOKENS=3
+    # The test measures its own pool, so a cover it inherited does not apply to it: run inside a plan
+    # run (as a case is), CAMEL_TOKENS_COVERED=1 would make every take below take nothing and every
+    # check below read an empty pool.
+    unset CAMEL_TOKENS_COVERED CAMEL_TOKENS_HELD CAMEL_TAKE_LABEL
 
     # 1. three tokens exist and none is held
     out=$(show)
@@ -544,7 +558,10 @@ self_test() {
     fi
     # 9. the peak is a reading, not a zero. Three tokens held at once must leave the mark at three
     #    even after they are all back: that is the number `tokensPeak` reports, and a pool that never
-    #    records it is a pool nobody can tell from an unused one.
+    #    records it is a pool nobody can tell from an unused one. It starts from an idle pool: a
+    #    worker of check 8 still holding a token would let the holder below take two at a pass and
+    #    give them back, so the mark would read two however the peak is recorded.
+    settle 'free=3 held=0' || { echo "FAIL  the pool did not go idle after the four takers: $out"; bad=$((bad + 1)); }
     ( take 3 >/dev/null; exec sleep 20 ) &
     holder2=$!
     settle 'peak=3'

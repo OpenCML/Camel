@@ -10382,7 +10382,7 @@ A translation pass only translates the graph the preceding passes left. Run the 
 
 ```camel
 // A pure `main` that goes through a set: what the translation passes (std::cpp,
-// onnx::export) are asked to translate and must refuse with a position.
+// onnx::export_model) are asked to translate and must refuse with a position.
 
 func main() => int {
     let s = [3, 1, 2, 3] as Set<int>

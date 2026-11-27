@@ -247,9 +247,9 @@ def run_shape(shape: str, n: int, passes: List[str], env_extra: Optional[dict] =
 
 
 LIMIT_OPTION = {
-    "graph": "--graph-space-limit-mb",
-    "perm": "--perm-space-limit-mb",
-    "meta": "--meta-space-limit-mb",
+    "graph": "--spaces graph_mb=",
+    "perm": "--spaces perm_mb=",
+    "meta": "--spaces meta_mb=",
 }
 
 
@@ -262,7 +262,7 @@ def run_limited(space: str, megabytes: int, shape: str, n: int, passes: List[str
         path.write_text(text, encoding="utf-8", newline="\n")
         code, out, err, _, _ = run_file(
             path, passes,
-            options=[LIMIT_OPTION[space], str(megabytes), "--output-format", "json"])
+            options=[LIMIT_OPTION[space], str(megabytes), "--diag-format", "json"])
     sys.stdout.write(out)
     sys.stdout.write(err)
     print(f"camel exit={code}")

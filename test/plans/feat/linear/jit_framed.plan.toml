@@ -34,7 +34,7 @@ desc = "Under std::jit those functions are compiled as framed code (fib, whose b
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
-args = ["--gc-check", "poison", "--gc", "mark-sweep", "-vv", "${case}", "std::jit"]
+args = ["--gc-check", "poison", "--gc", "kind=mark-sweep", "-vv", "${case}", "std::jit"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'collatz' as framed code", "compiled & cached graph 'repeat' as framed code", "compiled & cached graph 'sum_at' as framed code", "compiled & cached graph 'mean' as framed code", "compiled & cached graph 'name_of' as framed code", "compiled & cached graph 'weight' as framed code", "compiled & cached graph 'weigh' as framed code", "compiled & cached graph 'walk' as framed code", "compiled & cached graph 'swap_sum' as framed code", "compiled & cached graph 'is_even' as framed code", "compiled & cached graph 'is_odd' as framed code", "compiled & cached graph 'fib' as frameless code", "compiled & cached graph 'twice' as framed code", "compiled & cached graph 'scaled_total' as framed code", "compiled & cached graph 'totals' as framed code", "collatz 111 118", "weigh 3210", "twice 284626", "totals 14415"]
 expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core"]
@@ -45,7 +45,7 @@ desc = "The same after std::cxx::inline, where the branch arms are part of the f
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
-args = ["--gc-check", "poison", "--gc", "mark-sweep", "-vv", "${case}", "std::cxx::inline", "std::jit"]
+args = ["--gc-check", "poison", "--gc", "kind=mark-sweep", "-vv", "${case}", "std::cxx::inline", "std::jit"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'collatz' as framed code", "compiled & cached graph 'weigh' as framed code", "compiled & cached graph 'fib' as frameless code", "collatz 111 118", "weigh 3210", "totals 14415"]
 expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core"]
@@ -78,7 +78,7 @@ desc = "With the generational collector every function is still compiled, as the
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
-args = ["--gc", "generational", "-vv", "${case}", "std::cxx::inline", "std::jit"]
+args = ["--gc", "kind=generational", "-vv", "${case}", "std::cxx::inline", "std::jit"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'collatz' as framed code", "compiled & cached graph 'repeat' as framed code", "compiled & cached graph 'fib' as frameless code", "weigh 3210", "totals 14415"]
 expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core", "GC invariant violated"]
@@ -145,7 +145,7 @@ case = "../../../cases/linear/jit/framed_faults.cml"
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
-args = ["--gc-check", "poison", "--gc", "mark-sweep", "-vv", "${case}", "std::jit"]
+args = ["--gc-check", "poison", "--gc", "kind=mark-sweep", "-vv", "${case}", "std::jit"]
 envs = ["FAULT=none"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'pick' as framed code", "compiled & cached graph 'picks' as framed code", "compiled & cached graph 'rem' as framed code", "compiled & cached graph 'quot' as framed code", "compiled & cached graph 'depth' as framed code", "isolated", "done"]
@@ -182,7 +182,7 @@ case = "../../../cases/linear/jit/framed_loops.cml"
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
-args = ["--gc-check", "poison", "--gc", "mark-sweep", "-vv", "${case}", "std::jit"]
+args = ["--gc-check", "poison", "--gc", "kind=mark-sweep", "-vv", "${case}", "std::jit"]
 envs = ["N=5000"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'churn' as framed code", "compiled & cached graph 'ping' as framed code", "compiled & cached graph 'pong' as framed code", "compiled & cached graph 'build' as framed code", "compiled & cached graph 'total' as framed code", "compiled & cached graph 'digit_sum' as framed code", "done"]
@@ -215,7 +215,7 @@ case = "../../../cases/loops/compiled.cml"
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
-args = ["--gc-check", "poison", "--gc", "mark-sweep", "-vv", "${case}", "std::jit hot_threshold=0"]
+args = ["--gc-check", "poison", "--gc", "kind=mark-sweep", "-vv", "${case}", "std::jit hot_threshold=0"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'countdown' as framed code; loop rounds: native rounds\n", "compiled & cached graph 'sum_to' as framed code; loop rounds: native rounds\n", "compiled & cached graph 'sum_squares' as framed code; loop rounds: helper: the round takes the next element of a sequence\n", "compiled & cached graph 'until_above' as framed code; loop rounds: helper: the round takes the next element of a sequence\n", "compiled & cached graph 'nested' as framed code; loop rounds: helper: the round takes the next element of a sequence (2 loops)\n", "compiled & cached graph 'collects' as framed code; loop rounds: helper: the round collects the values it produces\n", "compiled & cached graph 'ticks' as framed code; loop rounds: helper: the round makes the state tuple anew every round\n"]
 expect_output_not_contains = ["'countdown' as framed code; loop rounds: helper", "'sum_to' as framed code; loop rounds: helper", "'sum_squares' as framed code; loop rounds: native", "'until_above' as framed code; loop rounds: native", "'nested' as framed code; loop rounds: native", "'collects' as framed code; loop rounds: native", "'ticks' as framed code; loop rounds: native", "compile skipped", "Segmentation fault", "dumped core"]

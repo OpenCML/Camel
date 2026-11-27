@@ -2706,6 +2706,41 @@ node_handle_t Builder::attachVisibleLoopState(
     return value;
 }
 
+void Builder::handCarriedStatesOut(
+    node_handle_t loopNode, const std::vector<LoopCarriedState> &carried,
+    const std::vector<Type *> &states, size_t firstState, uint32_t firstMember,
+    const GCT::node_ptr_t &gct) {
+    // A `var` the body wrote is a state of the loop, so a read written after the loop reads the
+    // state the loop hands out: the component of the loop's value at the position the state has
+    // among the loop's states. The value is a tuple whenever the loop has several states, so the
+    // component is read out of it; the read stands in the region the loop is written in, which is
+    // where a read after the loop looks for it.
+    const bool tupleValue = states.size() > 1;
+    for (size_t j = 0; j < carried.size(); ++j) {
+        const size_t index  = firstState + j;
+        node_handle_t value = loopNode;
+        if (tupleValue) {
+            value = memberReadNodeOf(
+                loopNode,
+                states[index],
+                firstMember + static_cast<uint32_t>(index),
+                gct);
+            registerNodeOrigin(context_, value, gct, "gir.loop.value");
+        }
+        if (carried[j].asValue) {
+            // The write the head hands out is recorded where the loop is written: on the head of a
+            // loop around this one, if there is one, so this loop's write is that loop's next state
+            // too. This loop's own port went back with the body it was declared in, so the name
+            // here is the enclosing declaration's again -- the one whose port, if any, takes this
+            // record.
+            noteLoopStateWrite(carried[j].name, value);
+            ssa_.rebind(nodeScope_, carried[j].name, value, armWritesHere());
+        } else {
+            carriedVersions_[carried[j].cell] = value;
+        }
+    }
+}
+
 node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     ENTER("LOOP");
     using camel::core::LoopKind;
@@ -2841,15 +2876,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     // handed, and a name the body writes anywhere deeper than its own block are left to the
     // lowering that carries a branch's or a call's write, which is what they need.
     const size_t declaredStates = k;
-    struct LoopCarriedState {
-        node_handle_t cell  = nullptr;
-        node_handle_t start = nullptr;
-        std::string name;
-        node_handle_t port = nullptr;
-        /// The state is a value, not a cell: the body's name is the port, a write
-        /// rebinds it and is the round's next value, and the head's phi is the port.
-        bool asValue = false;
-    };
+    // The `var`s the body writes are the loop's carried states, and the `var`s the head declares
+    // are the states it hands the program.
     std::vector<LoopCarriedState> carried;
     {
         // The names assigned by a statement of the body's block, in the order they are written; the
@@ -3200,14 +3228,14 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         // and no iterable), so nothing about the driver or a back end is new.
         if (sequenceType != nullptr && sequenceType->code() == TypeCode::Stream && k > 0) {
             LEAVE("LOOP");
-            return buildStreamLoop(gct, sequence, initial, stateTypes);
+            return buildStreamLoop(gct, sequence, initial, stateTypes, declaredStates, carried);
         }
         node_handle_t streamed = nullptr;
         elementType            = iterableElementType(sequence, expr, streamed);
         if (streamed != nullptr) {
             // A sequence that answers with a stream is walked the same way a stream is.
             LEAVE("LOOP");
-            return buildStreamLoop(gct, streamed, initial, stateTypes);
+            return buildStreamLoop(gct, streamed, initial, stateTypes, declaredStates, carried);
         }
     }
     // The states the loop carries: the ones its head declares, and the `var`s its body writes.
@@ -3278,34 +3306,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     // own has its own. Which head a name belongs to is not a table of its own -- the SSA
     // environment keeps the port on the declaration, so the innermost head is the one a write
     // inside the body finds and the enclosing one is what a write after the loop finds.
-    std::unordered_set<node_handle_t> enclosingPorts;
-    for (const auto &entry : loopStatePorts_) {
-        enclosingPorts.insert(entry.first);
-    }
-    for (const node_handle_t port : ssa_.portsInScope(nodeScope_)) {
-        enclosingPorts.insert(port);
-    }
-    struct LoopCarriedScope {
-        Builder &self;
-        decltype(loopStatePorts_) outerPorts;
-        decltype(loopStateWrites_) outerWrites;
-        std::unordered_set<node_handle_t> enclosing;
-        ~LoopCarriedScope() {
-            // A record this loop wrote made *on an enclosing head's port* is that head's next
-            // value, not this loop's: the port outlives this loop (a loop written in a loop's
-            // body), so its record goes back with the value the body wrote. A port of this loop's
-            // own body dies with the loop, and the record on it is dropped with the rest of the
-            // tables.
-            for (const auto &entry : self.loopStateWrites_) {
-                if (!enclosing.contains(entry.first)) {
-                    continue;
-                }
-                outerWrites[entry.first] = entry.second;
-            }
-            self.loopStatePorts_  = std::move(outerPorts);
-            self.loopStateWrites_ = std::move(outerWrites);
-        }
-    } carriedScope{*this, loopStatePorts_, loopStateWrites_, std::move(enclosingPorts)};
+    LoopStateTables carriedScope(*this);
     {
         ExpectedValueScope partScope(expectedValueType_, nullptr);
         if (camel::core::loopHasCondition(kind)) {
@@ -3861,27 +3862,10 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     // is rebound to what the head hands out, so every read after the loop takes that value and no
     // cell is involved anywhere. The rebinding is a write of the name in the region the loop is
     // written in, so the head of a loop *around* this one takes it too (noteLoopStateWrite), and an
-    // arm around it has the join carry it.
-    for (size_t j = 0; j < carried.size(); ++j) {
-        const size_t index  = declaredStates + j;
-        node_handle_t value = loopNode;
-        if (stateCount > 1) {
-            value =
-                memberReadNodeOf(loopNode, stateTypes[index], static_cast<uint32_t>(index), gct);
-            registerNodeOrigin(context_, value, gct, "gir.loop.value");
-        }
-        if (carried[j].asValue) {
-            // The write the head hands out is recorded where the loop is written: on the head of a
-            // loop around this one, if there is one, so this loop's write is that loop's next state
-            // too. This loop's own port went back with the body it was declared in, so the name
-            // here is the enclosing declaration's again -- the one whose port, if any, takes this
-            // record.
-            noteLoopStateWrite(carried[j].name, value);
-            ssa_.rebind(nodeScope_, carried[j].name, value, armWritesHere());
-        } else {
-            carriedVersions_[carried[j].cell] = value;
-        }
-    }
+    // arm around it has the join carry it. The stream path hands its states out the same way
+    // (buildStreamLoop): one function, so the two forms of a loop cannot come to read the value the
+    // other one leaves.
+    handCarriedStatesOut(loopNode, carried, stateTypes, declaredStates, 0, gct);
     if (splitApplied) {
         // The programme sees the struct, not its parts: it is rebuilt from the loop's value,
         // once, in the layout of the type the state had (nested structs included). Nothing of
@@ -3950,12 +3934,14 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
 // form: a back end sees the LOOP node it always did, and the driver the same.
 node_handle_t Builder::buildStreamLoop(
     const GCT::node_ptr_t &gct, node_handle_t sequence, const std::vector<node_handle_t> &initial,
-    const std::vector<Type *> &stateTypes) {
+    const std::vector<Type *> &stateTypes, size_t declaredStates,
+    std::vector<LoopCarriedState> &carried) {
     using camel::core::LoopKind;
     using camel::core::oper::TagIsNull;
     using camel::core::oper::TagNullValue;
-    const LoopKind kind    = gct->loopKind();
-    const size_t k         = initial.size();
+    const LoopKind kind     = gct->loopKind();
+    const size_t k          = declaredStates;
+    const size_t stateCount = stateTypes.size();
     StreamType *stream     = tt::as_ptr<StreamType>(valueTypeOf(nodeTypeOf(sequence)));
     FunctionType *stepType = stream->stepType();
     Type *pullType         = stepType->exitType();
@@ -3968,9 +3954,12 @@ node_handle_t Builder::buildStreamLoop(
     // head are the states and the element -- and the parts read the round through them.
     const std::string streamName = "$stream";
     const std::string doneName   = "$done";
-    std::vector<std::string> stateNames(k);
+    std::vector<std::string> stateNames(stateCount);
     for (size_t j = 0; j < k; ++j) {
         stateNames[j] = gct->loopStateName(j);
+    }
+    for (size_t j = 0; j < carried.size(); ++j) {
+        stateNames[k + j] = carried[j].name;
     }
 
     // The state of the loop: the stream this round pulls from, whether that stream is over, then
@@ -3980,8 +3969,16 @@ node_handle_t Builder::buildStreamLoop(
     std::vector<Type *> machineTypes{stream, Type::Bool()};
     machineTypes.insert(machineTypes.end(), stateTypes.begin(), stateTypes.end());
     Type *machineType = static_cast<Type *>(TupleType::create(machineTypes));
-    Type *stateType =
-        k == 1 ? stateTypes.front() : static_cast<Type *>(TupleType::create(stateTypes));
+    // The value the program's body gives is the next value of the states the head declares, and of
+    // nothing else: the `var`s the body writes are the loop's own state, and the round's write
+    // fills those (visitLoopNode, "The next state the body hands on").
+    const std::vector<Type *> declaredTypes(stateTypes.begin(), stateTypes.begin() + k);
+    Type *stateType = k == 0 ? nullptr
+                             : (k == 1 ? declaredTypes.front()
+                                       : static_cast<Type *>(TupleType::create(declaredTypes)));
+    // The tables that say which port a carried `var`'s name is in the body, and what the round
+    // wrote to it, are this loop's while its parts are built (visitLoopNode, LoopStateTables).
+    LoopStateTables stateTables(*this);
 
     // One pull, where the round stands. The value of `T..` is that function value, so the call
     // reads the step signature and nothing is converted.
@@ -4068,7 +4065,7 @@ node_handle_t Builder::buildStreamLoop(
         };
         add(streamName, stream);
         add(doneName, Type::Bool());
-        for (size_t j = 0; j < k; ++j) {
+        for (size_t j = 0; j < stateCount; ++j) {
             add(stateNames[j], stateTypes[j]);
         }
         refreshPorts(part);
@@ -4125,11 +4122,14 @@ node_handle_t Builder::buildStreamLoop(
                 // ends the loop without asking the condition again.
                 arms[0] = buildArm(gct->loopBody(), [&] {
                     std::vector<node_handle_t> next{*nodeAt(streamName), booleanConstant(true)};
-                    for (size_t j = 0; j < k; ++j) {
+                    for (size_t j = 0; j < stateCount; ++j) {
                         next.push_back(*nodeAt(stateNames[j]));
                     }
                     return machineStateOf(next);
                 });
+                // The machine state the round ends with, when the body reaches its end (see the
+                // `returned` reading below the arm).
+                node_handle_t bodyState = nullptr;
                 arms[1] = buildArm(gct->loopBody(), [&] {
                     // The element this round is about and the rest of the stream, taken out of
                     // the pull that has just answered.
@@ -4143,41 +4143,125 @@ node_handle_t Builder::buildStreamLoop(
                     node_handle_t rest = memberReadNodeOf(pair, stream, 1, gct->loopBody());
                     registerNodeOrigin(context_, rest, gct->loopBody(), "gir.loop.rest");
 
-                    // What the program's body gives is the state of the next round.
-                    node_handle_t state =
-                        intoState(loopStateValueOf(visitBodyNode(gct->loopBody())), stateType);
-                    if (state == nullptr) {
-                        diags_->of(SemanticDiag::LoopBodyTypeMismatch)
-                            .atOrigin(gct->loopBody()->origin())
-                            .commit(std::string("void"), stateType->toString());
-                        throw BuildAbortException();
-                    }
-                    // The body runs after the pull it reads its element from.
-                    writeControlLink(pull, state);
-                    std::vector<node_handle_t> next{rest, booleanConstant(false)};
+                    // What the program's body gives is the next value of the states its head
+                    // declares: one state is that value, several are the tuple it gave (a
+                    // construction that names its components) or a read of a component out of it
+                    // (visitLoopNode, "The next state the body hands on"). The `var`s the body
+                    // writes are the loop's own state and no value of the program's: the round's
+                    // write is their next value, and one it did not write goes on as the port the
+                    // round started from.
+                    node_handle_t returned = loopStateValueOf(visitBodyNode(gct->loopBody()));
+                    std::vector<node_handle_t> components(stateCount, nullptr);
                     if (k == 1) {
-                        next.push_back(state);
-                    } else {
+                        components[0] = intoState(returned, stateType);
+                        if (components[0] == nullptr) {
+                            diags_->of(SemanticDiag::LoopBodyTypeMismatch)
+                                .atOrigin(gct->loopBody()->origin())
+                                .commit(std::string("void"), stateType->toString());
+                            throw BuildAbortException();
+                        }
+                    } else if (k > 1) {
+                        bool fromFill = false;
+                        if (returned != nullptr) {
+                            const auto fillKind =
+                                constructionKindOf(returned, nodeTypeOf(returned));
+                            if (fillKind.has_value() && *fillKind == runtime::GCFillKind::Tuple) {
+                                fromFill = true;
+                                for (const auto &[slot, component] :
+                                     constructionValuesOf(returned)) {
+                                    if (slot >= k) {
+                                        fromFill = false;
+                                        break;
+                                    }
+                                    components[slot] = component;
+                                }
+                            }
+                        }
+                        if (!fromFill) {
+                            components.assign(stateCount, nullptr);
+                        }
                         for (size_t j = 0; j < k; ++j) {
-                            node_handle_t component = memberReadNodeOf(
-                                state,
-                                stateTypes[j],
-                                static_cast<uint32_t>(j),
-                                gct->loopBody());
-                            registerNodeOrigin(
-                                context_,
-                                component,
-                                gct->loopBody(),
-                                "gir.loop.state");
-                            next.push_back(component);
+                            if (components[j] == nullptr) {
+                                if (returned == nullptr) {
+                                    components[j] = *nodeAt(stateNames[j]);
+                                } else {
+                                    components[j] = memberReadNodeOf(
+                                        returned,
+                                        stateTypes[j],
+                                        static_cast<uint32_t>(j),
+                                        gct->loopBody());
+                                    registerNodeOrigin(
+                                        context_,
+                                        components[j],
+                                        gct->loopBody(),
+                                        "gir.loop.state");
+                                }
+                            }
+                            components[j] = intoState(components[j], stateTypes[j]);
                         }
                     }
-                    return machineStateOf(next);
+                    for (size_t j = 0; j < carried.size(); ++j) {
+                        node_handle_t written = carried[j].port;
+                        if (const auto at = loopStateWrites_.find(carried[j].port);
+                            at != loopStateWrites_.end()) {
+                            written = at->second;
+                        }
+                        components[k + j] = written;
+                    }
+                    // The body runs after the pull it reads its element from: the pull is ordered
+                    // before the value the body gave, which the components below read (the same
+                    // pair the pull's edge made when the machine's state was the program's value).
+                    if (k == 1) {
+                        writeControlLink(pull, components[0]);
+                    } else if (returned != nullptr) {
+                        writeControlLink(pull, returned);
+                    }
+                    std::vector<node_handle_t> next{rest, booleanConstant(false)};
+                    next.insert(next.end(), components.begin(), components.end());
+                    bodyState = machineStateOf(next);
+                    return bodyState;
                 });
+                // A `return` written in the body gives the arm's value, not the function's exit
+                // (design principles 5.1): the value it gives is the state of the next round, so
+                // the arm hands the machine's state on and not the value the `return` alone gave.
+                // This is the reading the `while` form takes when it replaces its body's value
+                // with the state the round ends with.
+                if (arms[1]->returned && bodyState != nullptr) {
+                    if (arms[1]->output != nullptr && arms[1]->output != arms[1]->value) {
+                        // A `sync` body's effects are ordered by the gate around the value the
+                        // `return` gave; the state the round ends with comes after them (the same
+                        // reading the `while` form takes).
+                        writeControlLink(arms[1]->output, bodyState);
+                    }
+                    arms[1]->output = bodyState;
+                    arms[1]->value  = bodyState;
+                    arms[1]->type   = nodeTypeOf(bodyState);
+                }
                 return buildBranch(gct->loopBody(), isNull, &arms);
             },
             runtime::GCRegionKind::LoopBody,
-            [&](ArmBuild &part) { declarePorts(part, gct->loopBody()); });
+            [&](ArmBuild &part) {
+                declarePorts(part, gct->loopBody());
+                // The name of a carried `var` stands for this head's state while the body is
+                // built: a write of it is the round's next value, not a store (visitLoopNode,
+                // "The name of a carried `var` is the port the body reads and writes").
+                for (size_t j = 0; j < carried.size(); ++j) {
+                    const size_t at = 2 + k + j;
+                    if (at >= part.ports.size()) {
+                        continue;
+                    }
+                    carried[j].port = part.ports[at];
+                    if (carried[j].asValue) {
+                        ssa_.declarePort(
+                            nodeScope_,
+                            carried[j].name,
+                            carried[j].port,
+                            stateTypes[k + j]);
+                    } else {
+                        loopStatePorts_[part.ports[at]] = carried[j].cell;
+                    }
+                }
+            });
     }
 
     node_handle_t loopNode = currGraph_->addRegionLoopNode(LoopKind::While, machineType);
@@ -4188,8 +4272,16 @@ node_handle_t Builder::buildStreamLoop(
     }
     attachLoopParts(loopNode, bodyPart, condPart, gct);
 
-    // The program sees the state it wrote, not the stream and the flag beside it.
-    return attachVisibleLoopState(loopNode, stateTypes, 2, gct);
+    // The program sees the states its head declares, not the stream and the flag beside them, and
+    // not the `var`s the body wrote, which are the loop's own state and no value of the program's
+    // (visitLoopNode).
+    node_handle_t loopValue = attachVisibleLoopState(loopNode, declaredTypes, 2, gct);
+    // A `var` the body wrote is a state of the loop, so a read written after the loop reads the
+    // state the loop hands out: the value of the LOOP's state, which is what the `let` writing's
+    // destructuring is (visitLoopNode). The two forms of a loop hand their states out the same way,
+    // so that neither can come to leave the value the other one leaves.
+    handCarriedStatesOut(loopNode, carried, stateTypes, k, 2, gct);
+    return loopValue;
 }
 
 node_handle_t Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {

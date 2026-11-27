@@ -1010,7 +1010,9 @@ Every `[[tests]]` entry may use these common fields:
   `skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]`,
   `skip_unless = ["${python}", "-c", "import onnxruntime"]`.
 - `skip_unless_timeout_ms`
-  Optional timeout for the precondition command. Default is `120000`.
+  Optional time limit for the precondition command, default `120000`. A probe that does not return
+  within it ends the entry with a failure that names the probe; it is never read as "not met". The
+  probe holds no card from the device selection.
 - `require_artifacts`
   Optional string array of paths this test reads out of the build, with the same variable expansion
   as `args` and resolved from the repository root. A leading `<install>` is the install this run
@@ -1041,8 +1043,8 @@ Every `[[tests]]` entry may use these common fields:
   to CUDA as to `nvidia-smi`), and records the choice in the test's `meta.json` under
   `cuda_device`. A host whose cards are all occupied **skips** the test with their numbers in the
   reason; a host that lists no card at all leaves the test to run as it would have. The choice is
-  made once per test, before its `skip_unless` probe, so the probe is asked against the card the
-  test will get. A test that writes `CUDA_VISIBLE_DEVICES` itself keeps its own value. See "A card
+  made once per test, after its `skip_unless` probe passed: the probe is a static question about the
+  host and holds no card. A test that writes `CUDA_VISIBLE_DEVICES` itself keeps its own value. See "A card
   that is not device 0".
 - `tier`
   `fast`, `slow` or `debug`, overriding the plan's layer for this test only.
@@ -1837,7 +1839,7 @@ has no free memory for a context", and that reads as a defect in the code under 
 one: on the same host the same plan passed once `CUDA_VISIBLE_DEVICES` named an idle card.
 
 So a plan that needs a card declares `cuda_free_device = true` and lets the runner choose, once per
-test, before the test's `skip_unless` probe:
+test, after the test's `skip_unless` probe has passed:
 
 | the host answers | what the runner does |
 |---|---|
@@ -2275,7 +2277,7 @@ instances run at the same time without seeing each other's files. A case run out
 (a benchmark, or a direct `camel` command) may keep its older fixed path as a fallback when
 `CAMEL_TEST_TMPDIR` is unset; the examples and mnist cases take it through
 `get_env('CAMEL_TEST_TMPDIR') ?? ''`, and the one ONNX refusal case that writes a model gets an
-`onnx::export out="${test_tmp}/..."` path.
+`onnx::export_model out="${test_tmp}/..."` path.
 
 **A test's own program runs from the checkout root, and a program that starts other programs must
 give them a directory of their own.** That is the rule this section is about, stated twice because
@@ -2294,7 +2296,7 @@ That script now runs each case in a directory of its own under `CAMEL_TEST_TMPDI
 case: what a case writes lands where the test's other output goes and goes with it. Any other harness
 that runs case programs owes the same.
 
-What a *user* sees is unchanged: `camel x.cml` with `onnx::export out=model.onnx` still writes to
+What a *user* sees is unchanged: `camel x.cml` with `onnx::export_model out=model.onnx` still writes to
 the directory the user ran it in. Nothing here changes how the exporter resolves a path, only where a
 test's programs are started. A `skip_unless` precondition also runs from the repository root -- it is
 a command a plan writes against the checkout, not a test's own program.

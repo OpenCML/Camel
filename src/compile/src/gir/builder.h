@@ -26,14 +26,14 @@ class Builder {
   public:
     /// A builder for a program of its own: it owns the program's export table (ProgramExports).
     explicit Builder(const camel::core::context::context_ptr_t &context)
-        : context_(context), exports_(&ownExports_) {}
+        : context_(camel::core::context::Context::handleOf(context)), exports_(&ownExports_) {}
 
     /// A builder that declares its modules into `exports`: the program the table belongs to
     /// (the context's own program, whose table other readers use too).
     Builder(
         const camel::core::context::context_ptr_t &context,
         camel::core::module::ProgramExports &exports)
-        : context_(context), exports_(&exports) {}
+        : context_(camel::core::context::Context::handleOf(context)), exports_(&exports) {}
 
     /// The builder of the program compiled on `context`, created on first use.
     static Builder &of(const camel::core::context::context_ptr_t &context);
@@ -1092,6 +1092,53 @@ class Builder {
     /// written is the loop's next state for that `var`, so the statement makes no store and the
     /// call of the assignment operator is not built at all. Null for everything else.
     node_handle_t loopStateAssignmentOf(const GCT::node_ptr_t &gct);
+    /// A `var` a loop's body writes: the state the loop carries for it (design principles 3.5).
+    struct LoopCarriedState {
+        /// The cell the `var` is, when the body's name still is one; null for a value.
+        node_handle_t cell = nullptr;
+        /// The value the loop starts from: the `var` as it stands where the loop is written.
+        node_handle_t start = nullptr;
+        std::string name;
+        /// The body's port for the state, once the body's region declares it.
+        node_handle_t port = nullptr;
+        /// The state is a value, not a cell: the body's name is the port, a write rebinds it and is
+        /// the round's next value, and the head's phi is the port.
+        bool asValue = false;
+    };
+    /// The two tables a loop keeps for the `var`s its body writes, saved when the loop starts and
+    /// put back when it is built: a loop written in a body of its own has its own. A record this
+    /// loop wrote on an enclosing head's port is that head's next value, not this loop's -- the
+    /// port outlives this loop -- so it goes back with the value the body wrote.
+    class LoopStateTables {
+      public:
+        explicit LoopStateTables(Builder &self)
+            : self_(self), outerPorts_(self.loopStatePorts_), outerWrites_(self.loopStateWrites_) {
+            for (const auto &entry : self.loopStatePorts_) {
+                enclosing_.insert(entry.first);
+            }
+            for (const node_handle_t port : self.ssa_.portsInScope(self.nodeScope_)) {
+                enclosing_.insert(port);
+            }
+        }
+        ~LoopStateTables() {
+            for (const auto &entry : self_.loopStateWrites_) {
+                if (!enclosing_.contains(entry.first)) {
+                    continue;
+                }
+                outerWrites_[entry.first] = entry.second;
+            }
+            self_.loopStatePorts_  = std::move(outerPorts_);
+            self_.loopStateWrites_ = std::move(outerWrites_);
+        }
+        LoopStateTables(const LoopStateTables &)            = delete;
+        LoopStateTables &operator=(const LoopStateTables &) = delete;
+
+      private:
+        Builder &self_;
+        decltype(Builder::loopStatePorts_) outerPorts_;
+        decltype(Builder::loopStateWrites_) outerWrites_;
+        std::unordered_set<node_handle_t> enclosing_;
+    };
     // What each direct call hands on beside its return value (callValueTypeOf): the mask of the
     // callee's capture table that says which variables it writes, and, per call, the versions of
     // those this graph holds and the access node of each part made so far. Part 0 is the return
@@ -3287,12 +3334,16 @@ class Builder {
     /// `for x in s` where `s` is a stream (design principles 5.4; the shape the rule gives): the
     /// rounds are the pulls of the stream's step function, so the loop is the `while` the graph
     /// already has, whose state is the pull together with the state the program wrote. `sequence`
-    /// is the stream value, `initial` the program's first values (in the head's order) and
-    /// `stateTypes` their types.
+    /// is the stream value, `initial` the program's first values (in the head's order),
+    /// `stateTypes` their types and `carried` the `var`s the body writes. The first
+    /// `declaredStates` of those states are the ones the head declares -- the value the program's
+    /// body gives is their next values -- and the rest are the `var`s, whose next values are the
+    /// writes the round made (visitLoopNode, "The next state the body hands on").
     node_handle_t buildStreamLoop(
         const GCT::node_ptr_t &gct, node_handle_t sequence,
         const std::vector<node_handle_t> &initial,
-        const std::vector<camel::core::type::Type *> &stateTypes);
+        const std::vector<camel::core::type::Type *> &stateTypes, size_t declaredStates,
+        std::vector<LoopCarriedState> &carried);
     /// The value a LOOP hands the program, once the loop is built (visitLoopNode, buildStreamLoop):
     /// the states its head declares, and nothing of the loop's own -- not the collection slots
     /// beside a state (collectLoopAppends), not the `var`s the body wrote, and not the machine's
@@ -3303,6 +3354,17 @@ class Builder {
     node_handle_t attachVisibleLoopState(
         node_handle_t loopNode, const std::vector<camel::core::type::Type *> &states,
         uint32_t firstState, const GCT::node_ptr_t &gct);
+    /// The value a loop leaves each carried `var` with, once the loop is built: the component of
+    /// the loop's value at the state's position among the loop's states (visitLoopNode,
+    /// buildStreamLoop). `states` are the loop's state types in order, so `firstState` is the index
+    /// of the first carried `var` among them, and `firstMember` is where the first of them sits in
+    /// the LOOP's With inputs. A `var` the body wrote a value for is a state of the head, so the
+    /// name is rebound to what the head hands out and the write is recorded where the loop is
+    /// written (noteLoopStateWrite); a `var` still held by a cell takes the value as its version.
+    void handCarriedStatesOut(
+        node_handle_t loopNode, const std::vector<LoopCarriedState> &carried,
+        const std::vector<camel::core::type::Type *> &states, size_t firstState,
+        uint32_t firstMember, const GCT::node_ptr_t &gct);
     /// The tail every LOOP node shares once its node and its parts are built (visitLoopNode,
     /// buildStreamLoop): the With inputs are the parts' results (the body's, then the condition's)
     /// and the slot the rounds are counted in, the parts are its regions, and running the loop is

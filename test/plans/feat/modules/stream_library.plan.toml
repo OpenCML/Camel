@@ -16,3 +16,37 @@ expect_exit = 0
 expect_stdout_exact = "6\n0\n[1, 2, 3]\n[1, 2, 4, 8]\n[2, 4, 6]\n[2, 4]\n[1, 2, 3]\n[] [1]\n[1, 3, 6]\n[[1, 2], [3]]\n[[1, 2], [3, 4]] []\n[(1, a), (2, b)]\n[] 0\n[1, 2, 3] [10, 20, 30]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# `zip` written the way `stream`'s own example writes it: the module's name, two streams, no
+# qualifier. The name is declared twice -- `stream`'s takes two streams and the prelude's takes
+# arrays `when ...is_array::<A>()` -- so the prelude's condition is false for these arguments and
+# the call has one candidate. When it did not hold, the call reported AmbiguousCall instead, which
+# is what the example of `stream#zip` hit before this case existed.
+[[tests]]
+name = "stream_library.zip_takes_streams_unqualified"
+desc = "`zip(from_array([1, 2]), from_array(['a', 'b', 'c']))->collect` written with the name imported from `stream` is the module's `zip`: the prelude's declaration of the same name is a candidate only where its `when ...is_array::<A>()` holds, and a stream does not satisfy it, so the call is not ambiguous and gives [(1, a), (2, b)]."
+kind = "behavior"
+case = "../../../cases/modules/stream/zip_streams_unqualified.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[(1, a), (2, b)]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The positive control: the same call shape over arrays, with no module imported, is the prelude's
+# `zip` and its condition holds. The two cases differ in the arguments only, so a screening that
+# dropped the holding candidate as well would be seen as this one's red.
+[[tests]]
+name = "stream_library.prelude_zip_still_takes_arrays"
+desc = "`zip([1, 2], ['a', 'b'])` with nothing imported from `stream` is the prelude's declaration, whose `when ...is_array::<A>()` holds for two arrays: the call gives [(1, a), (2, b)] and no diagnostic."
+kind = "behavior"
+case = "../../../cases/modules/stream/zip_arrays_prelude.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[(1, a), (2, b)]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

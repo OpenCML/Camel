@@ -19,11 +19,11 @@
 /// `inlineReport`, when given, receives the record this run made: the direct calls it examined and
 /// left, each with the reason it was left and the budget it was measured against. It is the run's
 /// own answer and not a value read back off the context, so a caller that has to explain a round
-/// which changed nothing -- `std::opt`, which says the growth budget is reached rather than that the
-/// optimizer reached a fixed point -- asks the run it just made, and a run with no context to keep a
-/// fact on answers all the same. The same record is published on the context as
-/// kInlineReportFactKey for the reader that asks long after the run (onnx::export explains a call
-/// still in the entry graph). One record with two readers, not two copies of one answer.
+/// which changed nothing -- `std::opt`, which says the growth budget is reached rather than that
+/// the optimizer reached a fixed point -- asks the run it just made, and a run with no context to
+/// keep a fact on answers all the same. The same record is published on the context as
+/// kInlineReportFactKey for the reader that asks long after the run (onnx::export_model explains a
+/// call still in the entry graph). One record with two readers, not two copies of one answer.
 const camel::runtime::Program *applyOptimizeRewritePass(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     const OptimizeRewriteConfig &config, bool *changed = nullptr,

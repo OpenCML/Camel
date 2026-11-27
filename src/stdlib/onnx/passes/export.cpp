@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The onnx::export translation pass (see export.h).
+ * The onnx::export_model translation pass (see export.h).
  */
 
 #include "export.h"
@@ -51,7 +51,7 @@ using camel::runtime::GCNodeKind;
 
 namespace {
 
-constexpr const char *kPassName = "onnx::export_model";
+constexpr const char *kPassName   = "onnx::export_model";
 constexpr const char *kRequestUri = "onnx:export_model";
 
 /// Why the pass does not translate, and the node it is about. A refusal that is about no
@@ -149,7 +149,7 @@ constantArgAt(const GCGraph *g, gc_node_ref_t node, gc_node_ref_t arg, std::stri
     throw Refusal{
         argOrigin(g->view(), node, arg),
         std::format(
-            "the {} of onnx.export_model is {}, not a constant of the graph; onnx::export "
+            "the {} of onnx.export_model is {}, not a constant of the graph; onnx::export_model "
             "does not run the program: run std::opt before it so that it folds, or "
             "build it from constants only",
             what,
@@ -179,7 +179,7 @@ void readFunction(const GCGraph *g, gc_node_ref_t node, Request &request) {
             throw Refusal{
                 argOrigin(g->view(), node, arg),
                 "the function argument of onnx.export_model is not a constant of the graph; "
-                "run std::opt before onnx::export"};
+                "run std::opt before onnx::export_model"};
         }
         auto *fn         = rtdata::fromSlot<::Function *>(templ->value);
         request.fn       = fn;
@@ -197,7 +197,7 @@ void readFunction(const GCGraph *g, gc_node_ref_t node, Request &request) {
                     argOrigin(g->view(), node, refs[k]),
                     std::format(
                         "the function passed to onnx.export_model captures {}, not a constant "
-                        "of the graph; onnx::export does not run the "
+                        "of the graph; onnx::export_model does not run the "
                         "program: run std::opt before it so that it folds, or pass "
                         "the value as a function argument",
                         describeNode(g->view(), refs[k]))};
@@ -250,7 +250,7 @@ Request readRequest(const GCGraph *g, gc_node_ref_t node, const std::string &out
             originNear(g->view(), node),
             "the onnx.export_model call names no model file: give it as the `out` argument "
             "(export_model<out: \"model.onnx\">(fn, example)), or name it with the parameter "
-            "out of the pass (onnx::export out=\"model.onnx\")"};
+            "out of the pass (onnx::export_model out=\"model.onnx\")"};
     } else if (const auto path = constantOf(g, with[0])) {
         request.path = rtdata::fromSlot<::String *>(path->value)->toString();
     } else {
@@ -259,7 +259,7 @@ Request readRequest(const GCGraph *g, gc_node_ref_t node, const std::string &out
             std::format(
                 "the output path of onnx.export_model is {}, not a constant of the graph; "
                 "name the model file with the parameter out of the pass "
-                "(onnx::export out=\"model.onnx\"), or write the path as a string literal",
+                "(onnx::export_model out=\"model.onnx\"), or write the path as a string literal",
                 describeNode(g->view(), with[0]))};
     }
     if (with.size() > 1) {
@@ -350,7 +350,7 @@ Request readEntryRequest(
     }
     std::string message = std::format(
         "the onnx.export_model call{} is made in an arm of this branch, and the "
-        "condition of the branch{} is not known at compile time; onnx::export does not "
+        "condition of the branch{} is not known at compile time; onnx::export_model does not "
         "run the program, so it cannot tell whether the request is made, and what the "
         "arm computes is not a constant of the graph; write the export_model call "
         "outside the branch, or make the condition a constant",
@@ -511,7 +511,7 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
     const auto report =
         std::static_pointer_cast<const InlineReport>(ctx.passFact(kInlineReportFactKey));
     if (!report) {
-        return "run std::opt before onnx::export (after std::macro when the program "
+        return "run std::opt before onnx::export_model (after std::macro when the program "
                "uses macros such as grad)";
     }
     const auto &program      = programOfGraph(ctx, root);
@@ -539,7 +539,8 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
     const std::string budget = std::format("{} nodes, {}", report->growthBudget, source);
     if (no && no->why == InlineDecline::GrowthBudget) {
         return std::format(
-            "the inliner ran before onnx::export and left this call because its growth budget "
+            "the inliner ran before onnx::export_model and left this call because its growth "
+            "budget "
             "was exhausted: the budget is {} nodes ({}), {} were spent, and inlining {} copies {} "
             "more; {}",
             report->growthBudget,
@@ -551,12 +552,12 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
     }
     std::string why;
     if (!no) {
-        why = "the inliner ran before onnx::export and left this call";
+        why = "the inliner ran before onnx::export_model and left this call";
     } else {
         switch (no->why) {
         case InlineDecline::OwnerSize:
             why = std::format(
-                "the inliner ran before onnx::export and left this call because inlining {} "
+                "the inliner ran before onnx::export_model and left this call because inlining {} "
                 "({} nodes) would make the entry graph ({} nodes) larger than the {} nodes a "
                 "graph may reach by inlining",
                 name,
@@ -566,14 +567,14 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
             break;
         case InlineDecline::Recursive:
             why = std::format(
-                "the inliner ran before onnx::export and left this call because {} is "
+                "the inliner ran before onnx::export_model and left this call because {} is "
                 "recursive, and a recursive function is not copied into its callers; write "
                 "the export_model call outside the recursion",
                 name);
             break;
         case InlineDecline::ReachesRecursion:
             why = std::format(
-                "the inliner ran before onnx::export and left this call because {} calls, "
+                "the inliner ran before onnx::export_model and left this call because {} calls, "
                 "directly or through other functions, a recursive function (a loop), and "
                 "such a function is inlined only while it is small: the inlined function has {} "
                 "compute nodes (at most {}; a constant, a parameter, a gate and what an inline "
@@ -588,7 +589,7 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
             // The duplication budget is about the nodes inlining would copy (see
             // InlineDecline::calleeNodes), not about how small the function's own computation is.
             why = std::format(
-                "the inliner ran before onnx::export and left this call because {} is "
+                "the inliner ran before onnx::export_model and left this call because {} is "
                 "called from {} places and is too large ({} nodes) to be copied to each; "
                 "write the export_model call in a function that is called once",
                 name,
@@ -597,7 +598,7 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
             break;
         case InlineDecline::InlinedCopy:
             why = std::format(
-                "the inliner ran before onnx::export and left this call because it lies in a "
+                "the inliner ran before onnx::export_model and left this call because it lies in a "
                 "copy inlined from {} itself, where inlining it again would copy the function "
                 "into its own copy; the call is the recursion of that copy, and the export "
                 "reads it as the loop it is (write the call in the copy's own body without a "
@@ -605,7 +606,7 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
                 name);
             break;
         default:
-            why = "the inliner ran before onnx::export and left this call";
+            why = "the inliner ran before onnx::export_model and left this call";
             break;
         }
     }
@@ -677,7 +678,7 @@ void refuseUnexpandedMacros(const GraphView &g) {
             originNear(g, ref),
             std::format(
                 "macro operator '{}' is not expanded; run std::macro (then "
-                "std::opt) before onnx::export",
+                "std::opt) before onnx::export_model",
                 operators.uri(oper))};
     }
 }
@@ -694,7 +695,7 @@ Model translate(core::context::Context &ctx, const Request &request) {
     } catch (const ExportError &e) {
         std::string message = e.what();
         if (e.kind() == ExportError::Kind::CallRemains) {
-            message += "; onnx::export inlines what std::opt left once the shapes "
+            message += "; onnx::export_model inlines what std::opt left once the shapes "
                        "of the examples are known, so this call is one no simplification "
                        "removes (run std::macro before the pass when the program uses macros "
                        "such as grad)";
@@ -717,8 +718,9 @@ void exportEntry(
             camel::source::kInvalidOriginId,
             std::format(
                 "the program contains no export_model<out: path>(fn, example) call, so "
-                "onnx::export translates 'main' itself, and the model file is not named: give "
-                "it as the parameter out, onnx::export out=\"model.onnx\"")};
+                "onnx::export_model translates 'main' itself, and the model file is not named: "
+                "give "
+                "it as the parameter out, onnx::export_model out=\"model.onnx\"")};
     }
     for (auto *g : camel::runtime::collectReachableGraphs(*program, root)) {
         if (g != nullptr) {
@@ -731,13 +733,13 @@ void exportEntry(
     } catch (const ExportError &e) {
         std::string message = e.what();
         if (e.kind() == ExportError::Kind::CallRemains) {
-            message += "; onnx::export inlines what std::opt left, so this call is "
+            message += "; onnx::export_model inlines what std::opt left, so this call is "
                        "one no simplification removes (run std::macro before the pass when "
                        "the program uses macros such as grad)";
         }
         // The program makes no export request, so what is translated is `main` as a whole:
         // say so, a driver program is refused here for what it does besides computing.
-        message += " (the program contains no onnx.export_model call, so onnx::export "
+        message += " (the program contains no onnx.export_model call, so onnx::export_model "
                    "translates the computation of 'main' itself: its parameters are the "
                    "model's inputs, its result the outputs; a program that does more than "
                    "compute exports one of its functions with onnx.export_model instead)";
@@ -748,7 +750,7 @@ void exportEntry(
     } catch (const std::runtime_error &e) {
         throw Refusal{camel::source::kInvalidOriginId, e.what()};
     }
-    os << std::format("onnx::export: wrote {}\n", out);
+    os << std::format("onnx::export_model: wrote {}\n", out);
 }
 
 } // namespace
@@ -792,7 +794,7 @@ OnnxExportPass::apply(const camel::runtime::Program *program, std::ostream &os) 
             } catch (const std::runtime_error &e) {
                 throw Refusal{requests[i].origin, e.what()};
             }
-            os << std::format("onnx::export: wrote {}\n", requests[i].path);
+            os << std::format("onnx::export_model: wrote {}\n", requests[i].path);
         }
     } catch (const Refusal &refusal) {
         // Every refusal is located: at the node it names, else at the export_model call it
@@ -827,9 +829,6 @@ void registerOnnxPasses() {
             args.getBool("prep_stats"));
     };
     registerModulePass(kPassName, std::move(descriptor));
-    // The pass is named for the function it wraps (`onnx.export_model`); the old spelling stays
-    // an alias.
-    registerPassAlias("onnx::export", kPassName);
 }
 
 } // namespace camel::onnx::passes

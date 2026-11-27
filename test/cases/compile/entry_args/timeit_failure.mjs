@@ -31,7 +31,7 @@ let failed = false
 try {
     {
         reset()
-        const proc = spawnSync(CAMEL, ['--output-format', 'json', program, '--timeit', 'std::nvm/5'], {
+        const proc = spawnSync(CAMEL, ['--diag-format', 'json', program, '--timeit', 'std::nvm/5'], {
             env,
             encoding: 'utf8',
         })

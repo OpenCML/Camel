@@ -1,15 +1,16 @@
 /**
  * A loop state that starts as `[]` and is only appended to is a collection output (design
- * principles 3.10): the element type comes from the appended value (5.1, 5.2), the driver
- * builds the array in one pass, and the state stays the program's value and its gradient
- * channel. The gradient reads the appended values back through the state, and the collection
- * costs a constant number of blocks, not one copy per round (`std::mem::blocks()`, 10.5).
+ * principles 3.10): the binding names the element type, because an empty array has none of
+ * its own (5.1); the driver builds the array in one pass, and the state stays the program's
+ * value and its gradient channel. The gradient reads the appended values back through the
+ * state, and the collection costs a constant number of blocks, not one copy per round
+ * (`std::mem::blocks()`, 10.5).
  */
 import { grad } from autodiff
 
 with <w: float>
 func sum_losses(n: int) => float {
-    let losses = loop acc = [] for i in 0 .. n do acc->append<float(i) * w>
+    let losses: float[] = loop acc = [] for i in 0 .. n do acc->append<float(i) * w>
     return losses[0] + losses[n - 1]
 }
 

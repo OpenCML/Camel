@@ -63,7 +63,7 @@ inline constexpr size_t kDefaultConstantBudgetBytes = 8u * 1024u * 1024u;
 /// The growth budget of one pass built on the rewrite engine. `nodes` is what the pass may copy;
 /// `written` says the pipeline wrote the `growth_budget` parameter (as against the default), and
 /// `passName` is the pass that owns it. A later pass that has to explain a call the engine left
-/// (onnx::export) reads all three from InlineReport.
+/// (onnx::export_model) reads all three from InlineReport.
 struct GrowthBudget {
     size_t nodes = kDefaultGrowthBudgetNodes;
     bool written = false;
@@ -105,12 +105,12 @@ struct InlineDeclined {
 };
 
 /// What the last run of the rewrite engine with inlining enabled decided about the calls it
-/// examined, each with the reason it was left. The graph a pass hands on does not show why a call in
-/// it is still a call, and the record is one object read twice: the engine hands it to the caller
-/// through its return value, for the round that has to explain a graph it changed nothing in, and
-/// publishes it on the context as the pass fact kInlineReportFactKey, for a pass that has to refuse
-/// such a graph (onnx::export: a request it cannot see). The run's answer and the later reader's
-/// record are the same object, so neither is a second copy of the other.
+/// examined, each with the reason it was left. The graph a pass hands on does not show why a call
+/// in it is still a call, and the record is one object read twice: the engine hands it to the
+/// caller through its return value, for the round that has to explain a graph it changed nothing
+/// in, and publishes it on the context as the pass fact kInlineReportFactKey, for a pass that has
+/// to refuse such a graph (onnx::export_model: a request it cannot see). The run's answer and the
+/// later reader's record are the same object, so neither is a second copy of the other.
 struct InlineReport {
     size_t growthBudget      = 0;
     size_t growthSpent       = 0;

@@ -1,6 +1,6 @@
 import tensor
 
-// The model's input goes through a map before it is returned: onnx::export has no node for
+// The model's input goes through a map before it is returned: onnx::export_model has no node for
 // an operator over a collection and refuses the graph there.
 
 func main(x: f32[2]) => f32[2] {

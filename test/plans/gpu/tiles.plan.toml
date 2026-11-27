@@ -417,7 +417,7 @@ timeout_ms = 60000
 name = "aggregate_outputs.nvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/outputs.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::nvm"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::nvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -435,7 +435,7 @@ timeout_ms = 60000
 name = "aggregate_outputs.fvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/outputs.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::fvm"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::fvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -453,7 +453,7 @@ timeout_ms = 60000
 name = "aggregate_outputs.jit"
 kind = "behavior"
 case = "../../cases/modules/tiles/outputs.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::jit"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::jit"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -555,7 +555,7 @@ timeout_ms = 60000
 name = "value_gradient.nvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/value_gradient.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::macro", "std::nvm"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::macro", "std::nvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -573,7 +573,7 @@ timeout_ms = 60000
 name = "value_gradient.fvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/value_gradient.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::macro", "std::fvm"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::macro", "std::fvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -591,7 +591,7 @@ timeout_ms = 60000
 name = "value_gradient.jit"
 kind = "behavior"
 case = "../../cases/modules/tiles/value_gradient.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::macro", "std::jit"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::macro", "std::jit"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -609,7 +609,7 @@ timeout_ms = 60000
 name = "resident_transfers.nvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident.cml"
-args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::nvm"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::nvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -623,7 +623,7 @@ timeout_ms = 60000
 name = "resident_transfers.fvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident.cml"
-args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::fvm"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::fvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -637,7 +637,7 @@ timeout_ms = 60000
 name = "resident_transfers.jit"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident.cml"
-args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::jit"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::jit"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -651,7 +651,7 @@ timeout_ms = 60000
 name = "resident_compute.nvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_compute.cml"
-args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::nvm"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::nvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -668,7 +668,7 @@ timeout_ms = 60000
 name = "resident_compute.fvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_compute.cml"
-args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::fvm"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::fvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -685,7 +685,7 @@ timeout_ms = 60000
 name = "resident_compute.jit"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_compute.cml"
-args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::jit"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::jit"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -702,7 +702,7 @@ timeout_ms = 60000
 name = "resident_outputs.nvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_outputs.cml"
-args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::nvm"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::nvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -716,7 +716,7 @@ timeout_ms = 60000
 name = "resident_outputs.fvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_outputs.cml"
-args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::fvm"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::fvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -730,7 +730,7 @@ timeout_ms = 60000
 name = "resident_outputs.jit"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_outputs.cml"
-args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::jit"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::jit"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -744,7 +744,7 @@ timeout_ms = 60000
 name = "resident_scalars.nvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_scalars.cml"
-args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::macro", "std::nvm"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::macro", "std::nvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -758,7 +758,7 @@ timeout_ms = 60000
 name = "resident_scalars.fvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_scalars.cml"
-args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::macro", "std::fvm"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::macro", "std::fvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -772,7 +772,7 @@ timeout_ms = 60000
 name = "resident_scalars.jit"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_scalars.cml"
-args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::macro", "std::jit"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::macro", "std::jit"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -786,7 +786,7 @@ timeout_ms = 60000
 name = "scalar_arithmetic.nvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/scalar_arithmetic.cml"
-args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::macro", "std::nvm"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::macro", "std::nvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -813,7 +813,7 @@ timeout_ms = 60000
 name = "scalar_arithmetic.fvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/scalar_arithmetic.cml"
-args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::macro", "std::fvm"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::macro", "std::fvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -840,7 +840,7 @@ timeout_ms = 60000
 name = "scalar_arithmetic.jit"
 kind = "behavior"
 case = "../../cases/modules/tiles/scalar_arithmetic.cml"
-args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::macro", "std::jit"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::macro", "std::jit"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {

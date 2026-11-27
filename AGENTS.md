@@ -15,7 +15,7 @@ In particular, before any `develop` -> `main` release merge, you must confirm th
 - Use `;` to chain commands. Do not use `&&`.
 - Prefer the repo build commands documented below.
 - Follow the refactor, test, commit, and branching rules in `agents/refactor.md`, `agents/test.md`, `agents/commit.md`, and `agents/branching.md`.
-- Do not create additional git worktrees unless the user explicitly asks for one.
+- Collaboration lanes use the worktree pool described in `internal/collab`; outside that agreement, do not create additional git worktrees unless the user explicitly asks for one.
 - When preparing a commit, describe the common purpose of the entire staged set, not just the most recent edit.
 - Merge commits must also summarize the integrated content itself; do not use vague merge-action-only subjects.
 - For branch, merge, rebase, tag, or release work, treat the process as stateful and sequential: do not continue past an unexpected state until you have re-checked the repository and confirmed the next step.
@@ -58,7 +58,7 @@ $env:PATH = "$env:CAMEL_HOME\bin;$env:PATH"
 - Canonical syntax: `camel xxx.cml pass1 pass2 ...`
 - `std::nvm` is the fallback pass when no pass is specified or when specified passes complete without yielding an empty graph.
 - Pass settings are pass parameters, not environment variables: `key=value` words after the pass name, with no parentheses (`std::opt safe_fp=true`, `std::jit hot_threshold=0`, `std::tf bytecode=false`, `onnx::export out=m.onnx`). The declared type decides how the value is read (design principles 9.3): a `string` parameter takes the word as written and needs no quotes, a `bool`/`int`/`float` parameter takes a constant expression, and a value with spaces is quoted by the shell. A pass is a function declared in the standard library (`stdlib/std.cml` for the core's, `with <...>` for its parameters); see `docs/cli.md`, "Pass parameters".
-- `std::` is for the core's own passes; a module's passes use the module's name (`tiles::compile`) and the module registers them and their short aliases (`registerModulePass`, `registerPassAlias`). The pipeline is composed explicitly: importing a module never adds a pass, and a library whose pass is a precondition diagnoses the missing pass and names it.
+- `std::` is for the core's own passes; a module's passes use the module's name (`tiles::compile`) and the module registers them (`registerModulePass`). The pipeline is composed explicitly: importing a module never adds a pass, and a library whose pass is a precondition diagnoses the missing pass and names it.
 
 ## Test Execution
 - Main entry: `node scripts/test.js`

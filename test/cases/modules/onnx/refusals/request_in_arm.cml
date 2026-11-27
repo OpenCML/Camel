@@ -1,6 +1,6 @@
 /**
  * The export request is made in an arm of a branch on an environment value: whether it is
- * made is decided when the program runs. onnx::export does not run the program; it refuses at
+ * made is decided when the program runs. onnx::export_model does not run the program; it refuses at
  * the branch (line 18) and says that the request is under a condition that is not known at
  * compile time (it used to say that the example argument is "a value computed at run time").
  */

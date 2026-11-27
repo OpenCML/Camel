@@ -1,0 +1,31 @@
+id = "compile.range_shared_names"
+order = 953
+tier = "fast"
+tags = ["feat", "compile", "overloads"]
+desc = "A name is one set of candidates: the prelude's `Range` functions of `map`/`filter`/`foreach` and the array operators of the same spelling are chosen by the argument type (design principles 4.4), from any module"
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "shared_names.range_versions"
+desc = "From this module, `(0 .. 3)->map<f>`, `map<f>(0 .. 3)`, `(0 .. 5)->filter<p>`, `(0 .. 5)->count<p>` and `(0 .. 3)->foreach<f>` select the prelude's `Range` functions, which are ordinary functions of the same names as the array operators."
+kind = "behavior"
+case = "../../../cases/compile/range_shared_names/range_versions.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[0, 2, 4]\n[0, 2, 4]\n[0, 2, 4]\n3\n0\n3\n6\n"
+
+[[tests]]
+name = "shared_names.array_versions"
+desc = "An `int[]` still selects the array operator's rule of the same name, both written as a pipe and as a call."
+kind = "behavior"
+case = "../../../cases/compile/range_shared_names/array_versions.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[2, 4, 6]\n[2, 4, 6]\n"

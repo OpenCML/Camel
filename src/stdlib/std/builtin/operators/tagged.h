@@ -39,4 +39,4 @@ slot_t __parse_int__(ArgsView &with, ArgsView &norm, camel::core::context::Conte
 slot_t __parse_float__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
 /// The operator groups of this file, exported by the globals module beside its own.
-const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups();
+std::vector<oper_group_ptr_t> getTaggedOperatorGroups();

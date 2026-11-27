@@ -833,6 +833,10 @@ struct LoopBodyPlan {
     /// own name must not be read before the group encodes it.
     std::string name;
     std::vector<Type *> captureTypes;  // the body's capture ports (With), in order
+    /// The values read from around the body that those ports stand for, in the same order, read
+    /// before the body is rewritten: the site passes these, so they have to be the list the ports
+    /// were reserved from.
+    std::vector<gc_node_ref_t> captureValues;
     std::vector<Type *> stateTypes;    // k, the types of the state
     std::vector<Type *> residualTypes; // r, the values the loop collects each round
     std::vector<Type *> portTypes;     // captures, then states: the ports of the call site
@@ -2496,15 +2500,25 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     const PullbackPlan site = makePlanTypes(sitePorts, bodyPlan.stateValueType, carriesGradient);
     // The site's inputs: the values the body reads from around it (the node's captures), then the
     // first values of the state (its Norm inputs), then the iterated array, the order
-    // visitCallSite reads them in.
-    const std::vector<gc_node_ref_t> captured = view.externalInputs(false);
-    std::vector<gc_node_ref_t> inputs(captured.begin(), captured.end());
+    // visitCallSite reads them in. The captures are the ones the plan reserved its first ports
+    // from, not a fresh reading of the body: building the plan rewrote the body (its calls were
+    // differentiated in place), and a node the rewrite added there may read a value from around
+    // the loop that the body did not read before. A capture list read now could therefore be
+    // longer than the plan's port list, and the site would index past its own ports.
+    std::vector<gc_node_ref_t> inputs = bodyPlan.captureValues;
     for (size_t j = 0; j < k; ++j) {
         inputs.push_back(view.initialState(j));
     }
     if (carryArray) {
         inputs.push_back(*iterable);
     }
+    // One value per site port, or the backward pass reads a tangent the plan never declared.
+    GUARD(
+        inputs.size() == site.portTypes.size(),
+        std::format(
+            "differentiating a 'loop' passes {} values to {} ports of its body's pullback",
+            inputs.size(),
+            site.portTypes.size()));
     // The loop's value becomes (the states…, one array per collection slot): the tape is part of
     // it, collected in place by the executor.
     std::vector<Type *> valueTypes = bodyPlan.stateTypes;
@@ -2645,7 +2659,7 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     }
     for (size_t c = 0; c < m; ++c) {
         if (reverse.captureSlot[c] != kNoSlot) {
-            captures.push_back(captured[c]);
+            captures.push_back(bodyPlan.captureValues[c]);
             closureTypes.push_back(bodyPlan.captureTypes[c]);
         }
     }
@@ -4824,6 +4838,7 @@ LoopBodyPlan Engine::buildLoopBody(
     // The values the body reads from outside it: the loop's captures, which are also the site's
     // inputs before the initial states.
     const std::vector<gc_node_ref_t> external = view.externalInputs(false);
+    plan.captureValues                        = external;
     for (gc_node_ref_t value : external) {
         plan.captureTypes.push_back(typeOf(transaction, value));
     }

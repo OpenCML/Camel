@@ -628,10 +628,10 @@ if (green.status !== 0) problems.push(`green fixtures: runner exit ${green.statu
 if (!green.output.includes('[SUMMARY] total: 31, pass: 31, fail: 0')) {
     problems.push(`green fixtures: unexpected summary (${summaryLine(green.output)})`)
 }
-// Naming a plan file is the intent, and eight of them were named: the run has to say so, because
-// that is what makes all five entries of `tier.plan.toml` run at a tier that selects two of them.
-if (!green.output.includes('named plan target(s) run in full: 8')) {
-    problems.push(`green fixtures: the run did not say the named plans run in full (${summaryLine(green.output)})`)
+// Naming a plan file runs all of its entries at the default layer too, and no tier was typed, so the
+// run has no tier to say it does not apply.
+if (green.output.includes('named plan target(s) run in full')) {
+    problems.push(`green fixtures: the run named a tier that was never typed (${summaryLine(green.output)})`)
 }
 
 //  --- the verify payload ----------------------------------------------------------------

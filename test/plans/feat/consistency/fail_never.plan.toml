@@ -73,7 +73,7 @@ name = "never.no_value"
 desc = "never has no value: a value written where it is expected is refused, and the report names the type."
 kind = "behavior"
 case = "../../../cases/consistency/fail_never/never_is_printed.cml"
-args = ["check", "-O", "short", "${case}"]
+args = ["check", "--diag-format", "short", "${case}"]
 expect_exit = 1
 expect_output_contains = ["never"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -84,7 +84,7 @@ name = "never.inferred"
 desc = "A generic parameter takes never when the argument gives no value, and the call's result stands where the declared type is: the compiler settles both on the signature."
 kind = "behavior"
 case = "../../../cases/consistency/fail_never/never_inferred.cml"
-args = ["check", "-O", "short", "${case}"]
+args = ["check", "--diag-format", "short", "${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -124,7 +124,7 @@ name = "never.argument"
 desc = "A call with an argument of type never never runs: it is typed never and no overload is chosen for it, so its result stands where the declared type is, and the warning names the argument."
 kind = "behavior"
 case = "../../../cases/consistency/fail_never/never_argument.cml"
-args = ["check", "-O", "short", "${case}"]
+args = ["check", "--diag-format", "short", "${case}"]
 expect_exit = 0
 verify_script = """
 assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
@@ -141,7 +141,7 @@ name = "never.argument_overload"
 desc = "A never argument is not allowed to make two overloads fit: the call never runs, so no overload is chosen, no ambiguity is reported, and the report is the warning such a call gets."
 kind = "behavior"
 case = "../../../cases/consistency/fail_never/never_argument_overload.cml"
-args = ["check", "-O", "short", "${case}"]
+args = ["check", "--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_output_not_contains = ["AmbiguousCall"]
 verify_script = """
@@ -212,7 +212,7 @@ name = "never.with_argument"
 desc = "A call with a `with` argument of type `never` never runs: it is typed `never`, no overload is chosen for it, its result stands where the declared type is, and the one warning names the `with` argument by its place among the `with` arguments."
 kind = "behavior"
 case = "../../../cases/consistency/fail_never/never_with_argument.cml"
-args = ["check", "-O", "short", "${case}"]
+args = ["check", "--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_output_contains = ["the `with` argument 1 has type 'never'"]
 verify_script = """
@@ -257,7 +257,7 @@ name = "never.with_argument_named"
 desc = "The same reading for a `with` argument given by name: the one warning names the argument by the name the program gave it, the wording an ordinary argument of type `never` gets."
 kind = "behavior"
 case = "../../../cases/consistency/fail_never/never_with_argument_named.cml"
-args = ["check", "-O", "short", "${case}"]
+args = ["check", "--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_output_contains = ["the argument 'rounds' has type 'never'"]
 verify_script = """
@@ -275,7 +275,7 @@ name = "never.with_argument_overload"
 desc = "A `never` `with` argument is not allowed to make two overloads fit either: the call never runs, so no overload is chosen, no ambiguity is reported, and the report is the warning such a call gets."
 kind = "behavior"
 case = "../../../cases/consistency/fail_never/never_with_argument_overload.cml"
-args = ["check", "-O", "short", "${case}"]
+args = ["check", "--diag-format", "short", "${case}"]
 expect_exit = 0
 expect_output_not_contains = ["AmbiguousCall"]
 expect_output_contains = ["the `with` argument 1 has type 'never'"]
@@ -320,7 +320,7 @@ name = "never.tagged_position"
 desc = "`never` enters a tagged position without a conversion: the declared `int!` and `string!` take the node as it stands, the two calls whose argument is `never` are typed `never`, and the only diagnostics are the two warnings, each naming its argument."
 kind = "behavior"
 case = "../../../cases/consistency/fail_never/never_tagged_position.cml"
-args = ["check", "-O", "short", "${case}"]
+args = ["check", "--diag-format", "short", "${case}"]
 expect_exit = 0
 verify_script = """
 assert(input.diagnostics.length === 2, JSON.stringify(input.diagnostics))
@@ -343,17 +343,17 @@ args = ["${case}", "${run_nvm}"]
 expect_exit = 1
 verify_script = """
 // The name is built from two pieces here too: the kind the program writes is its own word.
-// The two warnings are the ones the check form prints, at the positions it prints them (19:35 and
-// 20:41 -- `never.tagged_position` above reads the same two), and the run's own diagnostic comes
-// last: it is raised when the program runs, not when it compiles, and it names line 15, the
-// `fail<'Stopped'>` call, which is where this case puts the fault.
 assert(input.diagnostics.length === 3, JSON.stringify(input.diagnostics))
-assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', JSON.stringify(input.diagnostics[0]))
-assert(input.diagnostics[0].line === 19 && input.diagnostics[0].column === 35, JSON.stringify(input.diagnostics[0]))
-assert(input.diagnostics[1].name === 'SemanticDiag::NeverArgumentCall', JSON.stringify(input.diagnostics[1]))
-assert(input.diagnostics[1].line === 20 && input.diagnostics[1].column === 41, JSON.stringify(input.diagnostics[1]))
+// The order is the order these are written, not the order of the positions they name: the two
+// warnings are written when the program is compiled, the fault of the `with` argument when it
+// runs. Hence the fault is last although its position (15) is the first of the three.
 assert(input.diagnostics[2].name === 'RuntimeDiag::' + 'Stopped', JSON.stringify(input.diagnostics[2]))
 assert(input.diagnostics[2].line === 15 && input.diagnostics[2].column === 16, JSON.stringify(input.diagnostics[2]))
+for (const d of input.diagnostics.slice(0, 2)) {
+    assert(d.name === 'SemanticDiag::NeverArgumentCall', JSON.stringify(d))
+}
+assert(input.diagnostics[0].line === 19 && input.diagnostics[0].column === 35, JSON.stringify(input.diagnostics[0]))
+assert(input.diagnostics[1].line === 20 && input.diagnostics[1].column === 41, JSON.stringify(input.diagnostics[1]))
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000

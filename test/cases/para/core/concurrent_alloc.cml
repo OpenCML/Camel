@@ -29,7 +29,7 @@ func checksum(arr: int[]) => int {
 
 func main() => int sync {
     seed(7)
-    let data = (0 .. 96)->shuffle<next_key()>
+    let data = to_array(0 .. 96)->shuffle<next_key()>
     let sums = (0 .. 12)->map<func (k: int) => int {
         let part = data[k * 8..96]
         return checksum(mergesort(part))

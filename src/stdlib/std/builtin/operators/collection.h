@@ -42,4 +42,4 @@ slot_t __coll_eq__(ArgsView &with, ArgsView &norm, camel::core::context::Context
  * for (`len`, `contains`, `__idx__`, `__eq__`, `__neq__`): those are further overloads of
  * that name, and the globals module exports one group holding both.
  */
-const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups();
+std::vector<oper_group_ptr_t> getCollectionOperatorGroups();

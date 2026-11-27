@@ -85,13 +85,13 @@ timeout_ms = 20000
 # `onnx` gained a declaration module in (`stdlib/onnx.cml`), so it is now a Camel module of
 # the kind answers with the short diagnostic. The rule
 # (pass-unavailable-diagnostics 2) makes the declaration the one statement of which passes a module
-# provides: `stdlib/onnx.cml` declares `onnx::export_model` (the alias `onnx::export` is the
-# registration's), so the sentence "it provides no passes" is gone -- the fact it asserted stopped
-# being true. The generic unknown-pass answer is kept by the `hash` case in feat/compile/diag_json.
+# provides: `stdlib/onnx.cml` declares `onnx::export_model`, so the sentence "it provides no passes" is
+# gone -- the fact it asserted stopped being true. The generic unknown-pass answer is kept by the
+# `hash` case in feat/compile/diag_json.
 
 [[tests]]
 name = "pass_absent_from_a_declaration_module"
-desc = "onnx::nosuchpass: `onnx` declares the pass `export_model` and no `nosuchpass`, so the diagnostic is the module-specific one and names the pass its `.cml` declares; the program does not run and the global pass list is not printed."
+desc = "onnx::nosuchpass: `onnx` declares the pass `export` and no `nosuchpass`, so the diagnostic is the module-specific one and names the pass its `.cml` declares; the program does not run and the global pass list is not printed."
 kind = "negative"
 case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "onnx::nosuchpass", "std::nvm"]
@@ -147,10 +147,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "json_help_of_a_module_that_cannot_be_loaded"
-desc = "unloadable::run with --output-format json: the whole help, unpinned by the terminal's wrapping; it names the module and carries the loader's first reason, which is the module's own diagnostic from the message."
+desc = "unloadable::run with --diag-format json: the whole help, unpinned by the terminal's wrapping; it names the module and carries the loader's first reason, which is the module's own diagnostic from the message."
 kind = "behavior"
 case = "../../../cases/modules/pass_not_found/main.cml"
-args = ["--output-format", "json", "${case}", "unloadable::run", "std::nvm"]
+args = ["--diag-format", "json", "${case}", "unloadable::run", "std::nvm"]
 expect_exit = 1
 verify_script = """
 const diags = JSON.parse(input.stdout)
@@ -184,7 +184,7 @@ name = "a_missing_pass_of_a_module_that_loads_keeps_its_own_help"
 desc = "no_pass::run: the module loads, so the diagnostic stays PassNotProvidedByModule, its help is the one about a module's `.cml` pass declarations, and it is not the module-load help."
 kind = "behavior"
 case = "../../../cases/modules/pass_not_found/main.cml"
-args = ["--output-format", "json", "${case}", "no_pass::run", "std::nvm"]
+args = ["--diag-format", "json", "${case}", "no_pass::run", "std::nvm"]
 expect_exit = 1
 verify_script = """
 const diags = JSON.parse(input.stdout)
@@ -288,10 +288,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "json_data_of_a_pass_the_module_does_not_provide"
-desc = "no_pass::run with --output-format json: one diagnostic whose data.stage names the module and the pass while both location fields stay empty (a command line has no file), and whose message names both. This is the hash::nosuchpass instance in the form its own module provides."
+desc = "no_pass::run with --diag-format json: one diagnostic whose data.stage names the module and the pass while both location fields stay empty (a command line has no file), and whose message names both. This is the hash::nosuchpass instance in the form its own module provides."
 kind = "behavior"
 case = "../../../cases/modules/pass_not_found/main.cml"
-args = ["--output-format", "json", "${case}", "no_pass::run", "std::nvm"]
+args = ["--diag-format", "json", "${case}", "no_pass::run", "std::nvm"]
 expect_exit = 1
 verify_script = """
 const diags = JSON.parse(input.stdout)
@@ -311,10 +311,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "json_data_of_a_pass_the_module_does_not_export"
-desc = "declares_not_exported::run with --output-format json: the same envelope for the other module-specific code; stage names the module and the pass, both location fields are empty."
+desc = "declares_not_exported::run with --diag-format json: the same envelope for the other module-specific code; stage names the module and the pass, both location fields are empty."
 kind = "behavior"
 case = "../../../cases/modules/pass_not_found/main.cml"
-args = ["--output-format", "json", "${case}", "declares_not_exported::run", "std::nvm"]
+args = ["--diag-format", "json", "${case}", "declares_not_exported::run", "std::nvm"]
 expect_exit = 1
 verify_script = """
 const diags = JSON.parse(input.stdout)
@@ -332,10 +332,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "json_data_of_a_pass_module_that_cannot_be_loaded"
-desc = "unloadable::run with --output-format json: the pass specification is refused with InvalidPassParameter, and the same envelope holds -- stage names the specification, both location fields are empty because the refusal is about the command line (the loader's words are in the message and are not pinned here)."
+desc = "unloadable::run with --diag-format json: the pass specification is refused with InvalidPassParameter, and the same envelope holds -- stage names the specification, both location fields are empty because the refusal is about the command line (the loader's words are in the message and are not pinned here)."
 kind = "behavior"
 case = "../../../cases/modules/pass_not_found/main.cml"
-args = ["--output-format", "json", "${case}", "unloadable::run", "std::nvm"]
+args = ["--diag-format", "json", "${case}", "unloadable::run", "std::nvm"]
 expect_exit = 1
 verify_script = """
 const diags = JSON.parse(input.stdout)
@@ -357,10 +357,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "json_data_of_the_reported_instance"
-desc = "hash::nosuchpass with --output-format json, the run this diagnostic was reported from: hash is a declaration module that provides no passes; the message is the whole answer and data.stage carries hash::nosuchpass, while both location fields are empty because a command line has no file."
+desc = "hash::nosuchpass with --diag-format json, the run this diagnostic was reported from: hash is a declaration module that provides no passes; the message is the whole answer and data.stage carries hash::nosuchpass, while both location fields are empty because a command line has no file."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_direct_user.cml"
-args = ["--output-format", "json", "${case}", "hash::nosuchpass"]
+args = ["--diag-format", "json", "${case}", "hash::nosuchpass"]
 expect_exit = 1
 verify_script = """
 const diags = JSON.parse(input.stdout)

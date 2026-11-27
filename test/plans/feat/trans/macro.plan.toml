@@ -168,10 +168,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "failed_evaluation.json"
-desc = "With --output-format json the failed evaluation is the only diagnostic: an Error with stage pass:std::macro and the call's range. No run-stage diagnostic follows, because nothing ran."
+desc = "With --diag-format json the failed evaluation is the only diagnostic: an Error with stage pass:std::macro and the call's range. No run-stage diagnostic follows, because nothing ran."
 kind = "behavior"
 case = "../../../cases/trans/macro/failed_evaluation.cml"
-args = ["--output-format", "json", "${case}", "std::macro", "std::nvm"]
+args = ["--diag-format", "json", "${case}", "std::macro", "std::nvm"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """

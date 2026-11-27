@@ -153,11 +153,6 @@ PassDescriptor passWithoutParameters(PassFactory factory);
 /// registry.
 void registerModulePass(const std::string &path, PassDescriptor descriptor);
 
-/// Registers a short name for a pass, normally of the module's own: `registerPassAlias("tiles",
-/// "tiles::compile")`. A name of the core (`std::`) cannot be redefined; registering the same
-/// alias for the same target again is harmless, for another target it replaces the earlier one.
-void registerPassAlias(const std::string &alias, const std::string &target);
-
 /// Splits a comma-separated pass list (`--passes std::opt safe_fp=true,std::fvm`) at the commas
 /// outside string literals. Entries are trimmed; empty ones are dropped.
 std::vector<std::string> splitPassList(std::string_view text);

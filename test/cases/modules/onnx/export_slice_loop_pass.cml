@@ -3,7 +3,7 @@
  * depend on the model input. Checked on ONNX Runtime against NumPy for 1, 2 and 4 steps
  * (artifacts: b2/probes/check_slice_loop.py).
  *
- * The same program with the request as the program's own result, for the `onnx::export` pass:
+ * The same program with the request as the program's own result, for the `onnx::export_model` pass:
  * that pass reads requests from the top level of the entry graph, so a `main` that takes the
  * request apart with `match` (the run-time case, where the refusal is reported) hides it from
  * the pass. Running this one still reports the refusal: the request is what `main` answers.

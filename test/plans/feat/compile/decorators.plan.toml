@@ -121,7 +121,7 @@ name = "blocks.trees"
 desc = "The AST keeps a block's decorators; the GCT lowers the block to a call of the function it is."
 kind = "behavior"
 case = "../../../cases/compile/decorators/blocks.cml"
-args = ["inspect", "-a", "-c", "${case}"]
+args = ["inspect", "--ast", "--gct", "${case}"]
 expect_exit = 0
 expect_stdout_contains = ["FuncAnno*", "FUNC: (decorated block)"]
 
