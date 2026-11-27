@@ -1,0 +1,13 @@
+// The design's block head as design 15.1 writes it, on its own so that whatever the compiler says
+// about this file is about the production and nothing else: `view d = f { len(nodes(d)) }` is a
+// `view` block whose value is an integer (design 4 item 5's first positive example).
+import { nodes } from graph
+
+func count_nodes::<F>(f: F) => int when is_function::<F>() {
+    return view d = f { len(nodes(d)) }
+}
+
+func main() => int sync {
+    println(`${count_nodes(func (x: int) => int { x + 1 })}`)
+    return 0
+}

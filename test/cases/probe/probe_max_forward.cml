@@ -1,0 +1,38 @@
+// The **forward** half of `max_pool2d` alone: `jvp(max_total)` (no `split`, no transpose), and the
+// number it answers against the mask the engine's own pullback builds. Both operands are handed in
+// as values, so a law that walks here is also a law whose tangent can be checked:
+//
+//     d(sum(max_pool2d(x, k))) = sum(mask ⊙ dx),  mask = max_pool2d_grad(x, ones_like(y), k)
+//
+// The mask is the engine's operator, computed here directly, so `diff` is zero only when the law's
+// tangent is the same map; any value that moved would move it.
+
+import { abs } from math
+import { jvp } from transforms
+import { max_pool2d, max_pool2d_grad } from nn
+import rulesets.jvp
+import { ones_like, reshape, sum } from tensor
+
+func image() => f32[...] {
+    return reshape<[1, 2, 4, 4]>([0.1, -0.4, 0.8, 0.3, -0.9, 0.5, 0.2, -0.1, 0.7, -0.3, 0.6, 0.4, -0.2, 0.9, -0.6, 0.1, 0.3, -0.8, 0.5, 0.2, -0.4, 0.6, 0.1, -0.7, 0.8, -0.5, 0.3, 0.9, -0.1, 0.2, 0.4, -0.6] as f32[])
+}
+
+func direction() => f32[...] {
+    return reshape<[1, 2, 4, 4]>([0.2, 0.3, -0.1, 0.4, 0.5, -0.2, 0.1, 0.6, -0.3, 0.2, 0.4, -0.5, 0.1, 0.3, -0.6, 0.2, 0.4, 0.1, -0.3, 0.5, 0.2, -0.4, 0.6, 0.3, -0.2, 0.5, 0.1, -0.4, 0.3, 0.2, -0.5, 0.6] as f32[])
+}
+
+func max_total(x: f32[1, 2, 4, 4]) => float {
+    return float(sum(max_pool2d(x, 2)))
+}
+
+func main() => int sync {
+    let x = image() as f32[1, 2, 4, 4]
+    let dx = direction() as f32[1, 2, 4, 4]
+    let (value, tangent) = jvp(max_total)(x, dx)
+    let mask = max_pool2d_grad(x, ones_like(max_pool2d(x, 2)), 2)
+    let expected = float(sum(mask * dx))
+    let diff = abs(tangent - expected)
+    let ok = diff < 1e-6 && diff > -1e-6
+    `probe max_forward value={} tangent={} expected={} diff={} forward_ok={}`->format<value, tangent, expected, diff, ok>->println
+    return 0
+}
