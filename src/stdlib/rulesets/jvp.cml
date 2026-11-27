@@ -992,6 +992,47 @@ export rule jvp_idx_arr::<T>(xs: T[], i: int) { index_into(xs, i) => func (dxs: 
     pick_at(dxs, i, len(xs))
 } }
 
+// ---- the forward rule of `:op/idx_arr` at three operands, the read along a named dimension ----
+//
+// `xs[.., i]` is the same operator with its third word written: the position `i` on the dimension
+// that word names. Its law is a key of its own (`index_into_axis`, three operands), because the
+// two-operand law above answers an element of the first dimension and one law is filed under one
+// key. The operator's third word is the axis, and it is a value like the index, so the law takes it
+// as its third operand and one law answers every dimension and every rank.
+//
+// The linear half is the same read of the array's tangent: a position on a dimension of `xs` is the
+// same position of `dxs`, and the dimension is the same. Nothing needs a length here -- the read
+// takes the dimension the tangent already has, and the reverse half of this law is the axis-carrying
+// scatter in `rulesets.transpose` (`idx_arr_axis_t`), whose zeros come from the extents the walk
+// states rather than from a value the primal forgot.
+
+/// `xs[.., i]`: what `:op/idx_arr` at three operands means, and the left side this rule is filed
+/// under.
+///
+/// Private, like `index_into` above and for the same reason: a family cannot read another module's
+/// private function, so each family that files a law for this key spells it itself. It is a
+/// declaration of a *call form* of the same operator (`#op`) rather than a function with a body,
+/// because the third word is not a written dimension here but an operand the law receives: the
+/// subscript spells an axis by where its dots are, and a body cannot say "the dimension this number
+/// names" (`xs[.., at]` would fix the dimension to the last one). The operator's own resolver reads
+/// all three words (`lib/std/builtin/modules/globals.cpp#idxArrayResolver`), and a call to this name
+/// is a call to that node, which is what the walk matches the node against.
+/// @example index_into_axis([[1.0, 2.0], [3.0, 4.0]], 0, 1)    // [1.0, 3.0]
+#op(':op/idx_arr')
+func index_into_axis::<T>(x: T[...], i: int, at: int) => T[...] panic
+
+/// `d(xs[.., i]) = dxs[.., i]`: the tangent of a position on the dimension the third word names.
+///
+/// The operand and the tangent are written `T[...]` and not `T[]`: a read along a named dimension
+/// takes an array of any rank, and the transform asks a law at the *element* type of the operand
+/// (`rule_types.h`), so `T[]` would say one dimension of one element and refuse `float[2, 2]` as a
+/// value of `float[]`. The open rank is every rank, and it is the spelling every rank-carrying law
+/// here uses (`jvp_take`, `jvp_reshape`).
+/// @example index_into_axis([[1.0, 2.0], [3.0, 4.0]], 0, 1)    // [1.0, 3.0]
+export rule jvp_idx_arr_axis::<T>(xs: T[...], i: int, at: int) { index_into_axis(xs, i, at) => func (dxs: T[...]) {
+    index_into_axis(dxs, i, at)
+} }
+
 // ---- the forward rule of `tensor:pick_at`, the read that states its length ----
 //
 // `pick_at(xs, position, length)` is `xs[position]` of a rank-1 array whose length `length` states,

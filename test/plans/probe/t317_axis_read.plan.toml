@@ -1,0 +1,17 @@
+id = "probe.t317_axis_read"
+order = 971
+tier = "fast"
+tags = ["probe"]
+desc = "A read on the second dimension of a 2-D value: what `:op/idx_arr` carries when the axis is not the first, and whether the forward table answers it."
+
+[defaults]
+kind = "behavior"
+case = "../../cases/probe/t317_axis_read.cml"
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "probe.t317_axis_read"
+desc = "The axis-carrying read, differentiated."
+args = ["${case}", "std::gir"]

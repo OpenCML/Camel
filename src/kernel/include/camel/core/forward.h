@@ -11,16 +11,18 @@
  * **Nothing is registered per operator.** The key a rule is filed under is a fact about the
  * operator, so it is read off the operator: `:op/add_d` is written `+` with two operands because
  * that is what `add` means, and `tensor:matmul` is written `matmul(...)` because that is the
- * operator's own name. Three operators cannot be written that way -- `xs[i]` is a bracket form with no
- * token, the array product's `*` key at two operands is already `:op/mul_d`'s, and `ltod`'s spelling
- * `float(x)` at one operand is a key every conversion to a double shares -- and those three are
- * the whole of `ruleKeyExceptions()`, which says so in words and is printed by the `std::rulesets`
- * pass so that an exception is never silent.
+ * operator's own name. Three operators cannot be written that way -- `xs[i]` is a bracket form with
+ * no token, the array product's `*` key at two operands is already `:op/mul_d`'s, and `ltod`'s
+ * spelling `float(x)` at one operand is a key every conversion to a double shares -- and those
+ * three are the whole of `ruleKeyExceptions()`, which says so in words and is printed by the
+ * `std::rulesets` pass so that an exception is never silent. The bracket form is the one operator
+ * with two keys, one per operand count (`xs[i]` and the axis-carrying `xs[.., 0]`), so it holds an
+ * entry per count and the question carries the count (`operandCount`).
  *
  * The name is read from the family's index every time it is asked for, never remembered from
  * registration time. That is what makes this an index consumer rather than a second copy of the
- * rules: remove a rule from the ruleset and the next question has no answer, which is exactly what a
- * transform must see.
+ * rules: remove a rule from the ruleset and the next question has no answer, which is exactly what
+ * a transform must see.
  *
  * **What a caller is handed is a rule object, not a name to look up again.** A `RuleObject`
  * (`camel/core/rule_index.h`) carries the five facts a transform reads about a rule -- its name,
@@ -38,6 +40,7 @@
 
 #include "camel/core/rule_index.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -77,11 +80,27 @@ std::vector<std::string> ruleKeyExceptionLines();
 ///
 /// `family` is needed for the arity of a module operator: `tensor:sum_axis` is `sum_axis` at three
 /// operands, and three is a fact the family's index holds (`arityOfHead`), not one the name spells.
-std::optional<RuleKey> ruleKeyOf(const std::string &family, const std::string &uri);
+///
+/// `operandCount` is how many operands the node the question is about actually has, and it is only
+/// the exception table's business: an operator can spell one count one way and another count
+/// another way -- `:op/idx_arr` is `index_into(x, i)` at two operands and `index_into_axis(x, i,
+/// at)` at three -- and those two keys are written down as two exceptions under one URI. Without
+/// the count the question can only be answered with the first of them. `nullopt` is the question
+/// the operator's name alone can settle: the count is not asked, and the first exception under the
+/// URI is the answer.
+std::optional<RuleKey> ruleKeyOf(
+    const std::string &family, const std::string &uri,
+    std::optional<size_t> operandCount = std::nullopt);
 
 /// What `uri`'s forward rule is right now, read from `rulesets.jvp`'s index at this moment.
 /// `nullopt` when the operator has no key at all (which is not the same as a family that lacks the
 /// rule: the two are `NoRuleForPrimitive` and `NoSuchFamily` in the answer).
+///
+/// `operandCount` is the operand count of the node the rule is asked for (`ruleKeyOf`): an operator
+/// whose spelling depends on how many operands it has gives a different key at each count, so a
+/// caller that knows the count asks with it. A caller that does not asks without it and gets the
+/// key the name alone settles.
+std::optional<RuleMatch> forwardRuleOf(const std::string &uri, std::optional<size_t> operandCount);
 std::optional<RuleMatch> forwardRuleOf(const std::string &uri);
 
 /// Every forward rule `uri` could answer by, in the order the family filed them: empty when the
@@ -92,6 +111,7 @@ std::optional<RuleMatch> forwardRuleOf(const std::string &uri);
 /// apart. The index does not encode the type; this answers the candidates and the caller lets the
 /// engine decide -- it instantiates a rule at the operand's own type, and a rule whose condition
 /// does not hold there gives a named refusal instead of an answer.
+std::vector<RuleMatch> forwardRulesOf(const std::string &uri, std::optional<size_t> operandCount);
 std::vector<RuleMatch> forwardRulesOf(const std::string &uri);
 
 /// Every rule the forward family files, in filing order: what a reading of the transform's sources
@@ -100,6 +120,8 @@ std::vector<RuleMatch> forwardRulesOf(const std::string &uri);
 std::vector<RuleObject> forwardRules();
 
 /// `forwardRuleOf`, for the family a linear function's pullback is written in.
+std::optional<RuleMatch>
+transposeRuleOf(const std::string &uri, std::optional<size_t> operandCount);
 std::optional<RuleMatch> transposeRuleOf(const std::string &uri);
 
 /// Every rule `uri` could answer by in the transpose family, in filing order: what a caller that can
@@ -107,13 +129,16 @@ std::optional<RuleMatch> transposeRuleOf(const std::string &uri);
 /// rather than by the order they were filed in. Empty when the operator has no key or the family
 /// holds none there -- `transposeRuleOf` still tells those two apart (`NoSuchFamily`,
 /// `NoRuleForPrimitive`).
+std::vector<RuleMatch> transposeRulesOf(const std::string &uri, std::optional<size_t> operandCount);
 std::vector<RuleMatch> transposeRulesOf(const std::string &uri);
 
 /// `forwardRuleOf`, for the family a batching transform asks (`rulesets.vmap`).
+std::optional<RuleMatch> vmapRuleOf(const std::string &uri, std::optional<size_t> operandCount);
 std::optional<RuleMatch> vmapRuleOf(const std::string &uri);
 
 /// Every rule `uri` could answer by in the batching family, in filing order: `transposeRulesOf`'s
 /// question asked of `rulesets.vmap`.
+std::vector<RuleMatch> vmapRulesOf(const std::string &uri, std::optional<size_t> operandCount);
 std::vector<RuleMatch> vmapRulesOf(const std::string &uri);
 
 /// `vmapRuleOf`, for a *head* rather than an operator: a call's callee is a name the graph holds,
