@@ -140,15 +140,6 @@ kind = "behavior"
 case = "../../cases/probe/editview/sec2_log.cml"
 args = ["check", "${case}"]
 expect_exit = 0
-# A known red, and it is the stdlib's, not the example's. The design declares `inline` variadic --
-# `inline(at, fn, args...)` (`docs/design/graph-editing/README.cn.md:117`) -- and its example passes
-# three arguments (`docs/design/graph-editing/README.cn.md:35`); the module declares two,
-# `export func inline::<G>(at: Node, fn: G) => Node` (`src/stdlib/graph.cml#inline`). Fixing the
-# signature is another card; this case is the reading that says which side is short.
-known_fail = true
-known_fail_owner = "graph module: `inline` (`src/stdlib/graph.cml`)"
-known_fail_reason = "`inline` has no variadic parameters yet: `src/stdlib/graph.cml:449` declares `inline::<G>(at: Node, fn: G) => Node`, while the design's table declares `inline(at, fn, args...)` (`docs/design/graph-editing/README.cn.md:117`), so the example that passes three arguments (`docs/design/graph-editing/README.cn.md:35`) is refused with `NoMatchingFunction`. The design is authoritative: the stdlib is the side that is short, and fixing its signature is another card."
-known_fail_msg = "No matching function found for argument types"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
