@@ -30,4 +30,14 @@ EffectSummary ofRegion(const Program &program, const GCGraph *graph, uint32_t re
 /// The effects of running one node of `graph` of `program` once.
 EffectSummary ofNode(const Program &program, const GCGraph *graph, gc_node_ref_t ref);
 
+/// The same three over whatever walks a graph in place of the program: the walk asks its reader
+/// every question it has about a graph, and a reader that answers through `GraphAccess` computes
+/// the same summary without the walk owning the program. The definitions are in `effects.cpp`, one
+/// translation unit, and `ProgramReader` is the reader they are instantiated for.
+template <class Reader> EffectSummary ofGraph(Reader reader, const GCGraph *graph);
+template <class Reader>
+EffectSummary ofRegion(Reader reader, const GCGraph *graph, uint32_t region);
+template <class Reader>
+EffectSummary ofNode(Reader reader, const GCGraph *graph, gc_node_ref_t ref);
+
 } // namespace camel::runtime::effectwalk
