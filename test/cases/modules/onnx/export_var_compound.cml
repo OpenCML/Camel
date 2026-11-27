@@ -8,7 +8,7 @@
  * conversion is written, not assumed).
  */
 import { get_env } from env
-import { model, save } from onnx
+import { export_model } from onnx
 import { reshape, sum } from tensor
 
 func forward(x: f32[...]) => f32[...] sync {
@@ -25,9 +25,9 @@ func forward(x: f32[...]) => f32[...] sync {
 func main() => string! sync {
     let x = reshape<[2, 2]>([1.0, -2.0, 3.0, 4.0] as f32[])
     println(forward(x))
-    return match model(func (x: f32[...]) => f32[...] {
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] {
         forward(x)
-    }, x)->save<out: get_env('ONNX_OUT') ?? ''> {
+    }, x) {
         case error e => {
             return e
         }

@@ -7,7 +7,7 @@
  */
 
 import { get_env } from env
-import { model, save } from onnx
+import { export_model } from onnx
 import { reshape, relu } from tensor
 
 func counts(t: f32[...]) => int[...] {
@@ -17,13 +17,13 @@ func counts(t: f32[...]) => int[...] {
 func main() => void! sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as f32[])
     println(counts(x))
-    return match model<dynamic_axes: [], target: 'none'>(counts, x)->save<out: get_env('ONNX_OUT_UNCHECKED') ?? ''> {
+    return match export_model<out: get_env('ONNX_OUT_UNCHECKED') ?? '', dynamic_axes: [], target: 'none'>(counts, x) {
         case error e => {
             return e
         }
         case v => sync {
             println('written without the check')
-            model(counts, x)->save<out: get_env('ONNX_OUT') ?? ''>
+            export_model<out: get_env('ONNX_OUT') ?? ''>(counts, x)
         }
     }
 }

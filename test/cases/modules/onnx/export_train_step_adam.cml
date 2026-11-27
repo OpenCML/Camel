@@ -10,7 +10,7 @@
 import { with_grad } from autodiff
 import { get_env } from env
 import { OptimizerState, adam, adam_state } from nn
-import { model, save } from onnx
+import { export_model } from onnx
 import { relu, mean, reshape } from tensor
 
 type Mlp = { w1: f32[...], b1: f32[...], w2: f32[...], b2: f32[...] }
@@ -41,7 +41,7 @@ func main() => string! sync {
     }
     let st = adam_state(m)
     let x = reshape<[2, 2]>([1.0, 2.0, -1.0, 0.5] as f32[])
-    return match model(step, (m, st, x))->save<out: get_env('ONNX_OUT') ?? ''> {
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, st, x)) {
         case error e => {
             return e
         }

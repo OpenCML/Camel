@@ -3,7 +3,7 @@
  * call: the pass refuses at the entry function (line 9).
  */
 
-import { model, save } from onnx
+import { export_model } from onnx
 
 func main() => int sync {
     println(1)

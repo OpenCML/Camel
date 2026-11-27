@@ -323,3 +323,25 @@ expect_exit = 0
 expect_stdout_exact = "0\n0.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+
+[[tests]]
+name = "optim.pass_qualified"
+desc = "A pass of the `opt` module is called through the module's name: `import opt` puts the module in scope and `loss->opt::cse` runs the pass on the function value, which then computes 12.0."
+kind = "behavior"
+case = "../../../cases/modules/optim/pass_qualified.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "12.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "optim.pass_imported_name"
+desc = "The same pass imported by its own name: `import { cse } from opt` puts `cse` in scope and `loss->cse` runs it on the function value, which then computes 12.0."
+kind = "behavior"
+case = "../../../cases/modules/optim/pass_imported_name.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "12.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

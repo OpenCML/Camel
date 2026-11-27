@@ -8,7 +8,7 @@
  * module and has no row, which is what the classification check reports.
  */
 import { get_env } from env
-import { model, save } from onnx
+import { export_model } from onnx
 import { reshape, sum } from tensor
 import { mark } from test_attrs
 
@@ -21,7 +21,7 @@ func net(x: f32[...]) => f32[...] {
 func main() => void! sync {
     let x = reshape<[2, 3]>([1.0, -2.0, 3.0, 0.5, -1.5, 2.5] as f32[])
     println(sum(net(x)))
-    model(func (x: f32[...]) => f32[...] {
+    export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: f32[...]) => f32[...] {
         net(x)
-    }, x)->save<out: get_env('ONNX_OUT') ?? ''>
+    }, x)
 }

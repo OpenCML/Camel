@@ -4,7 +4,7 @@
  */
 
 import { get_env } from env
-import { model, save } from onnx
+import { export_model } from onnx
 import { reshape } from tensor
 
 func f(x: f32[2, 2]) => f32[2, 2] {
@@ -13,7 +13,7 @@ func f(x: f32[2, 2]) => f32[2, 2] {
 
 func main() => string! sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as f32[])
-    return match model<dynamic_axes: [0]>(f, x)->save<out: get_env('ONNX_OUT') ?? ''> {
+    return match export_model<out: get_env('ONNX_OUT') ?? '', dynamic_axes: [0]>(f, x) {
         case error e => {
             return e
         }

@@ -12,7 +12,7 @@
  */
 
 import { get_env } from env
-import { model, save } from onnx
+import { export_model } from onnx
 import { reshape, relu, zeros, shape, load_npy, save_npy } from tensor
 
 func gate(t: f32[...]) => f32[...] {
@@ -34,16 +34,16 @@ func main() => int! sync {
     let out = get_env('ONNX_OUT') ?? ''
     return if out == '' then 0
     else if isGate then sync {
-        match model(gate, x)->save<out: out> {
+        match export_model<out: out>(gate, x) {
             case error e => {
                 return e
             }
             case v => 0
         }
     } else sync {
-        match model<dynamic_axes: [0]>(func (t: f32[...]) => f32[...] {
+        match export_model<out: out, dynamic_axes: [0]>(func (t: f32[...]) => f32[...] {
             forward(t, w)
-        }, x)->save<out: out> {
+        }, x) {
             case error e => {
                 return e
             }

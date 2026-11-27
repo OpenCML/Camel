@@ -12,7 +12,7 @@
  * is exported when ONNX_OUT is set.
  */
 import { get_env } from env
-import { model, save } from onnx
+import { export_model } from onnx
 import { load_npy, reshape, save_npy, sum } from tensor
 
 // for: a tensor state, one round per element of the tensor.
@@ -49,36 +49,36 @@ func main() => string! sync {
     let which = get_env('MODEL') ?? ''
     return if out == '' then '0'
     else if which == 'total' then sync {
-        match model<dynamic_axes: [0]>(func (x: f32[?]) => f32[?] {
+        match export_model<out: out, dynamic_axes: [0]>(func (x: f32[?]) => f32[?] {
             total(x)
-        }, (x))->save<out: out> {
+        }, (x)) {
             case error e => {
                 return e
             }
             case v => '1'
         }
     } else if which == 'sweep' then sync {
-        match model<dynamic_axes: [0]>(func (x: f32[?]) => (int, f32[?]) {
+        match export_model<out: out, dynamic_axes: [0]>(func (x: f32[?]) => (int, f32[?]) {
             sweep(x)
-        }, (x))->save<out: out> {
+        }, (x)) {
             case error e => {
                 return e
             }
             case v => '1'
         }
     } else if which == 'halve' then sync {
-        match model<dynamic_axes: [0]>(func (x: f32[?]) => f32[?] {
+        match export_model<out: out, dynamic_axes: [0]>(func (x: f32[?]) => f32[?] {
             halve(x)
-        }, (x))->save<out: out> {
+        }, (x)) {
             case error e => {
                 return e
             }
             case v => '1'
         }
     } else sync {
-        match model<dynamic_axes: [0]>(func (x: f32[?]) => (f32[?], int) {
+        match export_model<out: out, dynamic_axes: [0]>(func (x: f32[?]) => (f32[?], int) {
             bounded(x)
-        }, (x))->save<out: out> {
+        }, (x)) {
             case error e => {
                 return e
             }

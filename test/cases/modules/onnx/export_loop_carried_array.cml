@@ -8,7 +8,7 @@
  * used to refuse this case.
  */
 import { get_env } from env
-import { model, save } from onnx
+import { export_model } from onnx
 import { reshape, sum } from tensor
 
 func walk(x: float[...], xs: int[], k: int) => float[...] {
@@ -18,9 +18,9 @@ func walk(x: float[...], xs: int[], k: int) => float[...] {
 func main() => string! sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
     println(len([0]))
-    return match model(func (x: float[...]) => float[...] {
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(func (x: float[...]) => float[...] {
         walk(x, [0], 0)
-    }, (x))->save<out: get_env('ONNX_OUT') ?? ''> {
+    }, (x)) {
         case error e => {
             return e
         }
