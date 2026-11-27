@@ -382,3 +382,10 @@ test/cases/opt/e9/rc17_seed193.cml
 test/cases/opt/e9/rc21_seed429.cml
 test/cases/opt/e9/rc22_flat_if_var.cml
 test/cases/opt/e9/rc18_seed429.cml
+
+# `math:abs` of the smallest integer of each width: the wrap is the answer, so the value and the
+# difference `abs(x) - x` (zero) are what the program prints. Written as `std::abs`, the smallest
+# value is undefined behaviour and the answer was a positive number; the writer's `rt::intAbs` is
+# what keeps the interpreter's answer in the generated program. The width is declared in the
+# program: a bare `-2147483648` literal does not fit i32 and is measured on the wider branch.
+test/cases/modules/stdlib/abs_smallest_int.cml
