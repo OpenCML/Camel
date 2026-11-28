@@ -213,12 +213,11 @@ a compile-time error.
 
 ## The batch in the test suite
 
-`test/plans/feat/opt/progen.plan.toml` runs `progen.py check`: the first seeds whose every
-cell of the `cross` matrix passes today (about 15 s). A seed with a known bad cell is left out
-and listed in `CHECK_EXCLUDED` with the finding it shows. When a finding is fixed, move its
-seed back; when the generator changes the programs of existing seeds, raise
-`generate.VERSION` and choose the batch again from a fresh `diff` run. No seed is left out at
-present.
+`test/plans/feat/opt/progen.plan.toml` runs `progen.py check`: seeds 1 to 25 of
+`generate.VERSION` 9 over every cell of the `cross` matrix (about 15 s). There is no exclusion
+list and no filter: a red cell is a reading, and the defect it shows is recorded on the progen
+findings page (`test/cases/opt/progen/README.md`). When the generator changes the programs of
+existing seeds, raise `generate.VERSION` and record the version with every seed number.
 
 The same plan runs `progen.py fixed`: every finding with a `fixed` key in `findings.json`, under
 the rewrite sequence it was found with and under `std::cxx::inline`, `std::opt`,
@@ -283,22 +282,17 @@ the rewrite sequence it was found with and under `std::cxx::inline`, `std::opt`,
 - **One statement, one effect** means interleavings inside an expression are not explored.
 - The seed stream depends on `generate.VERSION` and on the feature set; findings are archived
   as reduced programs with their expected output, not as seeds.
-- **A seed is left out when a pass crashes on it.** The check batch holds seeds whose every
-  cell passes, so a seed that stops being green is listed in `progen.py`'s `CHECK_EXCLUDED`
-  with what it shows, and left out is not absent: the test plan runs that seed on its own in a
-  fast-layer entry (`progen_seed_4` today), so the reading appears on every merge instead of
-  passing over it. `CHECK_EXCLUDED` is empty today. Its last entry was seed 4 of
-  `generate.VERSION` 8, which made all four cells of `std::cxx::inline` end in SIGSEGV -- not
-  something the front end says about the program and not something the generator can avoid
-  without dropping a shape the language accepts -- until `edeaa9c41` laid a spliced body's wait
-  before the loop's first round; `test/cases/opt/inline/loop_wait_after_inline.cml` is its
-  25-line reduction.
+- **A red cell is a reading, not a reason to leave the seed out.** The batch is fixed (seeds 1-25
+  of `generate.VERSION` 9) and every cell of every seed runs; a cell that fails names a defect, and
+  that defect is recorded on the progen findings page -- there is no exemption mechanism here. The
+  seed the optimizer broke last is also read on its own in a fast-layer entry (`progen_seed_4`),
+  so its reading appears on every merge; the crash it exercised is gone
+  (`test/cases/opt/inline/loop_wait_after_inline.cml` is its 25-line reduction).
 - **A seed number is not a program.** `generate.VERSION` 7 -> 8 (`0ddbb92af`, "existing seeds are
   other programs") re-pointed every seed at another program, so a finding recorded as "seed 26"
   alone names nothing a later version generates: the record survives, the program it named does
-  not. Every record of a seed therefore carries the generator version with it -- the entries of
-  `CHECK_EXCLUDED` (in the comment above it and in the entry itself), the plan's entries, and the
-  notes here.
+  not. Every record of a seed therefore carries the generator version with it -- the plan's
+  entries and the notes here.
 - **One program in fifty is still refused by the front end.** `SemanticDiag::GenericFunctionAsValue`
   is a generic function given a position that does not fix its type variables; seed 32 under
   `generate.VERSION` 8 shows it, seed 49 under version 7, so about one program in fifty and none

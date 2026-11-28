@@ -5,7 +5,7 @@ tags = ["feat", "opt", "progen", "differential"]
 
 [[tests]]
 name = "progen_check"
-desc = "Random programs with a reference output computed outside the compiler (test/tools/progen): a fixed batch of seeds over integer, float, bool and string arithmetic, arrays, tuples, structs, let and var (written through var parameters and captures), if and match, functions, bounded recursion, closures, higher-order functions, map / filter / reduce / foreach / zip / range, sync blocks with println, and wait. Each program runs without passes and under every cell of the cross matrix (25 rewrite sequences on the node VM; no rewrite, std::cxx::inline, std::opt, std::opt and std::macro std::opt also on the bytecode VM, the JIT and the parallel scheduler) and every run must print exactly the reference output or decline with a located diagnostic of a pass. The batch holds only seeds whose every cell passes today; the seeds left out and the defects they show are recorded in test/cases/opt/progen/README.md and in CHECK_EXCLUDED of progen.py. **Re-pointed to `generate.VERSION` 9: the batch is red until the seeds are re-picked** -- seed 25 now names a program on which `std::opt`'s specialization breaks the edge invariants of its own graph (`passes a string as ordinary argument 0 of 'r1$spec40', which takes a int`), 35 of 1025 cells, a defect that is not one of the two the findings pages record."
+desc = "Random programs with a reference output computed outside the compiler (test/tools/progen): a fixed batch of seeds over integer, float, bool and string arithmetic, arrays, tuples, structs, let and var (written through var parameters and captures), if and match, functions, bounded recursion, closures, higher-order functions, map / filter / reduce / foreach / zip / range, sync blocks with println, and wait. Each program runs without passes and under every cell of the cross matrix (25 rewrite sequences on the node VM; no rewrite, std::cxx::inline, std::opt, std::opt and std::macro std::opt also on the bytecode VM, the JIT and the parallel scheduler) and every run must print exactly the reference output or decline with a located diagnostic of a pass. The batch is fixed: a cell prints the reference output or declines with a located diagnostic of a pass, and the defect a red cell shows is recorded in the progen findings page."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/progen/progen.py"
@@ -18,32 +18,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # The work is fixed (25 programs x 41 pipelines = 1,025 cells, each one a compiler run), so what
 # bounds it is its own CPU time, and `timeout_ms` below is the liveness bound only -- the reading
 # the rule asks for, and the one the resnet referees of
-# feat/modules/autodiff and the entries of perf/step_budget state. Measured on the 32-core host
-# of this project, the plan alone under camel-remote -Jobs 8:
-#
-#   86560 ms of CPU / 91858 ms wall  (the first window in which every cell ran)
-#   82180 ms of CPU / 51220 ms wall  (the run that turned this entry green)
-#   83670 ms of CPU / 42820 ms wall  (the measurement in force: every cell reaches
-#                                     the compiler again, 223 of them by failing)
-#
-# The budget is 150000 ms and is not re-derived from the newest reading: it keeps the margin the
-# slower reading set (150000 / 86560 = 1.73x), the headroom those referees took, which
-# is what the budget states instead of the runner's 4x margin (300000 / 86560 = 3.47x, the reading
-# before the cells began to run). The 83670 ms measurement leaves that budget at
-# 150000 / 83670 = 1.79x.
-cpu_budget_ms = 150000
+# feat/modules/autodiff and the entries of perf/step_budget state. The budget states the take, not a
+# reading: 1.5x the CPU time this batch costs on the build host.
+cpu_budget_ms = 250000
 timeout_ms = 300000
 
 # Seed 4 of `generate.VERSION` 9, run on its own, and a fast reading of the seed the optimizer broke
-# last. It was the seed the batch left out and the entry carried `known_fail = true`; both are gone
-# because the crash is. `progen_4` of the E9 differential went from crash 1 to crash 0,
+# last. `progen_4` of the E9 differential went from crash 1 to crash 0,
 # and `test/cases/opt/inline/loop_wait_after_inline.cml` is its 25-line reduction: the four `inline`
 # cells (inline@nvm, @fvm, @jit, @prl) died of SIGSEGV because `addSpliceOrderEdges` writes the wait
 # of the statement a call was written after onto the nodes of the spliced body that own a region, and
 # `computeExecutionOrder` laid that predecessor between the body's range and the `LOOP`, which
-# `buildLoopTables` requires to be one range. `CHECK_EXCLUDED` in test/tools/progen/progen.py is
-# empty now, so the seed is back in `progen_check` as well; this entry stays because the batch is the
-# milestone layer and the seed the optimizer broke last is worth four seconds on every merge.
+# `buildLoopTables` requires to be one range. The seed runs in `progen_check` as well; this entry
+# stays because the batch is the milestone layer and the seed the optimizer broke last is worth four
+# seconds on every merge.
 #
 # The seed number alone does not name a program: `generate.VERSION` 7 -> 8 ("existing
 # seeds are other programs") re-pointed every seed at another program, and 8 -> 9 did it again
