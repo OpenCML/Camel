@@ -567,6 +567,11 @@ check(
     carried.includes('new=0\n') && /carried-from=[0-9a-f]{40}\n/.test(carried) && fs.existsSync(path.join(common, 'camel-built', docsTip)),
     carried,
 );
+check(
+    'the summary of the batch\'s reading is carried to the merge that landed as well',
+    fs.existsSync(path.join(common, 'camel-read', `${docsTip}.summary.json`)),
+    docsTip,
+);
 laneFrom('lane/source-arrives', 'src/third.cpp', 'int third() { return 3; }\n');
 const sourceBefore = remoteTip();
 const sourceArrive = runArrival('lane/source-arrives', 'src/arrived.cpp');
@@ -686,6 +691,14 @@ check(
     (traced.status ?? -1) === 0 && tracedResult && names(tracedResult.merged) === 'lane/untraced' &&
         tracedSkip && tracedSkip.reason.includes('process traces, which the pre-push hook refuses') &&
         /src[\\/]trace\.cpp:1/.test(tracedSkip.reason) && !tracedOut.includes('could not read'),
+    tracedOut,
+);
+const tracedTip = tracedOut.split('\n').find((one) => one.startsWith('  tip '))?.trim().split(/\s+/)[1];
+const tracedSummary = tracedTip ? path.join(common, 'camel-read', `${tracedTip}.summary.json`) : '';
+check(
+    'a whole-layer reading with no new red leaves the summary it read next to the record, for a promotion to reuse',
+    tracedTip && fs.existsSync(path.join(common, 'camel-read', tracedTip)) && fs.existsSync(tracedSummary) &&
+        Array.isArray(JSON.parse(fs.readFileSync(tracedSummary, 'utf8')).test_timings),
     tracedOut,
 );
 

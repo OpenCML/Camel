@@ -481,6 +481,44 @@ const reportsOf = (job) => Object.fromEntries((job.files || []).map((file) => [p
     check('a failed job frees the lock and cleans the remote run', !fs.existsSync(path.join(s.state, 'promotion', 'lock')) && fs.existsSync(s.file('cleanup.log')))
 }
 
+// ---- 9. --from-batch reuses the merge seat's whole-layer reading instead of running the layer
+{
+    const readDir = path.join(path.resolve(repo, git(repo, ['rev-parse', '--git-common-dir'])), 'camel-read')
+    const none = scenario({})
+    const refused = promote('start', [...none.args, '--from-batch'])
+    check('--from-batch with no whole-layer reading of the merge batch fails at start with exit 2 and says so', refused.code === 2 && /no merge-batch whole-layer reading/.test(refused.err) && /without --from-batch/.test(refused.err) && !fs.existsSync(path.join(none.state, 'promotion', 'lock')), `${refused.code} ${refused.err}`)
+    // A summary without a record that says plans=test/plans and new=0 does not count.
+    write(path.join(readDir, `${tip}.summary.json`), JSON.stringify({ test_timings: BASE_ROWS }))
+    write(path.join(readDir, tip), 'plans=smoke\nreds=1\ntier=fast\nnew=0\n')
+    const partial = promote('start', [...none.args, '--from-batch'])
+    check('a reading of touched plans only is not taken for the whole layer', partial.code === 2, `${partial.code} ${partial.err}`)
+
+    write(path.join(readDir, tip), 'plans=test/plans\nreds=1\nbaseline=x\ntier=fast\nnew=0\n')
+    const s = scenario({})
+    const begun = promote('start', [...s.args, '--from-batch', '--publish'])
+    check('--from-batch says which commit it took and that it is the merge batch\'s reading', begun.code === 0 && begun.out.includes(tip.slice(0, 12)) && /merge batch/.test(begun.out), `${begun.out}${begun.err}`)
+    const { job } = await until(s, ended)
+    const files = reportsOf(job)
+    const record = files['promotion-5.record.json'] ? JSON.parse(fs.readFileSync(files['promotion-5.record.json'], 'utf8')) : {}
+    const log = fs.readFileSync(path.join(s.state, 'promotion', job.id, 'worker.log'), 'utf8')
+    check('the layer command is not run, and the job completes on the reused reading', job.phase === 'done' && job.verdict === 'no new red' && !fs.existsSync(s.file('pids.jsonl')) && /reused the merge batch's whole-layer reading of /.test(log), `${job.phase} ${job.error ?? ''} ${log}`)
+    check('the promotion record says the reading came from the merge batch, and the tip is still published', record.reading_source === 'merge batch' && record.tip === tip && record.readings?.total === 5 && fs.existsSync(s.file('published.json')), JSON.stringify(record))
+    // The completeness check still applies to a reused reading.
+    write(path.join(readDir, `${tip}.summary.json`), JSON.stringify({ test_timings: BASE_ROWS.slice(0, 2) }))
+    const t = scenario({})
+    promote('start', [...t.args, '--from-batch'])
+    const incomplete = await until(t, ended)
+    check('a reused reading that lacks a case of the previous reading fails like a layer run would', incomplete.job.phase === 'failed' && /absent from this one/.test(incomplete.job.error || ''), `${incomplete.job.phase} ${incomplete.job.error}`)
+    // A normal start records the layer run as the source.
+    const u = scenario({})
+    promote('start', u.args)
+    const ran = await until(u, ended)
+    const ranFiles = reportsOf(ran.job)
+    const ranRecord = ranFiles['promotion-5.record.json'] ? JSON.parse(fs.readFileSync(ranFiles['promotion-5.record.json'], 'utf8')) : {}
+    check('a start without --from-batch records the layer run as the reading source', ranRecord.reading_source === 'layer run' && fs.existsSync(u.file('pids.jsonl')), JSON.stringify(ranRecord.reading_source))
+    fs.rmSync(readDir, { recursive: true, force: true })
+}
+
 const failed = checks.filter((c) => !c.holds)
 for (const c of checks) console.log(`${c.holds ? 'ok  ' : 'FAIL'} ${c.name}${c.holds ? '' : `  [${c.detail}]`}`)
 console.log(`promote: ${checks.length} checks, ${failed.length} failed`)

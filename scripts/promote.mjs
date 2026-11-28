@@ -30,6 +30,12 @@
  * Options of `start` (kept in `job.json`, so the other subcommands need none of them):
  *   --tip <ref>             what to measure; default origin/integration, else integration
  *   --publish               fast-forward develop to the measured commit when no red is new
+ *   --from-batch            reuse the whole-fast-layer reading the merge seat took: from the tip, walk the
+ *                           first-parent chain back (at most 50 commits) to the first commit that has
+ *                           `<git common dir>/camel-read/<sha>.summary.json` and a record with
+ *                           `plans=test/plans` and `new=0`; that commit becomes the tip and its summary
+ *                           stands in for the layer run (the completeness check and everything after are
+ *                           unchanged; the record says `reading_source`). No such commit: exit 2
  *   --repo <path>           the repository (default: the one this script is in)
  *   --state-dir <dir>       where jobs live; default `stateDir` of internal/tools/camel-gate.local.json
  *   --layer <command>       runs the whole fast layer in {worktree}; must leave {worktree}/test/results/fetched/summary.json
@@ -118,7 +124,7 @@ function parseArgs(argv) {
         'develop', 'reports', 'reports-ref', 'jobs', 'heartbeat-limit', 'heartbeat-interval', 'lines', 'job',
         'layer-timeout', 'short-timeout', 'accept-missing',
     ])
-    const bare = new Set(['publish', 'no-fetch', 'no-verify-publish', 'json'])
+    const bare = new Set(['publish', 'from-batch', 'no-fetch', 'no-verify-publish', 'json'])
     for (let i = 0; i < argv.length; i += 1) {
         const word = argv[i]
         if (!word.startsWith('--')) {
@@ -244,6 +250,32 @@ function holderAlive(root) {
 
 // ---------------------------------------------------------------- start
 
+const BATCH_WALK = 50
+
+/**
+ * The newest commit on the first-parent chain from `tip` (at most BATCH_WALK commits) that the merge
+ * seat read the whole fast layer at without a new red: it has `camel-read/<sha>.summary.json` in the
+ * git common dir and its record says `plans=test/plans` and `new=0`. Null when there is none.
+ */
+function findBatchReading(repo, tip) {
+    const commonRaw = git(repo, ['rev-parse', '--git-common-dir'], { allowFailure: true })
+    if (!commonRaw) return null
+    const readDir = path.join(path.resolve(repo, commonRaw), 'camel-read')
+    const chain = (git(repo, ['rev-list', '--first-parent', '-n', String(BATCH_WALK), tip], { allowFailure: true }) || '').split('\n').filter(Boolean)
+    for (const sha of chain) {
+        const summary = path.join(readDir, `${sha}.summary.json`)
+        if (!fs.existsSync(summary)) continue
+        let record
+        try {
+            record = fs.readFileSync(path.join(readDir, sha), 'utf8').split(/\r?\n/)
+        } catch {
+            continue
+        }
+        if (record.includes('plans=test/plans') && record.includes('new=0')) return { sha, summary }
+    }
+    return null
+}
+
 function doStart(flags) {
     const repo = path.resolve(flags.repo || SCRIPT_REPO)
     const root = stateRootOf(flags, repo)
@@ -257,6 +289,16 @@ function doStart(flags) {
         if (tip) break
     }
     if (!tip) fail(2, `the tip ${refs.join(' / ')} does not resolve to a commit in ${repo}`)
+
+    let batchReading = null
+    if (flags['from-batch']) {
+        batchReading = findBatchReading(repo, tip)
+        if (!batchReading) {
+            fail(2, `no merge-batch whole-layer reading was found within ${BATCH_WALK} commits of ${tip.slice(0, 12)} (first-parent); start without --from-batch`)
+        }
+        if (batchReading.sha !== tip) tip = batchReading.sha
+        say(`--from-batch: the tip is ${tip.slice(0, 12)}, the commit the merge batch read the whole fast layer at; its reading is reused and the layer is not run`)
+    }
 
     const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-')
     const id = `${stamp}-${tip.slice(0, 8)}`
@@ -290,6 +332,7 @@ function doStart(flags) {
             heartbeatInterval: Number(flags['heartbeat-interval'] || 20),
             fetch: flags['no-fetch'] !== true,
             verifyPublish: flags['no-verify-publish'] !== true,
+            batchReading,
         }
         createJob(root, id, {
             kind: 'promotion',
@@ -524,9 +567,19 @@ async function runWorker(flags) {
         const at = () => git(tree, ['rev-parse', 'HEAD'])
         if (at() !== tip) throw new Error(`the measuring tree is at ${at()}, not at the tip ${tip}`)
         fs.rmSync(summaryFile, { force: true })
-        const layer = await children.run(fill(config.layer, values), { label: 'layer', cwd: tree, limitSeconds: config.layerTimeout })
-        if (layer.error) throw new Error(`the layer command could not run: ${layer.error.message}`)
-        appendLog(dir, `[layer] exit ${layer.code}`)
+        let layer
+        if (config.batchReading) {
+            // The merge seat already read the whole fast layer at this commit: its summary stands in
+            // for a layer run, and goes through the same completeness check below.
+            fs.mkdirSync(path.dirname(summaryFile), { recursive: true })
+            fs.copyFileSync(config.batchReading.summary, summaryFile)
+            layer = { code: 0 }
+            appendLog(dir, `[layer] reused the merge batch's whole-layer reading of ${config.batchReading.sha}; no layer run`)
+        } else {
+            layer = await children.run(fill(config.layer, values), { label: 'layer', cwd: tree, limitSeconds: config.layerTimeout })
+            if (layer.error) throw new Error(`the layer command could not run: ${layer.error.message}`)
+            appendLog(dir, `[layer] exit ${layer.code}`)
+        }
         if (at() !== tip) throw new Error('the measuring tree moved while the layer ran, so the reading is not about the tip')
 
         // ---- the reading has to be complete
@@ -651,6 +704,7 @@ async function runWorker(flags) {
             promotion,
             tip,
             tier: 'fast',
+            reading_source: config.batchReading ? 'merge batch' : 'layer run',
             scope: 'test/plans (the whole plan tree)',
             jobs: config.jobs,
             measured_at: new Date().toISOString(),

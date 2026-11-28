@@ -446,8 +446,11 @@ function readTip(args, baseSha, tip) {
             : `merge-batch: reading ${plans.length} touched plan(s): ${plans.join(', ') || '(none)'}\n`,
     )
     let rows = []
+    const summary = path.join(seat, 'test', 'results', 'fetched', 'summary.json')
+    // Beside the record, the whole-layer summary a promotion may reuse; an earlier one is not this reading's.
+    const summaryCopy = `${recordFile}.summary.json`
+    fs.rmSync(summaryCopy, { force: true })
     if (plans.length > 0) {
-        const summary = path.join(seat, 'test', 'results', 'fetched', 'summary.json')
         fs.rmSync(summary, { force: true })
         const command = args.read.split('{seat}').join(seat).split('{plans}').join(plans.join(','))
         const started = Date.now()
@@ -498,6 +501,8 @@ function readTip(args, baseSha, tip) {
             '',
         ].join('\n'),
     )
+    // Only a reading of the whole layer can stand in for a promotion's own; touched plans cannot.
+    if (code && rows.length > 0) fs.copyFileSync(summary, summaryCopy)
     return { skipped: false, newReds, plans, reds: reds.length, baseline: baseline.name }
 }
 
@@ -726,6 +731,8 @@ function main() {
                 if (!fs.existsSync(from)) continue
                 fs.writeFileSync(path.join(common, kind, landed), `${fs.readFileSync(from, 'utf8').replace(/\n*$/, '\n')}carried-from=${tip}\n`)
             }
+            const summaryFrom = path.join(common, 'camel-read', `${tip}.summary.json`)
+            if (fs.existsSync(summaryFrom)) fs.copyFileSync(summaryFrom, path.join(common, 'camel-read', `${landed}.summary.json`))
         }
     }
 
