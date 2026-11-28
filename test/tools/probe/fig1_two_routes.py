@@ -57,3 +57,4 @@ for route, passes in ROUTES[stage]:
 if len(seen) == 2:
     print("identical=%s" % (seen["camel"] == seen["cpp"]))
 sys.exit(1)
+
