@@ -541,3 +541,6 @@ git worktree add --detach <旧提交>
 
 **12. `git cherry -v` 换底后仍全 `+` 是正常的。**
 我一度让车道"换底后 `cherry -v` 应该变空、空了才算干净"，`lane-oper-shape-guard` 纠了我：`cherry -v` 列的是"目标里没有等价补丁的那些提交"，换底（`rebase`）不改变"这 4 笔在上游有没有等价物"⇒ 本来就该全 `+`。**换底干净的判据是**：`rebase` 无冲突、`git status --porcelain` 空、`git log --oneline` 里提交数对得上，**不是** `cherry` 变空。判删才用 `cherry`：`+0 / -N`（全 `-`）才等价、才可删。
+
+**13. 任务板的例行清理：超过 230 张就清一次 `completed`。**
+决策者 2026-11-28 定（`D-1128-62`，起因是 `team_task_create` 报 `Team task limit 256 reached`，派不出新卡）：板上总数**超过 230** 就清 `completed`，**只删 `completed`，`in_progress`/`pending`/`blocked` 一张不动**；**不用先列 id 给他** —— 卡的记录在 `internal/backlog.md` 与提交里，卡只是派活的把手。清的时候按 `team_task_list({status:"completed"})` 分页取 `id + revision`，逐张 `team_task_update({action:"delete", expected_revision})`。清到 230 以下即可继续派活；不要一次清空（每次删 20–30 张，观察两轮再说）。
