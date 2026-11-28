@@ -54,6 +54,16 @@ exempt, 0 new, stale=0
 
 > 2026-11-25 跟进（`C-1124-231`）：上面 `--tables` 那句「三张表」和这段原样输出里的 `48 key(s) both answer` 是四桶拆分之前的读数。旧的 `both` 只要这个键有任何一条 law 就算成 both，于是 `forward-only` 被读成 both，engine-only 也被读成「可达但反半缺失」；现在四桶拆开（`both` / `forward-only` / `reverse-only` / `neither-half`），`engine-only` 与 `forward-only` 分开计数，数字以新输出为准。
 
+> 2026-11-28 跟进（`D-1128-*`，量具口径）：`engine-only` 里有两类差**根本不是欠账**，读出来单列，清单不再为它们各写一行。
+> 一类是**通则判据**：`covered by the no-tangent step`（`coveredByRule`）读的就是引擎自己的那条判据——数组的答案由**元素**决定
+> （`src/kernel/core/tangent_space.cpp#answerOf`，`case TypeCode::Array`：the element decides），元素离散则整体无切向空间；量具原先只认
+> 裸类型名，现在也认族写法（`=> WithElement<A, i32>`，`stdlib/prelude.cml`），于是 `:op/atoi`/`:op/atol` 两个键归这一类。
+> 另一类是**变换在查律之前就认下的键**：`handled by the transform before it looks a law up`（`transformHandled`），集合**从树里读**——
+> `src/stdlib/transforms/node_operator.h#memberReadOf` 拿节点 URI 比的那组字面量，由 `transforms/jvp.cpp` 在查律之前调用；成员读的成员模板
+> 是前端写进算子的常量，变换自己读它并投影切向，任何规则集的律都不可能是答案。现有两个键：`:op/access`、`:op/access_key`。
+> **`idx_take` 不在这里**：回答它的是引擎的 `idxTakeArrayVjp` 与 tensor 模块自己的 `setVjp`（`src/stdlib/tensor/ops/layout_ops.cpp`），
+> 那是引擎侧的另一套机制，不叫"变换在查律前认下"，仍留在 `engine-only` 的豁免里。两类都不改 `--strict` 的判定：`stale>0` 仍然 exit 1。
+
 | 数 | 值 | 意思 |
 |---|---|---|
 | 库的律 | 103 条 | 两个规则集（`transpose.cml` + `jvp.cml`）的 `rule` 声明 |
