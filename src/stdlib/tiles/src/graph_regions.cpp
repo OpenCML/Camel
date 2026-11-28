@@ -331,14 +331,19 @@ void ids(std::ostream &out, const std::vector<size_t> &values) {
 } // namespace
 bool touchesNothing(core::OperId oper) {
     const camel::ops::Record *record = core::OperatorTable::instance().recordOf(oper);
-    // The operator record's clause, and nothing beside it: `pure` is the empty `uses` clause and
-    // `external` is the reach that clause states, so a record nobody wrote a clause for answers
-    // "it touches something outside" (design principles 3.3) instead of being answered a second
-    // way from the table's derived bits.
+    // The operator record's clause, and nothing beside it: `external` is the reach that clause
+    // states, so a record nobody wrote a clause for answers "it touches something outside" (design
+    // principles 3.3) instead of being answered a second way from the table's derived bits.
     if (record == nullptr) {
         return false;
     }
-    return record->pure() && !record->external();
+    // The footprint, not the promise: `pure` answers "the clause states no write", which is the
+    // operator's own promise about itself, and not what a `#gpu` scope asks. What it asks is
+    // whether running the node touches anything the device does not have -- and the footprint says
+    // that in one reading, `none()`: no access declared (a read of a resource is as much a place
+    // the device does not have as a write is), nothing allocated, no reach outside the program, and
+    // no function operand whose own accesses the node brings.
+    return !record->external() && record->uses.value.none();
 }
 bool structuralOperator(core::OperId oper) {
     // The operator forms the front end writes that run nothing of their own: a conversion, a
