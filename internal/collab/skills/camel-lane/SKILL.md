@@ -624,6 +624,20 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
 
 · **PowerShell 里 `git grep -A 5 pattern` 会把 `-A` 当成 revision 而失败**：写成 `git grep --after-context=5 pattern`（同理 `--before-context=`），或直接用 grep 工具。同类陷阱：`git log -S` 的 `-S` 正常，但任何单字母选项都可能被 PowerShell 抢参，长选项最稳。
 
+## 11¼. 反向断言：每一串必须在正确路径上**不可能出现**（2026-11-28，付过两次代价）
+
+```
+判据不是「我没想到它会命中」，而是「**这条正确消息 / 正确输出里有没有这个词**」。
+反向断言（`expect_output_not_contains`、`expect_error_not_contains`、日志 `!~` 一类）的每一串，
+必须**只在错误路径才产生**；否则用例测的是「正确消息里别出现这个词」，而不是被测行为。
+两次实例（同一形状）**：
+ · `always_fails` 的程序形态原本写 `expect_output_not_contains = ["exported"]` —— 它命中了**正确消息本身**里的
+   `for the exported inputs` ⇒ 那一行被判红一次。改成 `["onnx::export_model: wrote", ":?:?:"]`（**变紧**，不是放宽）。
+ · 更早那对「**同串不等于同结果**」：两个后端报同一个错也会同串，于是拿字符串相等当行为相等 —— 反向侧同理，串只证文本。
+可用的反向标记只有两类**：① **只有成功路径才写出的行**（如 `onnx::export_model: wrote`）；② **兜底格式**（如 `:?:?:`，没有位置信息时才有）。
+拿不准时先问一句「这条用例的正确输出长什么样」，把那串念一遍；念得到 ⇒ 它不能当反向标记。
+```
+
 ## 11½. 两条失败例：假红来自行号，grep 来自跨行拼接（2026-11-28）
 
 ```
