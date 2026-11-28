@@ -225,6 +225,8 @@ async function buildPanelOf(repo, stateDir) {
         // A queue that is long, or two runs whose phases overlap, is read here rather than assumed.
         running: open.map((row) => ({
             worktree: row.worktree ?? null,
+            // Whose work the run is: a tree is lent between lanes, so its name alone does not say.
+            branch: row.branch ?? null,
             phase: row.phase ?? null,
             slot: row.slot ?? null,
             // The width the run's slot granted (see camel-remote.ps1): what a reader compares the
