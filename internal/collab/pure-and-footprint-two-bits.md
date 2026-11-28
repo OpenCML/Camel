@@ -47,6 +47,22 @@ if (clause->pure() && !clause->uses().empty())   // 声明写了 pure，却带�
 - **甲/乙/丙**：按 `feat/modules` 层基线（`fail 29 / known 1`）＋ **75 表 141 名**逐名判；**每条甲写一句"为什么被 pure 变意思打到"**；**旧法期望的改用例，真回归的修实现，不许为让它绿改语义**。
 - `lane-editview-a` 手上那两笔（`63845ee572` 读声明 + `45f096735c` 体-序）**保留、但不宣称修好块体**。
 
+**② 的两条读数（第五项接线后，在 `lane/arrangeable-two-bits@85101c529b` 上取；底 `origin/integration@97755d51e8`）**
+
+**现场（承诺真、足迹假、仍可重算）**：`test/cases/loops/edges.cml` 的 node 13
+```
+FACT {"library":"facts","kind":"core.arrangeable",...,"anchors":[{"graph":"root","node":13}],"value":"reads a resource a write reaches",...}
+```
+理由串**只有**这一项 —— 若 ① 承诺为假，`toString` 会先打 `not pure`（逐个列出不成立者），所以这一行同时是"`pure` 仍为真"的读数；同一用例四个后端全绿（`loops.edges.nvm/.fvm/.jit/.prl` PASS）⇒ **"不可摆"不妨碍它被丢弃、被重算**。
+
+**缺口（"读只读资源仍可摆"：**无实例**）**：把 `test/cases` 全 4200 个 `.cml` 用 `camel inspect --fact core.arrangeable` 扫过，只得到上一条"仅第五项不成立"的节点；`camel inspect --ops` 显示**当前标准库被声明的可写资源只有 `graph::draft`（`class: handle`，`mode: rmw`：`graph::erase`/`add_constant`/`add_param`/`commit`）与 `profiler`（`class: ambient`）**，语料里**没有"读一个没人写的 `handle` / `graph` / `spelling`"的算子**（`src/stdlib/graph.cml:72 resource spelling readonly` 这类只读资源**有声明、没有算子读它**）。⇒ 第五项**目前只会因为"读草稿"而为假**；"读只读资源仍可摆"这条**等有人写出那样的算子**，取第一例的现成命令：
+```
+camel inspect --fact core.arrangeable <case>
+```
+（事实转储在 `inspect` 子命令下；`camel --fact …` 在 run 语法里是 unknown option。）**不为了凑读数造临时用例** —— 那是第二份真相。
+
+**代价（消费者一侧，已另派一格）**：`test/cases/modules/tiles/resident_cpu_block.cml` 变红（`GpuScopeUnsupported: '#gpu' scope 'step'`），走 `src/stdlib/tiles/src/region_outline.cpp:155-167` 的 `keepsOrder` —— **"要保顺序"被当成了"留在 `#gpu` 作用域里"**，而这是两个问题。判定 **真回归、不是旧法期望**，**修在消费者**（`lane/gpu-scope-placement`），不在事实层。
+
 ## 3 不归这条线的一格
 
 **编 stdlib 库时 prelude 的导出表整个为空（连 `map` 都取不到）** —— `rules` 那 5 条与 `schedulers` 编不过的根，**单开一格修**，不要并进这条主线。
@@ -54,3 +70,7 @@ if (clause->pure() && !clause->uses().empty())   // 声明写了 pure，却带�
 ## 4 台账
 
 三版读数与四类读者的行号见 `internal/collab/pure-one-bit-four-readers.md`（含 `Compare-Object` 少 `-IncludeEqual` 时"丙恒为 0"那条教训）。
+
+`2026-11-28` **第五项接线**（`lane/arrangeable-two-bits@85101c529b`，底 `origin/integration@97755d51e8`，两笔：`c8ae83150f` 模型格 cherry-pick + `85101c529b` 第五项）：`arrangeable.h` 五项齐全（`noAccessToWrittenResource`），`facts.cpp` 的 `terms.pure = record->pure()` **原样未动**、新增 `terms.noAccessToWrittenResource = !record->accessesWritableResource()`，`andTerms` 跟着加、`toString` 打 `reads a resource a write reaches`。`BUILD_EXIT=0`、`dirty 0`；capacity 18/18、compile 2734/2718/13、modules 2093/2057/**28**（基线 27，+1）。对 75 表 141 名：**甲 1 / 丙 40 / 乙 0 / 未跑 101**，覆盖 4845 条（`feat/compile` 114 计划 + `feat/modules` 85 计划 + `feat/mm/capacity`）。**甲那 1 条 = `resident_cpu_block`，真回归，修在消费者**（见 §2 末）。
+
+`2026-11-28` **另一条同族教训（读数口径）**：poison 族的基线**只能取同一棵树上的"整份跑"**（点名计划文件，`--tier` 不参与）；141 表里那几行是快层的**风险抽样**（每源计划 1–3 条），**抽样是整份跑的子集**（表里 3 条在整份跑 42 条里 3/3 命中），`-Tier milestone` 只跑未抽样那一半、不能当这条基线。
