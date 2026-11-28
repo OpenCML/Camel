@@ -59,7 +59,7 @@
 
 | 枝 | ahead | behind | 最后提交（时刻 + 标题前 40 字） | 谁在做 | 去向 |
 |---|---|---|---|---|---|
-| `lane/onnx-run` | 26 | 11 | 09:04 collab: the map of the twenty-six reds this lane still owns | `lane-ssa-residue` | **冻结＝迁移轨**；26 条地图在 `task-342-onnx-migration-map.md`；迁移不通之前不进队列 |
+| `lane/onnx-run` | 26 | 11 | 09:04 collab: the map of the twenty-six reds this lane still owns | `lane-ssa-residue` | **C7 主线（`D-1128-66` 解冻）**：`task-342` 26 条迁移（地图 `task-342-onnx-migration-map.md`，顺序 E→B→A→D→C→F）+ `task-368-c-heap.md` 45 条；判据 甲 0 / 新形态 / 导出成功 / ORT=nvm |
 | `lane/opt-inline` | 23 | 49 | 07:29 collab: the nvm i32 card is taken from integration too | `lane-oper-shape-guard` | **撤回车道**（`opt.cml` 的 AST 甲 + `inline_closure` 25 甲）；验收三项做中，含 `jgir canonical=true` 逐字节比 |
 | `lane/editview-commit` | 18 | 60 | 08:43 docs: the generated stdlib reference follows the new commit signatures | `lane-editview-a` | **队列第 ①**，甲 0、17 笔；合并信息写三笔（类型同一性 / 删 `getenv` 调试打印 / 生成物） |
 | `lane/task-229` | 16 | 17 | 08:35 collab: residual_mlp's judgement, the three readings behind it | `lane-arrangeable` | **队列第 ③**；`capacity×2`/`harness×5` soap 已有，"load-sensitive, not 甲" 保留 |
@@ -77,5 +77,5 @@
 | `lane/index-axis` | 1 | 17 | 02:52 compile: a subscript axis one dimension too far is refused | 无人 | **暂停**：与 `nvm-int-compare` 同一条"多打一行 `0"` 待归属；归属确定后才进队列 |
 
 **这批的合并顺序（1 号位）**：`docs/notes6 @ 3fc4a30c09`（`plan_fields` 的账）→ `lane/editview-commit @ 0b46776399` → `docs.ai_reference.current` 的重生成（`index-axis` 动了 `docs/diagnostics.md`，单列一笔）→ 队列第 ③④ 视名额。
-**撤下过的**：`seat/opt-inline-net`（撤，`opt-inline` 回车道）；`nvm-int-compare`/`index-axis`（暂停，等那行 `"0"` 的归属）。
+**撤下过的**：`seat/opt-inline-net`（撤，`opt-inline` 回车道）。**`index-axis` 已洗清（那行 `"0"` 是设计 9.8 的输出，`entry_args.cpp:600-635`）⇒ 可合**；`nvm-int-compare` 等 `lane-block-hash` 把计划期望补上 `"0"` 那一行再合。
 **规矩第 4 条的更正**：`lane/arg-parse-uaf-w` 原先记在 `kinds-oper` 树，那棵树 08:5x 已被 `lane/with-const` 检出（`lane-kinds-oper` 在用）⇒ `cap-probe` 的未提交文件已备份并挪到 `pools-red`（`lane/jvp-loop` 那棵），`kinds-oper` 还空。**一棵树同时只归一条车道**这条照旧，附带一条：换枝/换树前先 `git branch --list` 与 `git worktree list` 各读一次。
