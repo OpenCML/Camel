@@ -1,0 +1,24 @@
+/**
+ * A callee above the small threshold, called twice: ten operations in its body, so `compute_size`
+ * is 10 and the small rule declines it. The duplication rule is what may accept it -- the copy is
+ * made once more, and `(2 - 1) * copy_cost` is far below the 256 node duplication budget.
+ */
+
+func middle(a: int) => int {
+    let b = a + 1
+    let c = b * 2
+    let d = c - 3
+    let e = d + 4
+    let f = e * 5
+    let g = f - 6
+    let h = g + 7
+    let i = h * 8
+    let j = i - 9
+    return j + 10
+}
+
+func main() => int sync {
+    let x = 1
+    println(middle(x) + middle(x + 1))
+    return 0
+}
