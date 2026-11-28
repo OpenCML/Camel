@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Generate n progen programs into the CC-eval preliminary report and write the plan that runs them.
 
 Instrument for the stage-fault reading (tab:stage-faults), first half: a program's output under each

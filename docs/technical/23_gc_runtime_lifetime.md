@@ -427,7 +427,7 @@ Runtime passes expose the same infrastructure:
   available for later passes.
 - `std::gc::summary` prints a compact human-readable GC summary and leaves the graph available for
   later passes.
-- `std::gc::snapshot` / `std::gcsnap` prints JSON with region object counts/bytes, collection
+- `std::gc::snapshot` prints JSON with region object counts/bytes, collection
   counters, deferred-collection and elder-overflow counters, moved/promoted/freed counters,
   root-source data, remembered-set size, and foreign-resource diagnostics.
 - `std::gc::remembered_set` runs a targeted old-to-young remembered-set self-test and leaves the

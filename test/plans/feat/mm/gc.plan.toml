@@ -61,7 +61,7 @@ tier = "slow"
 desc = "Checks the GC snapshot pass exposes assertion-friendly counters and root-source data."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_fib10.cml"
-args = ["${case}", "std::gcsnap"]
+args = ["${case}", "std::gc::snapshot"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -88,7 +88,7 @@ tier = "slow"
 desc = "Checks GC configuration and human-readable summary diagnostic passes stay composable."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_fib10.cml"
-args = ["--gc-stress", "alloc=7,safepoint=3,kind=minor", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::gc::config", "std::gc::summary", "std::gcsnap"]
+args = ["--gc-stress", "alloc=7,safepoint=3,kind=minor", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::gc::config", "std::gc::summary", "std::gc::snapshot"]
 expect_exit = 0
 expect_stdout_contains = ["\"youngCopying\": true", "\"allocInterval\": 7", "GC summary", "mode: young-copying", "\"regions\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

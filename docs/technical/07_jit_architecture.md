@@ -581,14 +581,14 @@ jg  .recurse
 ### 13.1 MIR Dump
 
 ```bash
-camel fib.cml std::cxx::inline std::mir    # 输出优化后的 MIR（带 VReg）
-camel fib.cml std::cxx::inline std::rmir   # 输出原始 MIR（优化前）
+camel fib.cml std::cxx::inline std::fastvm::jit_mir    # 输出优化后的 MIR（带 VReg）
+camel fib.cml std::cxx::inline std::fastvm::jit_rmir   # 输出原始 MIR（优化前）
 ```
 
 ### 13.2 ASM Dump
 
 ```bash
-camel fib.cml std::cxx::inline std::asm    # 输出 x64 汇编（含偏移和指令注释）
+camel fib.cml std::cxx::inline std::fastvm::jit_asm    # 输出 x64 汇编（含偏移和指令注释）
 ```
 
 输出格式：`[offset]  instruction  ; annotation`。C++ wrapper 从 offset 0 开始，JIT body 从 `jitEntryOffset`（包装器之后）开始。

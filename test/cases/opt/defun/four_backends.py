@@ -21,7 +21,7 @@ EXE = ROOT / "out/latest/bin" / ("camel.exe" if os.name == "nt" else "camel")
 CASES = ROOT / "test/cases/opt/defun"
 
 PASS = "std::defunctionalize"
-BACKENDS = ("std::nvm", "std::fvm", "std::fastvm::jit", "std::prl")
+BACKENDS = ("std::nvm", "std::fvm", "std::jit", "std::prl")
 
 
 def run(case, *passes):

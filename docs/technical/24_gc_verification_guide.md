@@ -68,7 +68,7 @@ Current GC diagnostic passes:
   available for later passes.
 - `std::gc::summary`: prints a compact human-readable GC summary and leaves the graph available for
   later passes.
-- `std::gc::snapshot` / `std::gcsnap`: prints JSON memory and GC diagnostics, then consumes the
+- `std::gc::snapshot`: prints JSON memory and GC diagnostics, then consumes the
   graph.
 - `std::gc::remembered_set`: runs a white-box old-to-young remembered-set self-test and leaves the
   graph available for later passes.
@@ -205,7 +205,7 @@ Expected evidence:
 
 - Output contains `{"ok":true,"kind":"gc.verify"}`.
 - Program output remains correct.
-- `std::gcsnap` JSON has `regions`, `gc`, `summary`, root-source data, remembered-set size, and
+- `std::gc::snapshot` JSON has `regions`, `gc`, `summary`, root-source data, remembered-set size, and
   `foreignResources`.
 - `std::gc::config` and `std::gc::summary` show the effective stress and verification settings
   before a snapshot consumes the graph.
@@ -292,7 +292,7 @@ Expected evidence:
 - The self-test verifies rooted handle survival across GC, pinned address stability after promotion,
   idempotent disposal, access failure after disposal, finalization after disposal, and handle
   counters returning to zero.
-- `std::gcsnap` exposes `foreignResources.createdControlBlocks`,
+- `std::gc::snapshot` exposes `foreignResources.createdControlBlocks`,
   `foreignResources.disposedResources`, `foreignResources.finalizedWrappers`,
   `foreignResources.liveControlBlocks`, `foreignResources.activeRootedHandles`, and
   `foreignResources.activePinnedHandles`.

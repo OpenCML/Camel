@@ -23,7 +23,7 @@ args = ["${case}", "std::gc::blocks", "std::nvm"]
 [[tests]]
 name = "blocks.selftest_alias"
 desc = "The same self-test through its short alias."
-args = ["${case}", "std::gcblocks", "std::nvm"]
+args = ["${case}", "std::gc::blocks", "std::nvm"]
 
 [[tests]]
 name = "dlpack_complex_numpy"

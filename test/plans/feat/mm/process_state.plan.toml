@@ -9,7 +9,7 @@ The allocator is one per process; the object root set and the graph sweeper belo
 each. `test::contexts` creates a second context beside the running one, collects the heap while both
 are alive, makes a registration of its own and takes it back, and reads how many `runtimeGraphRoots`
 entries the allocator holds at each step from `rootSourceDescriptions()` -- the list the profiler and
-`std::gcsnap` already report. `before=1 second=2` is one registration per context, and
+`std::gc::snapshot` already report. `before=1 second=2` is one registration per context, and
 `own=1 own_released=0` says that taking one registration back removes that one and nobody else's.
 `released` is read after the second context's scope has ended, so it reads 1: with the module's and
 the executor manager's back-references non-owning (the context-lifetime lane) the second context is

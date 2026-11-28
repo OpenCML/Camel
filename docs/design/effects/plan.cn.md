@@ -324,7 +324,7 @@ pump(s, open("b"))   同上：被调用者不知道 s 与新句柄不同，仍�
 - 建图时对每个"碰资源"的节点，按 2.3 得到键集合；与前一个同键的节点连 ctrl（6a 先按成对冲突、6b 再按资源链稀疏化）。已有的 `shouldAddSyncCtrlLink`（`builder_helpers.h#shouldAddSyncCtrlLink`）与 `hasControlDependency` 负责去重与避免已有数据依赖时再加边；分支两臂的节点不互连（`exclusive` 的规则，`resources.cpp#exclusive`）。
 - `ordered by data` 的对不重复加 ctrl（数据边已经给了顺序）；`ordered by control` 的对已经有边；只有"冲突且无路径"的对才加。加边方向是书写顺序（节点创建顺序），通常不会成环；仍用 `reaches` 兜底。
 - 判据的落点：`mayAlias`/`originOf` 现在只接受 `GCGraph`（`resources.cpp#mayAlias`）。建图时在草稿节点上维护同一张来源表（Fresh/Port/Same/Unknown、由哪个节点来），逐条对齐那张判决表；`requiredOrderings` 需要 `Program`，只在验收时调用，不在建图时调用。
-- 调度器读的还是同三种边，**`std::prl`/`std::prl` 一行不改**。这是"执行顺序是图的属性"的直接结果：图的边变了，调度自然变。
+- 调度器读的还是同三种边，**`std::prl` 一行不改**。这是"执行顺序是图的属性"的直接结果：图的边变了，调度自然变。
 - `requiredOrderings`（`resources.cpp#requiredOrderings`）继续作为独立验收：步骤 6 之后，除 `unordered` 资源上的对外，所有 `ResourceConflict` 的对都必须是 `ordered`。
 
 ---

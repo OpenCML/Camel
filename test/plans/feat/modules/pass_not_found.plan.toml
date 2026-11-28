@@ -219,6 +219,8 @@ expect_stdout_contains = ["unloadable.cmo is text"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 10000
 
+# The alias table is gone (a pass has one name, its declaration's), so the answer lists the
+# declared passes and no aliases: the listing is what exists, not what used to.
 # The third answer is unchanged: a name with no module behind it is the pipeline's unknown pass,
 # followed by the list of passes that exist.
 
@@ -229,7 +231,7 @@ kind = "negative"
 case = "../../../cases/modules/pass_not_found/main.cml"
 args = ["${case}", "none_such::run", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["Pass <none_such::run> not found, available passes are:", "Available aliases are:"]
+expect_output_contains = ["Pass <none_such::run> not found, available passes are:"]
 expect_output_not_contains = ["PassNotProvidedByModule", "PassNotExportedByModule", "42"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
@@ -242,7 +244,7 @@ timeout_ms = 10000
 # would be the alias written as a sentence, so the name is an ordinary unknown pass, exactly like
 # any name the pipeline resolves to nothing, and the answer is the same one `none_such::run` gets
 # above. What makes this a control rather than a restatement is the direction: putting the entry
-# back into `passAliases` makes the program run and this entry red.
+# back as an alias in the registry makes the program run and this entry red.
 #
 # The three expectations are the refusal read from the run: the diagnostic on stdout, the listing of
 # what does exist on stderr, and the absence of `42` -- the program's own output, which a pipeline
@@ -255,7 +257,7 @@ kind = "negative"
 case = "../../../cases/modules/pass_not_found/main.cml"
 args = ["${case}", "std::null"]
 expect_exit = 1
-expect_output_contains = ["Unrecognized graph rewriting/scheduling/translation pass 'std::null'", "RuntimeDiag::UnrecognizedGraphPass", "Pass <std::null> not found, available passes are:", "Available aliases are:"]
+expect_output_contains = ["Unrecognized graph rewriting/scheduling/translation pass 'std::null'", "RuntimeDiag::UnrecognizedGraphPass", "Pass <std::null> not found, available passes are:"]
 # `std::null ->` is the line the alias would print in that listing; the whole point is that the
 # spelling is refused rather than resolved. `42` is the program's own output.
 expect_output_not_contains = ["std::null ->", "42"]
