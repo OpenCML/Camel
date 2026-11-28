@@ -100,4 +100,4 @@
 30k→60k 4.3×、60k→120k 3.9×：**二次**。12M 元素上第一条 >600 s（同形状的内建 `map` 是 ~7 s）。原因是 `append` 是 `#op(':struct/append_arr')`（`prelude.cml:1318`，表达式位置每轮造一个新数组），而 `builder_control.cpp:4657` 的收集槽要求：空数组初值、该状态的下一值本身就是 `append` 算子、`append` 的唯一普通输入是循环体的那个端口、端口只有这一个用处、且循环体不直接返回状态值（`:4661`、`:4712-4718`）。源级能写出的形状都不满足它。
 
 ⇒ 第一刀因此落在 **GIR 的循环构造处**（`builder_control.cpp:3942-3956` 的 `addRegionLoopNode` + `attachLoopParts`，收集槽由 `collectLoopAppends` 在同一处命中），不是改 `prelude.cml`。第二刀（核内联）之外，这是唯一还缺的东西。
-**源级收集循环都不是候选。** 除上表第一行外，`var` 状态形（`{ out = out->append<x>; acc + 1 }`）120k 83.3 s、元组状态形（`(out->append<x>, n + 1)`）120k 96.0 s——把状态值当收集器同样每轮造新数组，不是免费替代。所以不要再用"在 `.cml` 里把 `map` 写成收集循环"这条路做第一刀；下一个接手的人也不必再试。
+**更正：源级收集循环只在 `Range` 上不是候选，在数组上是线性的。** 上表三组与 `var` 状态形（120k 83.3 s）、元组状态形（120k 96.0 s）**都不是数组迭代**：`for x in 0 .. N` 走的是流循环（`buildStreamLoop`，GIR 里 `value_type=(int.., bool, int[])`），收集槽不在那条路上，所以每轮 `append` 造新数组、二次。换成数组迭代 `loop out = [] for x in xs do out->append<x * k>`（`xs: int[]`）就是线性的：**120k 198 ms、1.2M 1477 ms**（10× 元素 7.5× 时间）。⇒ 第一刀若走 `visitComprehension`，`Range` 源必须先 `to_array`，数组源直接迭代。
