@@ -2022,6 +2022,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "jvp_of_a_take"
+desc = "`xs[positions]` is `:op/idx_take`, the read at many positions, and the transform could not lift it: the operator's key is not derivable from its name and the key table had no row for it, so the walk stopped with `skip=rule uri=:op/idx_take reason=the operator has no forward rule bound at all` while the same read written one position at a time was answered by `jvp_idx_arr`. Its rule is `jvp_idx_take`, filed under `index_take(x, positions)` at two operands -- the count the node has, because the positions arrive as a value and not as a written dimension -- and the read is linear, so the tangent is the take of the tangent at the same positions. `row` pins the rank the read keeps (`[[4.0, 5.0, 6.0]]`), `rows` pins the written order (`[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]` with its tangent `[[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]]`), and `reversed` pins it on a rank-1 array (`xs[[2, 0]]` answers `[3.0, 1.0]` and so does its tangent; a take that answered the value's own order would answer `[1.0, 3.0]`)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_idx_take.cml"
+args = ["--trace", "transforms", "${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["LAW_APPLIED {\"transform\":\"jvp\",\"function\":\"row\",\"law\":\"jvp_idx_take\",\"uri\":\":op/idx_take\"}", "REINTERP jvp function=row graph=", "rules=jvp_idx_take", "REINTERP jvp function=rows graph=", "REINTERP jvp function=reversed graph=", "[[4.0, 5.0, 6.0]]", "[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]", "[[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]]", "[3.0, 1.0]"]
+expect_output_not_contains = ["no forward rule bound at all", "skip=rule uri=:op/idx_take"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "jvp_structural_zero_at_the_wide_widths"
 desc = "A constant has no tangent, so the lift hands a rule the zero of the constant's own type, and the expansion drops the term that zero multiplies. The question it asks is one question about one fact -- *is this tangent the zero constant the tangent's type registers?*, `zeroTangentConstantOf` in `include/camel/core/derivative.h` -- and not a list of the widths somebody has met. This case pins the two widths the old `switch` in `modules/transforms/jvp.cpp` named (`float` and `f32`) and pins them by **absence**: each function is asked at a negative base, where the dropped exponent term `x^w * log(x) * dw` would answer NaN, so the reading is the expansion's `omit=structurally-zero-tangent` line naming the operators it never copied, beside the tangent that is still there. It goes red if the criterion stops recognising one of these widths, if the dropped term comes back (the tangent becomes NaN), or if the write side stops writing the zero of that width."
 kind = "behavior"

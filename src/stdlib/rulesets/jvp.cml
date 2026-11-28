@@ -1034,6 +1034,33 @@ export rule jvp_idx_arr_axis::<T>(xs: T[...], i: int, at: int) { index_into_axis
     index_into_axis(dxs, i, at)
 } }
 
+// ---- the forward rule of `:op/idx_take`, the read at many positions ----
+//
+// `xs[positions]` takes the positions the array names on the first dimension, and answers a copy of
+// the value with that dimension's extent set to the number of positions. It is the same bracket form
+// as the two rules above with an array in its first word, and it was the one read of the family with
+// no forward law: a walk that met it stopped by name while the same read written one position at a
+// time was answered.
+//
+// The read is linear and moves no element -- every position it answers is a position of the value
+// at the same coordinates -- so the tangent of the take is the take of the tangent, at the same
+// positions and in the order they are written. The positions are integers, and an integer carries no
+// tangent, so they do not enter the right side.
+
+/// `xs[positions]`: what `:op/idx_take` means, and the left side this rule is filed under.
+///
+/// Private, like the two declarations above and for the same reason: a family cannot read another
+/// module's private function, so each family that files a law for this key spells it itself.
+/// @example index_take([[1.0, 2.0], [3.0, 4.0]], [1])    // [[3.0, 4.0]]
+#op(':op/idx_take')
+func index_take::<T>(x: T[...], positions: int[]) => T[...] panic
+
+/// `d(xs[positions]) = dxs[positions]`: the tangent of a take is the take of the tangent.
+/// @example index_take([[0.5, 0.25], [3.0, 4.0]], [1])    // the tangent of `xs[[1]]` when `dxs` is that array
+export rule jvp_idx_take::<T>(xs: T[...], positions: int[]) { index_take(xs, positions) => func (dxs: T[...]) {
+    index_take(dxs, positions)
+} }
+
 // ---- the forward rule of `tensor:pick_at`, the read that states its length ----
 //
 // `pick_at(xs, position, length)` is `xs[position]` of a rank-1 array whose length `length` states,
