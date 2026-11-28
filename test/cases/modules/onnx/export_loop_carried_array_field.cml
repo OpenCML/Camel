@@ -2,8 +2,8 @@
  * Refused for a reason of this exporter's own: a tail recursion whose depth depends on the model
  * input carries a struct with an `int[]` field the body appends to, and this exporter does not yet
  * carry an array whose length changes between rounds as an ONNX sequence -- it names the field, an
- * int array, says that, and writes no model file. `D-1128-39`'s premise is retracted; when the
- * export turns positive (`D-1128-52`) this case turns over and asserts the exported model.
+ * int array, says that, and writes no model file. The premise this refusal once rested on is
+ * retracted; when the export turns positive this case turns over and asserts the exported model.
  */
 import { get_env } from env
 import { export_model } from onnx
