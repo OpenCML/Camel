@@ -281,8 +281,13 @@ Value valueOf(slot_t slot, Value::Kind kind) {
 Value call(
     std::string_view uri, const std::vector<Value> &norm, const std::vector<Value> &with,
     Value::Kind result, int64_t resultElemCode) {
-    ::operator_t op = operatorFor(uri);
     try {
+        // The runtime is started and the operator's module loaded inside this guard: the first
+        // call is where a program built against an installation learns that the module is not
+        // there or that it is not the version it was built against, and that is a fault reported
+        // at the call's site (design 9, principles 7.1) with a non-zero exit -- not an exception
+        // out of `main`, which would end the process without a report.
+        ::operator_t op = operatorFor(uri);
         ArgsOfCall normArgs(norm);
         ArgsOfCall withArgs(with);
         if (resultElemCode >= 0) {
