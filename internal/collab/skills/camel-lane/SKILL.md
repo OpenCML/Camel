@@ -576,3 +576,5 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
 · **临时借补丁取读数（`cherry-pick -n <sha>` 后 `git restore`）必须在交回里点名**（2026-11-28，`lane/block-hash`）：借用的提交号、它**毒化出哪几条假红**、复现命令，三者缺一不可。实例：借 `616f65b436`（给函数类型的形参起名）绕开 `argNameAt` abort 时，会凭空造出 `modules.graph_inline.a_call_through_a_value_reaches_what_its_type_declares` 与 `compile.type_packs.gradient_type.printed` 两条红 —— 不点名，别人拿自己的子树去比同一张表就会把这两条当自己的甲。判据：**借补丁期间拿到的"甲"一律先怀疑补丁**，先在不借的树上单独跑该计划（实例里 `type_packs` 不借时 25/25 全绿）。
 
 · **"临时借补丁"多半是基点落后，不是补丁没合**（2026-11-28，`lane/block-hash`）：借之前先 `git merge-base --is-ancestor <sha> HEAD`。非 0 ⇒ 你的枝不含它，**别借补丁跑整层**（借了会毒化读数：`616f65b436` 会造出 `modules.graph_inline.a_call_through_a_value_reaches_what_its_type_declares` 与 `compile.type_packs.gradient_type.printed` 两条假红）；非借不可时在交回里点名该提交号、两条假红原名、以及"不借时绿"的那次读数；更好的做法是把基点移到含它的 `origin/integration`。
+
+· **借补丁会在树上留下暂存区残留**（2026-11-28）：`cherry-pick -n` 之后即使 `git restore` 了工作区，`git add` 过的内容仍可能在别人的 `git status` 里显示成"有人在改这个文件"——实例：`mm-capacity` 的 `staged.patch` 就是 `cherry-pick -n 616f65b436` 的残留，被当成了"第三个人的重复实现"。所以借补丁的正确收尾是**三件**：`git restore --staged` 撤暂存、`git restore` 撤工作区、`git status --porcelain` 必须为空；并把借用的提交号写进交回。
