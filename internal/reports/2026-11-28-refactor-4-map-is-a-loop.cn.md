@@ -124,3 +124,42 @@
 | `[x * 2 for x in 0 .. 3]`（推导式对照） | `073B0F9BA4FC148F` | **不能**：`SemanticDiag::GenericFunctionAsValue`，`type variable(s) $element0 cannot be determined`，位置 `main.cml:2:19`，签名 `(x: $element0) => <null>` |
 
 读法：**去掉 `#op` 之后 `map` 连导出都没了**（两条手写调用在同一条诊断上失败，与 lambda 写不写类型无关），所以"手写不写类型 lambda 能不能定型"这一问在这棵树上还问不到——前置问题变成"`map` 去掉算子声明后为什么不导出"。推导式那条则仍然报 `$element0`：**推导式的降低确实给 lambda 造了自己的 `$element0` 类型变量**（`builder_data.cpp:382-401`），与手写调用无关。
+## 7 5.9 在这棵树上的实测：`with` 实参能推、普通实参不能
+
+设计原则 5.9 的原文（`docs/design-principles.cn.md` 第 495 行，逐字）：
+
+> **lambda 的参数类型可以从上下文推出**：lambda 出现在期望某个函数类型的位置（实参、`with` 实参、带标注的绑定）时，未标注的参数类型与返回类型由该函数类型推出，如 `tree_reduce<func (count, leaf) { count + numleaf(leaf) }>(model, 0)`；推不出时要求标注。
+
+同节第 496 行：**lambda 的形参要写括号**：`func (x) { e }`；没有 `x => e` 的写法。
+
+### 7.1 先记一条新事实：算子声明同时是导出声明
+
+上一轮的对照坏了，坏得有用：把 `prelude.cml` 里 `map` 的 `#op(':mark/map_arr')` 去掉、只留函数体后，`xs->map<…>` 与 `xs->map<…>` 两条手写调用都死在同一条 `SemanticDiag::ImportNameNotExported`（`Reference 'map' is declared as imported but is not exported by its module.`）⇒ **`map` 的导出是挂在 `#op` 声明上的**。所以"给 `map` 加体、去掉 `#op`"这条路改的是导出面，不能拿它试 lambda 定型。
+
+### 7.2 换成普通泛型函数（不是算子、不写 `#op`、正常导出）
+
+`internal/tools/probe-generic-lambda.ps1`，探针在 `D:\Temp\bench7`，驱动的头几行自报五个程序的 SHA-256-16；`std::fvm`，本次 `[load] 11%`，构建 `3e2c8c0898 (clean)`。
+
+函数体（两种写法都试过，结论一致）：
+```camel
+export func mymap::<T, U>(xs: T[], f: (item: T) => U) => U[] {
+    return loop out = [] for x in xs do out->append<f(x)>
+}
+```
+（`[] as U[]` 这种写法在**用户泛型函数体里**过不去：`SemanticDiag::LiteralNotRepresentable`，`The literal '[]' cannot be represented as type 'int[]'`；不写 `as`、由 `append` 定元素类型就可以。这是另一条独立的小事实，记在这里。）
+
+| 探针 | SHA-256-16 | 结果 |
+|---|---|---|
+| `mymap(xs, func (x) { x * 2 })`（**不写类型**、普通实参） | `F81DE11BAF9A4EDB` | **不能**：`SemanticDiag::LambdaParameterWithoutType` — `The type of the parameter 'x' of this lambda is not written and cannot be inferred: nothing here expects a function type.`，位置 `main.cml:7:30`；帮助文字自己引 "design principles 5.9" |
+| `mymap(xs, func (x: int) { x * 2 })`（写了类型，对照） | `3A2D1D9AA312045E` | **能**：打印 `3` / `6` |
+| `mymap(xs, (x) => x * 2)`（箭头写法） | `52BD294E1182AB16` | `SyntaxDiag::MissingComma`（`Expected ',' or ')' before '=>'`）——与 5.9 第 496 行一致：没有 `x => e` 的写法 |
+| `with <f: (item: T) => U>` 版本，`mymap_w<func (x) { x * 2 }>(xs)`（**不写类型**、`with` 实参） | `DE26EE82E2AC2875` | **能**：打印 `3` / `6` |
+| 同一 `with` 版本，`mymap_w<func (x: int) { x * 2 }>(xs)`（对照） | `B11EA9D8529E6DFB` | **能**：打印 `3` / `6` |
+
+### 7.3 读法
+
+- **5.9 在 `with` 实参上成立**（不写类型也能定型、能跑），**在普通实参上不成立**（`LambdaParameterWithoutType`）。
+- 推导式的 `map` 调用正是**按 `with` 实参**传 lambda 的（`builder_data.cpp:403-409`），所以它失败的原因不是"lambda 位置不对"，而是**推导式的降低给 lambda 造了自己的 `$element0` 类型变量**（`builder_data.cpp:382-401`）；换成 `with` 实参、lambda 不写类型，5.9 就能推出来。
+- 箭头写法不存在是 5.9 已写明的规则，不是缺陷。
+
+⇒ 下一步（未做，等指令）：把 `visitComprehension` 造的 lambda 改成"形参不写类型"的普通 lambda（不再 `TypeVarType::create("$element"…)`），位置与 `with` 传递方式不变。
