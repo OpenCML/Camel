@@ -83,3 +83,32 @@
 - 本文件是**排查清单**，不含代码改动；`git status` 干净。
 - 基线（`perf/*` 的 cpu 秒）与 A 级改动的改后读数**均等窗口**：宿主 1m 负载降到 8 以下再取。
 - 先把 §二.1 的确定性计数取到（不受负载影响），作为"A 级改动有没有改变执行步数"的护栏 —— 这一步随时可做。
+## 五、A-1 降级为 B（卡面作废）与 A-3 前提更正（2026-11-28 下午，只读）
+
+### A-1：不是 A，是 B —— 按卡面改会违反 `ExecPlan` 的契约
+
+```
+exec_plan.h:16-19  "What the kind hands out is a whole immutable value: nothing a back end records
+                    while it runs lives in it. The state a bytecode engine keeps about the code it
+                    made for a version is the engine's own, keyed by the plan (fvm/version_state.h) …"
+exec_plan.h:165-168 "… handed over by value, because a plan is a value and keeps no table a reader
+                    fills in -- the reader holds the table it walks."
+调用点：nodevm.cpp:354（进执行器一次）、nodevm.cpp:667（切换到被调图一次）—— 全仓仅此两处
+```
+⇒ 把表存进 `ExecPlan` = 第二份真相 + 违反契约；正确形状是**读者侧缓存（后端自己的状态、按 plan 键）**，
+属"给后端加状态"，降为 **B**。收益上限也只是"每次进入/每次跨图调用省一张表"，不在节点循环里。
+**没有窗口读数证明 >5% 之前不做。**
+
+### A-3 的前提要更正：字符串表**只在静态初始化时用一次**
+
+```
+fvm/compile.cpp:84-123
+  static const std::unordered_map<std::string_view, OpCode> byUri = { … 40 条 URI … };   // 一次
+  static const std::unordered_map<OperId, OpCode> supportedInlineOperators = [] {
+      for (const auto &[uri, code] : byUri) byId.emplace(OperatorTable::instance().intern(uri), code);
+  }();                                                                                    // 也一次
+```
+⇒ **编译期并不逐节点查字符串表**：字符串只在第一次建表时被 `intern` 成 `OperId`；编译时每节点做的是
+`unordered_map<OperId, OpCode>` 的哈希查找。所以 A-3 按原写法（"换成枚举下标、去掉字符串"）**是空改动**，
+真正剩下的候选是 A-4 的形状：**按 `OperId` 直接下标的数组**（由同一张表在初始化时填，不新造第二份真相）。
+这一条要先确认 `OperId` 的取值范围与稀疏度，再决定用数组还是分段表；**未量、未改**。
