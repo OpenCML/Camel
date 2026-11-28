@@ -1,0 +1,61 @@
+{
+  "kind": "promotion",
+  "promotion": 73,
+  "tip": "cca900c6118944e569789671f12a86703ea88afc",
+  "measured_tip": "cca900c6118944e569789671f12a86703ea88afc",
+  "pushed_develop_sha": "cca900c6118944e569789671f12a86703ea88afc",
+  "landing_tip": "the record is a documentation commit and lands on whatever integration holds at push time. While this layer ran, thirty commits arrived and twenty-five of the paths they touch are build paths: five merges came in (lane/call-candidates, lane/std-run, wip/selfchecks-flaky, wip/baseline-73, and the batch built at bd6d6d7de20a). This reading covers none of them",
+  "note": "the layer was measured at cca900c61189, the tip the seat/batch8 batch had reached. Between 58ebad1ebe54, where that batch's landing begins, and this tip, the eight commits in between are backlog: and collab: ledger rows that touch no build path (a src/, test/plans/ or scripts/ diff of zero), so the two tips are equivalent for what was measured and the newer one was taken. What this reading does cover is seat/batch8 itself: the batch built and read at ecd32fc9cf7b, the ast record re-read for the four standard library files (a02dd732e1), p 6504b06293, origin/fsh-dev's newer tip 884f52abbd and stdlib-docs 11cd15cf4e. What it does not cover is argp d3287fd4f4 and tensor-pow-law a8925c2cd2, which were not ancestors at the measured tip",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at cca900c61189; load 1m 48.30 at the start of the run",
+  "binary_built": "2026-11-28T11:37:45+08:00",
+  "readings": {
+    "total": 9919,
+    "pass": 9718,
+    "fail": 141,
+    "skip": 27,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 0,
+    "re_run": 0,
+    "re_run_passed": 0,
+    "load_before": "1m 48.30, 5m 43.35, 15m 39.74",
+    "load_warning": "[load] WARNING: 1m load 48.30 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth to seventy-second layers carried; a promotion does not wait on load, D-1128-36)"
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-72-reds.tsv (the seventy-second promotion, 141 names)",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], with the plan aliases transforms/compile.transforms and stated_extents/compile.stated_extents read as the same plan; this reading writes the bare names transforms (8 rows) and stated_extents (1 row), the same spelling the seventy-second table holds, so the alias is a no-op here",
+    "still_red": 141,
+    "turned_green": 0,
+    "turned_green_names": [],
+    "new_reds": 0,
+    "new_reds_names": [],
+    "vanished_reds": 0,
+    "arithmetic": "141 names before: 0 turned green, 0 vanished, 0 appeared, 141 remain red; the two sets are the same set name for name",
+    "notes": [
+      "pass rose by one and skip fell by one against the previous layer for a reason outside the red set: gpu.profile device_region.nvm was skipped there and passed here, and no other entry changed status",
+      "the ast record re-read a02dd732e1 is inside this reading's coverage and produced no red of its own: no name in the ast record family appears in this red set, so nothing was judged as a regression and nothing needed the re-record reading",
+      "no case timed out in this layer and none was re-run; fault_deep.prl_off is absent for the seventh round running because the scheduler root-cause fix holds",
+      "export_loop_carried_array_field stayed green, so the seventy-second reading's one green was not a one-off"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 0,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [],
+    "how": "the layer reported timed_out 0 and re_run 0, so there was no timeout to run alone"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-73-reds.tsv",
+  "red_table_rows": 141,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-73-reds.tsv",
+  "new_red_names": [],
+  "pushed_as": "develop, fast-forwarded from 0967afd6159a to cca900c61189, the tip this layer measured",
+  "develop_before": "0967afd6159a8d9b952e9a1e58f61038c7e0f630",
+  "develop_after": "cca900c6118944e569789671f12a86703ea88afc",
+  "commits_brought_in": 35,
+  "commits_touching_src": 5
+}
