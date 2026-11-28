@@ -852,6 +852,7 @@ c6f908df8cf72dfc ok test/cases/compile/equality/collections_compare_by_content.c
 0d3c930abc40405e ok test/cases/compile/equality/err_function_part.cml
 e9604c34f177fb07 ok test/cases/compile/equality/err_not_equal_function.cml
 8daa692cc91e8efd ok test/cases/compile/equality/err_types_differ.cml
+5496718672b08bf3 ok test/cases/compile/equality/i32_compares_by_number.cml
 e3d259bea11b9a56 ok test/cases/compile/equality/negates_the_whole_comparison.cml
 70e04b27c5b1e0a4 ok test/cases/compile/equality/null_test_never_null.cml
 673e716ac8041281 ok test/cases/compile/escapes/formatted.cml
@@ -2103,6 +2104,7 @@ f9d2bbd9ad70de7e ok test/cases/compile/transforms/transpose_callee_is_a_returned
 9fd5ae548c224dec ok test/cases/compile/transforms/transpose_gradient_both_legs.cml
 e9ccde7be6ab5e1a ok test/cases/compile/transforms/transpose_hand_closed_lambda.cml
 77c582c9858ce465 ok test/cases/compile/transforms/transpose_loop.cml
+db03c2d88326935f ok test/cases/compile/transforms/transpose_loop_condition_reads_state.cml
 ccaf40a38c453a68 ok test/cases/compile/transforms/transpose_loop_escape_int.cml
 05fa32cd5fd2e679 ok test/cases/compile/transforms/transpose_loop_escape_reads_one.cml
 81db73311cf773e0 ok test/cases/compile/transforms/transpose_loop_escape_reads_outer.cml
