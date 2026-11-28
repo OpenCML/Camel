@@ -551,7 +551,7 @@ slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc) {
             runtimeTarget != nullptr,
             "FastVM JIT indirect CALL requires a materialized runtime graph target.");
         Frame *funcFrame = vm->acquireFrameForCall(runtimeTarget);
-        vm->populateIndirectCallFrame(frame, funcFrame, function, nargs, wargs);
+        vm->populateIndirectCallFrame(frame, funcFrame, function, nargs, wargs, bc.result);
 
         // Indirect CALL still crosses a runtime Function carrier and closure
         // object, so this path stays on the interpreter entry until the JIT
