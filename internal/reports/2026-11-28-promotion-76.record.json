@@ -1,0 +1,61 @@
+{
+  "kind": "promotion",
+  "promotion": 76,
+  "tip": "57838d1f3cdf6a082f67a951430a383b99c3ad94",
+  "measured_tip": "57838d1f3cdf6a082f67a951430a383b99c3ad94",
+  "pushed_develop_sha": "57838d1f3cdf6a082f67a951430a383b99c3ad94",
+  "landing_tip": "the record is a documentation commit and lands on whatever integration holds at push time. The all-tier daily gate was running on its own tree while this layer ran; that is a different checkout and a different lock, and neither run's reading covers the other",
+  "note": "the layer was measured at 57838d1f3cdf, one ledger commit above the seventy-fifth promotion's record merge: the only commit in between is a backlog row, so the code this reading covers is the same code the seventy-fifth layer covered. batch9's forward law, the runtime conv and equality changes and the stdlib jvp and nvm changes produced no red in either layer",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at 57838d1f3cdf; load 1m 42.83 at the start of the run, with the all-tier gate running beside it on its own tree",
+  "binary_built": "2026-11-28T12:57:06+08:00",
+  "readings": {
+    "total": 9920,
+    "pass": 9718,
+    "fail": 141,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 0,
+    "re_run": 0,
+    "re_run_passed": 0,
+    "load_before": "1m 42.83, 5m 39.88, 15m 34.24",
+    "load_warning": "[load] WARNING: 1m load 42.83 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth to seventy-fifth layers carried; a promotion does not wait on load, D-1128-36)"
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-75-reds.tsv (the seventy-fifth promotion, 141 names)",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], with the plan aliases transforms/compile.transforms and stated_extents/compile.stated_extents read as the same plan; this reading writes the bare names transforms (8 rows) and stated_extents (1 row), the same spelling the seventy-fifth table holds",
+    "still_red": 141,
+    "turned_green": 0,
+    "turned_green_names": [],
+    "new_reds": 0,
+    "new_reds_names": [],
+    "vanished_reds": 0,
+    "arithmetic": "141 names before: 0 turned green, 0 vanished, 0 appeared, 141 remain red; the two sets are the same set name for name",
+    "total_delta": "none: the layer declares 9920 entries, the same number the seventy-fifth layer declared, and no case changed status against it",
+    "notes": [
+      "no case timed out in this layer and none was re-run; fault_deep.prl_off is absent for the tenth round running because the scheduler root-cause fix holds",
+      "export_loop_carried_array_field stayed green for the fifth reading running",
+      "the all-tier gate that runs beside this layer is the slow layer's ledger; its red names are taken from its own reading on its own tree and are never mixed into a promotion table"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 0,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [],
+    "how": "the layer reported timed_out 0 and re_run 0, so there was no timeout to run alone"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-76-reds.tsv",
+  "red_table_rows": 141,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-76-reds.tsv",
+  "new_red_names": [],
+  "pushed_as": "develop, fast-forwarded from a97b033b517d to 57838d1f3cdf, the tip this layer measured",
+  "develop_before": "a97b033b517d16ba086aec5322203e9b2f4960de",
+  "develop_after": "57838d1f3cdf6a082f67a951430a383b99c3ad94",
+  "commits_brought_in": 1,
+  "commits_touching_src": 0
+}
