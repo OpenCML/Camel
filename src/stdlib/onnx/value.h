@@ -37,7 +37,11 @@ namespace rtdata = camel::core::rtdata;
 
 struct Value {
     enum class Kind { Constant, Symbolic };
-    enum class Form { Tensor, Scalar, IntArray, Aggregate, Closure };
+    /// `Sequence` is a tensor-valued value ONNX carries as a `sequence`: `dtype` and `shape` are
+    /// the *element's*, and the length is the run's, so it changes from one round of a Loop to the
+    /// next where a tensor's shape cannot. A collecting loop's growing array is the value this form
+    /// exists for (`SequenceEmpty` / `SequenceInsert` / `ConcatFromSequence` in the emitted graph).
+    enum class Form { Tensor, Scalar, IntArray, Aggregate, Closure, Sequence };
     /// What a Closure value is (see the linear-recursion translation in exporter.cpp).
     enum class ClosureKind { Plain, Hole, Loop, Select };
 
@@ -108,6 +112,22 @@ struct Value {
     bool isConstant() const { return kind == Kind::Constant; }
     bool isAggregate() const { return kind == Kind::Symbolic && form == Form::Aggregate; }
     bool isClosure() const { return kind == Kind::Symbolic && form == Form::Closure; }
+    /// A value ONNX carries as a sequence of tensors (see `Form::Sequence`): `dtype` and `shape`
+    /// describe one element, and nothing states how many elements there are.
+    bool isSequence() const { return kind == Kind::Symbolic && form == Form::Sequence; }
+
+    /// A sequence of tensors whose elements all have `dtype` and `shape` (the element's shape; a
+    /// sequence of scalars passes an empty one).
+    static Value symbolicSequence(
+        std::string name, type::TypeCode dtype, std::optional<tensor::StaticShape> shape) {
+        Value v;
+        v.kind  = Kind::Symbolic;
+        v.form  = Form::Sequence;
+        v.name  = std::move(name);
+        v.dtype = dtype;
+        v.shape = std::move(shape);
+        return v;
+    }
 
     static Value closure(ClosureKind closureKind, type::Type *functionType) {
         Value v;
