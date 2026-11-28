@@ -35,8 +35,9 @@ import { erfc as math_erfc, erf as math_erf, exp as math_exp, log as math_log, m
 // a law's left side spells the operator (`nn/signatures/nn.cml`), and a family cannot read
 // another module's private function.
 import { avg_pool2d, conv2d, embedding, max_pool2d, max_pool2d_grad } from nn
-import { abs, add_stated, div_stated, erf, erfc, exp, full, gelu, layer_norm, layer_norm_grad, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, ones_like, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, subtract_stated, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros_like } from tensor
-import { is_float, is_integer, is_same, is_string, Tangent } from types
+import { abs, add_stated, div_stated, erf, erfc, exp, full, gelu, layer_norm, layer_norm_grad, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, one_hot, ones_like, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, subtract_stated, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros_like } from tensor
+import { is_array, is_float, is_integer, is_same, is_string, Tangent } from types
+import { shape as array_shape } from array
 
 /// A value of type `T` with its tangent: what a forward transform carries for one value.
 /// @example is_same::<Lift<float>, (float, float)>()    // true
@@ -1948,6 +1949,33 @@ export rule jvp_ones_like(t: float[...]) {
     }
 }
 
+// ---- the forward rule of `one_hot` ----
+//
+// `one_hot(labels, classes)` reads a label and writes a row, and the row does not move with
+// anything a derivative can see: a label is a discrete value, and a discrete value's gradient is
+// the zero of its own type (design principles 9.9). The result is `f32[...]`, so the tangent the
+// walk needs is the zero array of the *result's* shape.
+//
+// That shape is the labels' extent with the class count appended, and it is read off the primal:
+// `array_shape(labels)` is a value of this half and `classes` is the scalar the call was handed, so
+// `full` can fill the zero array from them. The cast states the element type, because the tangent
+// is `f32[...]` and `full` answers `float[...]`.
+//
+// The right side takes no parameter even though `jvp` of a function over a discrete parameter takes
+// the parameter's tangent as an argument (the type `Tangent<int[]>` is the array itself): no law
+// reads it, because the rows do not move with it. The `zeros_like` law above needed one because its
+// operand is a `float` array, whose tangent is a value the law's own body consumes.
+//
+/// The shape `one_hot`'s zero has: the labels' extent, with the class count appended.
+func one_hot_zero_shape(labels: int[], classes: int) => int[] {
+    return concat(array_shape(labels), [classes])
+}
+
+export rule jvp_one_hot(labels: int[], classes: int) {
+    one_hot(labels, classes) => func () {
+        f32(full(one_hot_zero_shape(labels, classes), 0.0))
+    }
+}
 
 // ---- the `nn` module's primitives ----
 //

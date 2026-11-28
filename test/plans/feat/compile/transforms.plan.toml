@@ -3533,3 +3533,14 @@ expect_exit = 0
 expect_stdout_exact = "[1.0, 2.0, 3.0]\n[0.5, 0.25, 0.125]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+[[tests]]
+name = "transforms.derivative_of_one_hot_is_zero"
+desc = "The forward derivative of `one_hot(labels, classes)` is the zero of the result's shape (design principles 9.9): a label is a discrete value, and the row `one_hot` writes does not move with anything a derivative can see. At `labels = [0, 2]` and `classes = 3` the value is the two one-hot rows and the tangent is the zero array of the same shape, `[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]`. `jvp` of a function over a discrete parameter still takes that parameter's tangent as an argument -- `Tangent<int[]>` is the array itself -- and no law reads it, because the rows do not move with it. Red when `jvp` refuses `tensor:one_hot` or answers anything but the one-hot rows and the zero of their shape."
+kind = "behavior"
+case = "../../../cases/compile/transforms/derivative_of_one_hot.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_exact = "[[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]\n[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

@@ -1,0 +1,33 @@
+/**
+ * The forward derivative of `one_hot(labels, classes)` is the zero of the result's shape.
+ *
+ * A label is a discrete value, and a discrete value's gradient is the zero of its own type (design
+ * principles 9.9): the row `one_hot` writes does not move when the label moves by nothing a
+ * derivative can see. So the term is constant in its operand and the walk needs the zero array of
+ * the *result's* shape, which is the labels' extent with the class count appended.
+ *
+ * At `labels = [0, 2]` and `classes = 3` the value is the two one-hot rows and the tangent is the
+ * zero array of the same shape, `[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]`.
+ *
+ * `jvp` of a function of a discrete parameter still takes the parameter's tangent as an argument --
+ * the type `Tangent<int[]>` is the array itself -- and no law reads it: the rows do not move with
+ * it.
+ *
+ * Red when: `jvp` refuses `tensor:one_hot`, or the pair is anything but the one-hot rows and the
+ * zero of their shape.
+ */
+import rulesets.jvp
+import { jvp } from transforms
+import { one_hot } from tensor
+
+func hot(labels: int[]) => f32[...] {
+    return one_hot(labels, 3)
+}
+
+func main() sync {
+    let labels = [0, 2] as int[]
+    let dlabels = [0, 0] as int[]
+    let (value, tangent) = jvp(hot)(labels, dlabels)
+    println(value)
+    println(tangent)
+}
