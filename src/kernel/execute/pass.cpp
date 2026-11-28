@@ -375,7 +375,8 @@ struct FoundPass {
 /// supplies only the kernel. `ctx` locates the standard library and the pass modules; a name
 /// without one is a name the pipeline cannot resolve.
 std::optional<FoundPass> findDescriptor(const context_ptr_t &ctx, const std::string &name) {
-    // The name as written is tried first, so a module alias can never shadow a declaration.
+    // The written name is the pass's name: it is resolved through the operator its declaration
+    // names, and nothing else answers for it.
     const auto candidateFor = [&](const std::string &written) -> std::optional<FoundPass> {
         std::string module;
         std::string function;

@@ -270,7 +270,7 @@ with <
 >
 export func fvm::<F>(f: F) => F! when is_function::<F>()
 
-namespace fastvm {
+namespace fvm {
     /// Prints the bytecode of every graph and hands the program on.
     export func bytecode::<F>(f: F) => F! when is_function::<F>()
     
@@ -416,22 +416,6 @@ namespace cxx {
     /// statements are one chain and carry no redundancy.
     export func order::<F>(f: F) => F! when is_function::<F>()
 }
-
-// ---------------------------------------------------------------------------------------------
-// The spellings a pipeline has always written
-//
-// A pass is named by its declaration, and the pipeline is written with names a reader learned
-// from older documents: `std::fvm` for `std::fvm`, `std::fastvm::bytecode` for
-// `std::fastvm::bytecode`, and so on. Each of them is a pass a pipeline may write, so each gets a
-// declaration of the pass shape here -- the name is a pass because it is declared as one, not
-// because a table beside the declarations says what it means.
-//
-// Which function implements each one is not this file's answer: the core's registry binds the
-// kernel, and today the name table in src/execute/pass.cpp supplies the kernel of a spelling whose
-// own operator has none (the alias fallback of `findDescriptor`). These declarations are what the
-// spellings need to *be* passes; the kernel side is the next step, and until it lands a pipeline
-// resolves each name exactly as it did before -- these lines change no reading.
-
 
 /// `std::jit`: the fast VM's JIT backend (`std::jit` implements it); the parameters are
 

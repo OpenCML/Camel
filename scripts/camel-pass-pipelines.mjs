@@ -26,9 +26,9 @@ export const TRANSLATE = new Set([
   'std::agir', 'std::argir', 'std::jgir',
   'std::cml', 'std::cpp', 'std::cpp::module_file', 'std::cpp::inspect',
   'std::topo_node_seq', 'std::tfdump',
-  'std::fastvm::bytecode', 'std::fastvm::linked_bytecode',
-  'std::fastvm::jit_asm', 'std::fastvm::jit_bin',
-  'std::fastvm::jit_rmir', 'std::fastvm::jit_mir',
+  'std::fvm::bytecode', 'std::fvm::linked_bytecode',
+  'std::fvm::jit_asm', 'std::fvm::jit_bin',
+  'std::fvm::jit_rmir', 'std::fvm::jit_mir',
   'onnx::export',
 ])
 
