@@ -5,9 +5,8 @@ tags = ["feat", "opt", "inline", "figure1", "report"]
 
 # The pipeline the figure of the paper is drawn from, one reading per step, all with the Camel
 # inliner and the paper's own program (`inc(x) * 3 + (x + 1) * 4`, printed). These entries are the
-# source of the three graphs and the node counts on
-# internal/reports/2026-11-28-figure1-inline-final.md; the last pair is the comparison with the C++
-# inliner on the same downstream, compared on the canonical bytes.
+# source of the three graphs and the node counts the paper's figure carries; the last pair is the
+# comparison with the C++ inliner on the same downstream, compared on the canonical bytes.
 #
 # A step prints `std::gir`, so the entry's stdout IS the graph the report pastes, and the node count
 # of that graph is counted from those lines rather than from a summary.
