@@ -170,3 +170,40 @@ if (name == "std::opt" && args.given("settle_runs") && args.getInt("settle_runs"
 - `test/plans/feat/opt/pass_params.plan.toml`：`settle_runs=0` 的用例断言不变（文案不变），可加一条"下限来自声明"的用例；
   `docs/cli.md` 的 "Pass parameters" 要补这个语法。
 - **风险**：`PassParam` 是内核与解析层共享结构，改它要同时动两个目标；范围语法本身是语言表面，拼写由决策者定。
+
+## 七、第二刀：裁决后的落点（`D-1128-199`）
+
+决策者裁了五处，**都不加新注解**（原则 9：遍都是函数，不设字段记录类别）：`#native_codegen`、`#debugger`、
+`#profiles` 三个都不加，各有不靠名字的落点。已做 ①③④⑤，②⑥ 等这枝合进 integration 后从新尖做。
+
+**① jit 缺代码生成器**：通用层（原 `pass.cpp:2550`）的检查删掉，`jitWithoutCodeGeneratorWarning` 与它在
+`main.cpp` 的调用一起消失（`base.h` −6 行、`pass.cpp` −9 行）；由 `std::jit` 自己的 pass 在 `apply()` 里报
+`RuntimeDiag::JitWithoutCodeGenerator`（`fastvm.cpp` +26 行，`fastvm.h` 一个 once 标志）。
+读数：`git grep jitWithoutCodeGeneratorWarning` = 0；`std::jit` 的 stderr 里有这条运行时告警（与程序输出同一次运行）。
+
+**③ 阶段计时始终记录**：`pipelineNamesProfile` 删除（`base.h` −8 行、`pass.cpp` −9 行），`main.cpp` 只有一句
+`phase::enableRecording()`（−13/+6）。判词有读数，两个数都写在这里：
+- **A/B 实测**：同一二进制、`--time-phases=-` 开/关，负载 `test/cases/modules/optim/agreement.cml std::opt std::nop`
+  （约 3.6 s），4 对交替换跑（A 不开 / B 开）：A 中位 **3.62 s**、B 中位 **3.57 s**，差 **−1.4%**，**在本次噪声内**
+  （同一批 4 次跑的极差就有 ±1.4%）；1m load 26.8 → 28.8。
+- **解析上界**：一次运行约 **24 个 phase**，每个 phase 两次时钟读 + 一次入表 ⇒ 上界约 **5 µs**；
+  占 3.6 s 的 **0.0001%**，占最短现实运行（约 10 ms）也 **≤0.05%** ⇒ 判"可忽略，始终记录"。
+
+**④ `settle_runs` 归 `std::opt`**：规则搬进读参数的那份文件（`opt.cpp` 的 `settleRunsRefusal`，28/4），
+`PassDescriptor` 新增 `checkParams`（`params.h` +16、`registration.h` +29、`registration.cpp` +19），
+`pass.cpp` 里按遍名判的分支与 `valueProblem` 一起删除（24/92 中的那一段）。诊断位置由 `parsed.params` 里
+该参数词的 `column`/`length` 填入 ⇒ 落在**参数词**，不落在整条 spec。`PassParam` 与 `with` 语法**没动**。
+
+**⑤ 标签读者名单删除**：`declareCoreTagReaders` 与 `ensureCoreTagReaders` 一起删除（`pass.cpp` −29 行），
+读者身份回到遍注册处（`PassKernel(..., readsTags)` ⇒ `OperatorTable::declareReadsTags`）：`std::gir` 六种、`std::jgir`、
+`std::opt` 与十二个 `std::cxx::*` kernel 各自声明。
+
+**守卫缺口（诚实说法，本轮不补静态守卫）**：
+- `test/tools/check-pass-declarations.mjs` **挡不住**"某个遍漏写 `readsTags`"——它只检查 declaration ↔ kernel 的双射。
+- **漏写**的形状是**过度告警**：该遍被当成非读者，`TagHasNoReader` 会误报它没读的标签，**不沉默**。
+- **反方向**（把不读标签的遍声明成读者）才是**沉默漏报**：标签写了、没人读，却不告警。
+- 两个方向今天**都没有静态守卫**。要一个的话是行为用例（`isReader("std::opt")` / `isReader("std::cxx::fold")` 为真，
+  且流水线里放一个不读标签的遍时 `TagHasNoReader` 仍然报），归下一段。
+
+**② 调试器可停性**、**⑥ 脚本读兜底目标**：未做，等这枝合进 integration 后从新尖做（② 要给
+`GraphSchedulePass` 加 `dynamic_cast` 可问的性质接口；⑥ 让 `scripts/camel-pass-pipelines.mjs` 从 camel 读兜底目标）。
