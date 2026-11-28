@@ -1,0 +1,73 @@
+{
+  "kind": "promotion",
+  "promotion": 89,
+  "tip": "1641989303de83dce761749ac183cfb65474d2b1",
+  "measured_tip": "1641989303de83dce761749ac183cfb65474d2b1",
+  "pushed_develop_sha": "1641989303de83dce761749ac183cfb65474d2b1",
+  "landing_tip": "the record is a documentation commit and lands on whatever integration holds at push time; the tip this layer measured was read twice with git ls-remote before the run and it is the tip the merge seat pushed the forty-eighth batch on",
+  "note": "the layer was measured at 1641989303de, the batch that makes a pass a value the program can take and hand on: thirty-three build paths, the pass declaration and registration headers among them, one new plan (modules.pass_as_value) and one plan rewritten (modules.graph). Three cases arrived with the new plan and all three pass; three cases that had been red for layers turned green, all in modules.graph, because that plan's readings were rewritten in the same batch to read the canonical node order and the order of two creation numbers instead of a counter value. The red set fell from 132 to 129 and no name was added to it",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at 1641989303de; load 1m 39.76 at the start of the run",
+  "binary_built": "2026-11-28T20:25:59+08:00",
+  "readings": {
+    "total": 9940,
+    "pass": 9750,
+    "fail": 129,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 0,
+    "re_run": 0,
+    "re_run_passed": 0,
+    "load_before": "1m 39.76, 5m 39.05, 15m 37.86",
+    "load_warning": "[load] WARNING: 1m load 39.76 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth to eighty-eighth layers carried; a promotion does not wait on load, D-1128-36). The load is the whole shared host's, not this run's: at the start of the run the token pool held four of twenty-four and this run took its two, and the CPU aggregate belonged mostly to other users. This record states the number as the tool printed it and does not call it an environment fault."
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-88-reds.tsv (the eighty-eighth promotion, 132 names)",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], with the plan aliases transforms/compile.transforms and stated_extents/compile.stated_extents read as the same plan; the two summaries were also compared entry by entry, so a case that changed status without entering or leaving the red set would have been seen",
+    "still_red": 129,
+    "turned_green": 3,
+    "turned_green_names": [
+      "modules.graph|types_and_node_kind",
+      "modules.graph|node_kinds_match_the_graph",
+      "mm.gc_poison_sweep|poison:modules.graph:types_and_node_kind"
+    ],
+    "turned_green_kind": {
+      "modules.graph|types_and_node_kind": "verdict changed -- the case's expectation was rewritten in this coverage (commit 26e255b943, the creation number is read as an order, never as a value: expect_stdout_exact changed 0/1/47/NodeKind::Oper to 0/1/true/NodeKind::Oper)",
+      "modules.graph|node_kinds_match_the_graph": "verdict changed -- the case's reading was rewritten in this coverage (commit c8e99e448f, the kinds case reads the kinds and not the numbers the graphs were created with: the anonymous graphs are renumbered by first appearance, so a counter that other changes move no longer decides the case)",
+      "mm.gc_poison_sweep|poison:modules.graph:types_and_node_kind": "verdict changed -- the poison sweep's twin of the case above; it follows that case's verdict, so it turned green with it and not on its own"
+    },
+    "new_reds": 0,
+    "new_reds_names": [],
+    "vanished_reds": 0,
+    "arithmetic": "132 names before: 3 turned green, 0 vanished, 0 appeared, 129 remain red. 129 + 3 = 132",
+    "total_delta": "plus three: 9940 entries against the eighty-eighth layer's 9937, and the three that appeared are modules.pass_as_value|value.taken_and_not_called, modules.pass_as_value|value.unknown_name_refused and mm.gc_poison_sweep|poison:modules.pass_as_value:value.taken_and_not_called. All three pass, so the addition is a case captured rather than a verdict changed",
+    "notes": [
+      "this is the first layer since the sixty-sixth in which the red set moved downward: three cases turned green and none appeared, so the batch that makes a pass a value repaired readings it did not break",
+      "the three greens are one repair read three ways, not three repairs: the two modules.graph cases have their expectations rewritten in the same batch (c8e99e448f and 26e255b943, both in this coverage), and the poison twin follows its case by construction. Recorded as verdict changed, which is the class this session reserves for a red that goes away because the case's own reading changed",
+      "opt.progen|progen_seed_4 stayed green for a fifth layer",
+      "no case timed out in this layer and none was re-run; fault_deep.prl_off is absent for the twenty-third round running because the scheduler root-cause fix holds",
+      "the new plan modules.pass_as_value declares two cases and both pass on their first reading, so the feature's own plans came in green with the feature",
+      "the record of a red that turns green names the commit that changed the reading, so a later layer that sees the name red again knows which of the two moved"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 0,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [],
+    "how": "the layer reported timed_out 0 and re_run 0, so there was no timeout to run alone"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-89-reds.tsv",
+  "red_table_rows": 129,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-89-reds.tsv (129 names)",
+  "new_red_names": [],
+  "pushed_as": "develop, fast-forwarded from f6ab147a4e99 to 1641989303de, the tip this layer measured",
+  "develop_before": "f6ab147a4e99846c6093587d7884a6725bf00561",
+  "develop_after": "1641989303de83dce761749ac183cfb65474d2b1",
+  "commits_brought_in": 32,
+  "commits_touching_src": 33
+}
