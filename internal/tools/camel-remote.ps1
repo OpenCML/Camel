@@ -352,6 +352,22 @@ param(
     # Drop this worktree's checkout on the host, build directory included, and stop. The branch
     # itself lives in the bare repository and locally; only the compiled output is lost.
     [switch]$Clean,
+    # End the run that holds this checkout's lock on the host -- the one whose host, pid, run id and
+    # start time the lock records -- and end this workstation's own side of it, so the host's
+    # watchdog does not go on believing somebody is waiting for the reading. This is what a person
+    # runs after a lane session was interrupted: killing the session leaves the host run alive (its
+    # watchdog only acts when the process that started it is gone, and a workstation-side survivor
+    # is enough to keep it waiting), and the checkout stays held while everybody else gets `exit 4`.
+    #
+    # It ends only what the lock names: the pid in the record, or when that pid is gone, the
+    # processes that have the lock file open -- never a process by name. A checkout with no run
+    # says so and exits 0, because "there was nothing to end" is not a failure.
+    [switch]$Cancel,
+    # With -Cancel, end the run holding THIS checkout's lock on the host, named by its checkout
+    # (the leaf of -Path, which is also the checkout's name there). This switch names a *different*
+    # checkout for the case where the tree that started the run is itself gone or is not the one
+    # this command can be run from.
+    [string]$CancelCheckout = '',
     # Diagnostic build: assertion stack traces on (`npm run build -- --stack-trace`). Off by default;
     # **its readings do not decide green or red** -- use it to read a trace, then rebuild without it.
     [switch]$StackTrace,
@@ -1192,6 +1208,138 @@ if ($Changed -and $Plan.Count -gt 0) {
     Write-Host (Format-CamelPlanTargetLine -Targets $planTargets -Tier $Tier -Golden:$UpdateGolden)
 }
 
+    $orphanGuard = @'
+# --- host orphan guard: extracted and run by internal/tools/camel-remote-orphan.test.ps1 ---
+# This script is started by sshd's session process and has no terminal, so when the workstation side
+# dies (the ssh client is killed, the session is stopped, the machine sleeps) nothing sends it a
+# hangup: the session process exits, this script is reparented, and everything under it keeps running,
+# queued for a slot or a token nobody will ever read the result of. The watchdog below is what ends it.
+orphan_ppid() {
+    local s
+    s=$(cat "/proc/$1/stat" 2>/dev/null) || return 1
+    s=${s##*) }
+    set -- $s
+    printf '%s' "$2"
+}
+# Every descendant of $1 (never the subtree rooted at $2), found through the parent links in
+# /proc/*/stat: a descendant may have moved to its own process group or session, so the process group
+# says nothing about who belongs to the run.
+orphan_descendants() {
+    local root="$1" skip="$2" f s pid ppid cur
+    local -A kids=()
+    for f in /proc/[0-9]*/stat; do
+        { read -r s < "$f"; } 2>/dev/null || continue
+        pid=${f#/proc/}; pid=${pid%/stat}
+        s=${s##*) }
+        set -- $s
+        ppid=$2
+        kids[$ppid]="${kids[$ppid]:-} $pid"
+    done
+    local queue=("$root") out=()
+    while [ ${#queue[@]} -gt 0 ]; do
+        cur=${queue[0]}; queue=("${queue[@]:1}")
+        for pid in ${kids[$cur]:-}; do
+            [ "$pid" = "$skip" ] && continue
+            out+=("$pid"); queue+=("$pid")
+        done
+    done
+    echo "${out[@]:-}"
+}
+# The process group of $1, from the same line `orphan_ppid` reads: after `(comm)` come the state,
+# the parent and then the group, so the group is field 3.
+orphan_pgrp() {
+    local s
+    s=$(cat "/proc/$1/stat" 2>/dev/null) || return 1
+    s=${s##*) }
+    set -- $s
+    printf '%s' "$3"
+}
+orphan_watch() {
+    local reader="$1" run="$2" log="$3" poll="${CAMEL_ORPHAN_POLL_S:-5}" grace="${CAMEL_ORPHAN_GRACE_S:-10}"
+    local me="$BASHPID" now seen=" " my_pg
+    my_pg=$(orphan_pgrp "$me" 2>/dev/null)
+    # Every pid this run has been seen with, not only the ones under it at the end. The parent links
+    # answer "who is under the run now", and they stop answering the moment the run's own shell dies:
+    # the kernel reparents its children, and a build started under `setsid` is a session of its own
+    # from the first instant. So each poll writes down what it can see, and the end kills the union:
+    # what is under the run then, and everything that was. A process left behind keeps the checkout
+    # lock held and keeps the CPU time it was given, which is why the sweep does not lean on the
+    # parent links alone.
+    orphan_remember() {
+        local one
+        for one in $(orphan_descendants "$run" "$me"); do
+            case " $seen " in *" $one "*) ;; *) seen="$seen$one ";; esac
+        done
+    }
+    # The same list, ended -- and then the groups it leads. A build runs under `setsid`, so ending
+    # its leader leaves the compilers under it running; the group is the only handle on them. This
+    # watchdog's own group is skipped: it is the run's group, and ending it would end the kill before
+    # its second pass.
+    orphan_end_pids() {
+        local one pgid
+        [ -n "${seen// /}" ] || return 0
+        for one in $seen; do
+            kill "-$1" "$one" 2>/dev/null
+            pgid=$(orphan_pgrp "$one" 2>/dev/null)
+            [ -n "$pgid" ] && [ "$pgid" != "$my_pg" ] && kill "-$1" -- "-$pgid" 2>/dev/null
+        done
+    }
+    while :; do
+        orphan_remember
+        now=$(orphan_ppid "$run") || break
+        if kill -0 "$reader" 2>/dev/null && [ "$now" = "$reader" ]; then sleep "$poll"; continue; fi
+        break
+    done
+    echo "[camel-remote] the process that started this run ($reader) is gone: ending the run $run and everything under it" >> "$log"
+    # Frozen first, so that the run does not go on to its next step as its children die. Frozen is not
+    # dead, and that is the point of doing it first: a stopped process keeps its parent links, so the
+    # sweep below still sees what it started rather than a set of children the kernel has adopted.
+    kill -STOP "$run" 2>/dev/null
+    orphan_remember
+    orphan_end_pids TERM
+    sleep "$grace"
+    orphan_remember
+    orphan_end_pids KILL
+    kill -KILL "$run" 2>/dev/null
+    # Ending the processes closes their descriptors, and that is how the tokens this run held or
+    # was queued for (`flock`s) are given back: nothing here releases them by name.
+    exit 0
+}
+orphan_begin() {
+    local stamp base f n
+    mkdir -p "$orphan_dir" 2>/dev/null || return 0
+    stamp=$(date +%Y%m%d-%H%M%S)-$$
+    base="$orphan_dir/$stamp"
+    # The name of this run's copy, for the pointer the remote script prints after the guard is sourced
+    # (and for anyone reading the host afterwards): the copy is the only place a `[SUMMARY]` survives
+    # the workstation side going away, so the path is said rather than hunted for afterwards.
+    orphan_copy="$base.out"
+    # The host's copy of the run's output. Each stream still reaches ssh byte for byte; a tee whose
+    # reader went away ignores the broken pipe and keeps writing the file, so what came before is kept.
+    # The pair is made on disk before the prune below counts it: a tee the shell starts asynchronously
+    # may create the file a moment after the count, and then "the newest 20 pairs" keeps 21.
+    : >> "$base.out"
+    : >> "$base.err"
+    exec > >(trap '' PIPE; exec tee --output-error=warn-nopipe -a "$base.out") \
+         2> >(trap '' PIPE; exec tee --output-error=warn-nopipe -a "$base.err" >&2)
+    # Only the newest 20 pairs stay.
+    n=0
+    for f in $(ls -1t "$orphan_dir"/*.out 2>/dev/null); do
+        n=$((n + 1))
+        if [ "$n" -gt 20 ]; then rm -f "$f" "${f%.out}.err"; fi
+    done
+    orphan_watch "$1" "$$" "$base.err" </dev/null >/dev/null 2>&1 &
+    orphan_watch_pid=$!
+    trap orphan_end EXIT
+}
+# The watchdog ends with the run. A later `trap ... EXIT` replaces this one, so it calls this itself.
+orphan_end() {
+    [ -n "${orphan_watch_pid:-}" ] && kill "$orphan_watch_pid" 2>/dev/null
+    return 0
+}
+orphan_begin "$PPID"
+# --- end host orphan guard ---
+'@
 # One checkout per worktree name, kept for its incremental build directory. `-Clean` throws that
 # away when a task is finished; the stale ones are reclaimed at the start of a run, but only those
 # that carry a creation record (`~/camel-work/.records/`) and that no run is inside -- a checkout
@@ -1228,6 +1376,142 @@ rm -f "`$root/.records/$name"
     # "nothing to remove" as "the disk is free".
     exit $cleanExit
 }
+# --- -Cancel: end the run that holds this checkout on the host --------------
+# Two sides belong to one run, and both have to end before the checkout is anybody else's:
+#
+#   * this workstation's side -- the `camel-remote.ps1` process that started the run and the ssh
+#     session under it. The host's watchdog ends a run when the process that started it is gone,
+#     and only then: a workstation-side survivor is enough for the watchdog to believe somebody
+#     is still waiting for the reading, so the run goes on and takes the checkout with it;
+#   * the run on the host, which holds `/tmp/camel-tree-<cksum>.lock` for its whole life and whose
+#     children (a build under `setsid` among them) keep holding it after their own shell is gone.
+#
+# So the workstation side is ended first, from the run registry (`run-registry.jsonl`), where each
+# run records its own pid, checkout and phase; a pid is ended only when its command line still
+# names this script, so a recycled pid is never somebody else's process. The host side then goes
+# through the watchdog's own shutdown -- the same functions, extracted from the guard below, with
+# `orphan_watch` called against the pid the lock names -- so "stop a run" has one implementation:
+# freeze it, end what it started and the groups it leads, then KILL after a grace. The run's result
+# directory takes a `CANCELLED` marker, so a reading cut short is never read back as one that
+# finished.
+#
+# Only what the lock names is ended: the pid in the record, or when that pid is gone, the processes
+# that have the lock file open. Nothing here ever ends a process by name. A checkout with no run
+# says so and exits 0: nothing to end is not a failure.
+if ($Cancel) {
+    $cancelCheckout = if ($CancelCheckout -ne '') { $CancelCheckout } else { $name }
+    $cancelPath = if ($CancelCheckout -ne '') { '' } else { $Path }
+
+    $registryPath = Join-Path $cfg.stateDir 'run-registry.jsonl'
+    $ended = 0
+    if (Test-Path $registryPath) {
+        # One line per snapshot and several per run, so the last line per pid is the row to read.
+        $rows = @{}
+        foreach ($line in (Get-Content -Path $registryPath)) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            try { $row = $line | ConvertFrom-Json } catch { continue }
+            if ($null -eq $row.pid) { continue }
+            $rows["$($row.pid)"] = $row
+        }
+        foreach ($row in $rows.Values) {
+            if ($row.pid -eq $PID) { continue }
+            $sameTree = if ($cancelPath -ne '') {
+                $null -ne $row.path -and
+                [string]::Equals([IO.Path]::GetFullPath([string]$row.path), $cancelPath,
+                                 [StringComparison]::OrdinalIgnoreCase)
+            } else {
+                $null -ne $row.worktree -and $row.worktree -eq $cancelCheckout
+            }
+            if (-not $sameTree) { continue }
+            if (-not (Get-Process -Id $row.pid -ErrorAction SilentlyContinue)) { continue }
+            $proc = Get-CimInstance Win32_Process -Filter "ProcessId = $($row.pid)" -ErrorAction SilentlyContinue
+            $cmdLine = if ($null -ne $proc) { [string]$proc.CommandLine } else { '' }
+            if ($cmdLine -notmatch 'camel-remote\.ps1') {
+                Write-Host ("[camel-remote] -Cancel: pid {0} is alive but its command line does not name camel-remote.ps1; not ending it ({1})" -f $row.pid, $cmdLine)
+                continue
+            }
+            Write-Host ("[camel-remote] -Cancel: ending this workstation's side of the run, pid {0} (run {1}, phase {2})" -f $row.pid, $row.runId, $row.phase)
+            $null = & taskkill.exe /T /F /PID $row.pid 2>&1
+            $ended++
+        }
+    }
+    if ($ended -eq 0) {
+        Write-Host "[camel-remote] -Cancel: no camel-remote.ps1 process of this workstation is running for checkout $cancelCheckout"
+    }
+
+    # The host side: the guard's functions without its `orphan_begin` line, which is the whole of
+    # the guard but the start of this run's own watchdog.
+    $guardFunctions = [System.Collections.Generic.List[string]]::new()
+    foreach ($one in ($orphanGuard -split "`n")) {
+        if ($one -eq 'orphan_begin "$PPID"') { break }
+        $guardFunctions.Add($one)
+    }
+    $cancelScript = ($guardFunctions -join "`n") + @"
+
+: "`${HOME:=`$(getent passwd "`$(id -un)" | cut -d: -f6)}"
+R="`$HOME/$($cfg.hostWorkRoot)/$cancelCheckout"
+tree_lock="/tmp/camel-tree-`$(printf '%s' "`$R" | cksum | cut -d' ' -f1).lock"
+record=""
+[ -r "`$tree_lock" ] && record=`$(head -n 1 "`$tree_lock" 2>/dev/null)
+holder=`$(printf '%s' "`$record" | sed -n 's/.* pid=\([0-9][0-9]*\).*/\1/p')
+run_id=`$(printf '%s' "`$record" | sed -n 's/.* run=\([^ ]*\).*/\1/p')
+exec 6>>"`$tree_lock"
+if flock -n 6; then
+    echo "[camel-remote] -Cancel: this checkout has no run in progress; nothing to end"
+    exit 0
+fi
+echo "[camel-remote] -Cancel: the lock records: `$record"
+if [ -z "`$holder" ] || ! kill -0 "`$holder" 2>/dev/null; then
+    # The record's pid is gone and something still holds the lock: those holders are what to end.
+    for d in /proc/[0-9]*/fd; do
+        p=`${d#/proc/}; p=`${p%/fd}
+        [ "`$p" = "`$`$" ] && continue
+        for l in "`$d"/*; do
+            if [ "`$(readlink "`$l" 2>/dev/null)" = "`$tree_lock" ]; then holder="`$p"; break 2; fi
+        done
+    done
+fi
+if [ -z "`$holder" ]; then
+    echo "[camel-remote] -Cancel: the lock is held but no holder process is visible; nothing to end"
+    exit 0
+fi
+# The marker goes down before the run is stopped: a reading cut short must not be read back as a
+# reading that finished, and the run's own closing steps will not run.
+if [ -n "`$run_id" ] && [ -d "`$R/test/results" ]; then
+    mkdir -p "`$R/test/results/log/`$run_id" 2>/dev/null &&
+        printf 'CANCELLED\t%s\treason=cancelled on request\thost=%s\tpid=%s\trun=%s\n' \
+            "`$(date -u +%Y-%m-%dT%H:%M:%SZ)" "`$(uname -n)" "`$holder" "`$run_id" \
+            > "`$R/test/results/log/`$run_id/CANCELLED" 2>/dev/null
+fi
+echo "[camel-remote] -Cancel: ending pid `$holder and everything it started (the watchdog's own shutdown)"
+# `0` as the reader: it is not this script's pid, so the watch does not wait for anybody to go away
+# and ends the run on its first pass -- freeze, TERM what it started and the groups it leads, KILL.
+orphan_watch 0 "`$holder" /dev/null
+if flock -n 6; then
+    echo "[camel-remote] -Cancel: the checkout is free"
+else
+    on_lock=""
+    for d in /proc/[0-9]*/fd; do
+        p=`${d#/proc/}; p=`${p%/fd}
+        [ "`$p" = "`$`$" ] && continue
+        for l in "`$d"/*; do
+            if [ "`$(readlink "`$l" 2>/dev/null)" = "`$tree_lock" ]; then
+                on_lock="`$on_lock `$p(`$(tr '\0' ' ' < "/proc/`$p/cmdline" 2>/dev/null | cut -c1-100))"
+                break
+            fi
+        done
+    done
+    echo "[camel-remote] -Cancel: the checkout is still held by:`${on_lock:- nothing visible}"
+fi
+exit 0
+"@
+    $cancelScript = $cancelScript -replace "`r`n", "`n"
+    $cancelOutput = & $sshExe -o ConnectTimeout=20 $sshHost $cancelScript 2>&1
+    $cancelExit = $LASTEXITCODE
+    foreach ($one in $cancelOutput) { Write-Host $one }
+    exit $cancelExit
+}
+
 
 # --- published state --------------------------------------------------------
 # Same read-modify-write rules as camel-build.ps1 / camel-test.ps1; the two files have a mutex
@@ -2684,138 +2968,7 @@ cleanup_staging_refs() {
     # The run's end when its reader is gone, and a host-side copy of what the run said. Single-quoted
     # so the fragment is bash exactly as written; internal/tools/camel-remote-orphan.test.ps1 extracts
     # and runs it. `orphan_dir` is set by the line before it in the remote script.
-    $orphanGuard = @'
-# --- host orphan guard: extracted and run by internal/tools/camel-remote-orphan.test.ps1 ---
-# This script is started by sshd's session process and has no terminal, so when the workstation side
-# dies (the ssh client is killed, the session is stopped, the machine sleeps) nothing sends it a
-# hangup: the session process exits, this script is reparented, and everything under it keeps running,
-# queued for a slot or a token nobody will ever read the result of. The watchdog below is what ends it.
-orphan_ppid() {
-    local s
-    s=$(cat "/proc/$1/stat" 2>/dev/null) || return 1
-    s=${s##*) }
-    set -- $s
-    printf '%s' "$2"
-}
-# Every descendant of $1 (never the subtree rooted at $2), found through the parent links in
-# /proc/*/stat: a descendant may have moved to its own process group or session, so the process group
-# says nothing about who belongs to the run.
-orphan_descendants() {
-    local root="$1" skip="$2" f s pid ppid cur
-    local -A kids=()
-    for f in /proc/[0-9]*/stat; do
-        { read -r s < "$f"; } 2>/dev/null || continue
-        pid=${f#/proc/}; pid=${pid%/stat}
-        s=${s##*) }
-        set -- $s
-        ppid=$2
-        kids[$ppid]="${kids[$ppid]:-} $pid"
-    done
-    local queue=("$root") out=()
-    while [ ${#queue[@]} -gt 0 ]; do
-        cur=${queue[0]}; queue=("${queue[@]:1}")
-        for pid in ${kids[$cur]:-}; do
-            [ "$pid" = "$skip" ] && continue
-            out+=("$pid"); queue+=("$pid")
-        done
-    done
-    echo "${out[@]:-}"
-}
-# The process group of $1, from the same line `orphan_ppid` reads: after `(comm)` come the state,
-# the parent and then the group, so the group is field 3.
-orphan_pgrp() {
-    local s
-    s=$(cat "/proc/$1/stat" 2>/dev/null) || return 1
-    s=${s##*) }
-    set -- $s
-    printf '%s' "$3"
-}
-orphan_watch() {
-    local reader="$1" run="$2" log="$3" poll="${CAMEL_ORPHAN_POLL_S:-5}" grace="${CAMEL_ORPHAN_GRACE_S:-10}"
-    local me="$BASHPID" now seen=" " my_pg
-    my_pg=$(orphan_pgrp "$me" 2>/dev/null)
-    # Every pid this run has been seen with, not only the ones under it at the end. The parent links
-    # answer "who is under the run now", and they stop answering the moment the run's own shell dies:
-    # the kernel reparents its children, and a build started under `setsid` is a session of its own
-    # from the first instant. So each poll writes down what it can see, and the end kills the union:
-    # what is under the run then, and everything that was. A process left behind keeps the checkout
-    # lock held and keeps the CPU time it was given, which is why the sweep does not lean on the
-    # parent links alone.
-    orphan_remember() {
-        local one
-        for one in $(orphan_descendants "$run" "$me"); do
-            case " $seen " in *" $one "*) ;; *) seen="$seen$one ";; esac
-        done
-    }
-    # The same list, ended -- and then the groups it leads. A build runs under `setsid`, so ending
-    # its leader leaves the compilers under it running; the group is the only handle on them. This
-    # watchdog's own group is skipped: it is the run's group, and ending it would end the kill before
-    # its second pass.
-    orphan_end_pids() {
-        local one pgid
-        [ -n "${seen// /}" ] || return 0
-        for one in $seen; do
-            kill "-$1" "$one" 2>/dev/null
-            pgid=$(orphan_pgrp "$one" 2>/dev/null)
-            [ -n "$pgid" ] && [ "$pgid" != "$my_pg" ] && kill "-$1" -- "-$pgid" 2>/dev/null
-        done
-    }
-    while :; do
-        orphan_remember
-        now=$(orphan_ppid "$run") || break
-        if kill -0 "$reader" 2>/dev/null && [ "$now" = "$reader" ]; then sleep "$poll"; continue; fi
-        break
-    done
-    echo "[camel-remote] the process that started this run ($reader) is gone: ending the run $run and everything under it" >> "$log"
-    # Frozen first, so that the run does not go on to its next step as its children die. Frozen is not
-    # dead, and that is the point of doing it first: a stopped process keeps its parent links, so the
-    # sweep below still sees what it started rather than a set of children the kernel has adopted.
-    kill -STOP "$run" 2>/dev/null
-    orphan_remember
-    orphan_end_pids TERM
-    sleep "$grace"
-    orphan_remember
-    orphan_end_pids KILL
-    kill -KILL "$run" 2>/dev/null
-    # Ending the processes closes their descriptors, and that is how the tokens this run held or
-    # was queued for (`flock`s) are given back: nothing here releases them by name.
-    exit 0
-}
-orphan_begin() {
-    local stamp base f n
-    mkdir -p "$orphan_dir" 2>/dev/null || return 0
-    stamp=$(date +%Y%m%d-%H%M%S)-$$
-    base="$orphan_dir/$stamp"
-    # The name of this run's copy, for the pointer the remote script prints after the guard is sourced
-    # (and for anyone reading the host afterwards): the copy is the only place a `[SUMMARY]` survives
-    # the workstation side going away, so the path is said rather than hunted for afterwards.
-    orphan_copy="$base.out"
-    # The host's copy of the run's output. Each stream still reaches ssh byte for byte; a tee whose
-    # reader went away ignores the broken pipe and keeps writing the file, so what came before is kept.
-    # The pair is made on disk before the prune below counts it: a tee the shell starts asynchronously
-    # may create the file a moment after the count, and then "the newest 20 pairs" keeps 21.
-    : >> "$base.out"
-    : >> "$base.err"
-    exec > >(trap '' PIPE; exec tee --output-error=warn-nopipe -a "$base.out") \
-         2> >(trap '' PIPE; exec tee --output-error=warn-nopipe -a "$base.err" >&2)
-    # Only the newest 20 pairs stay.
-    n=0
-    for f in $(ls -1t "$orphan_dir"/*.out 2>/dev/null); do
-        n=$((n + 1))
-        if [ "$n" -gt 20 ]; then rm -f "$f" "${f%.out}.err"; fi
-    done
-    orphan_watch "$1" "$$" "$base.err" </dev/null >/dev/null 2>&1 &
-    orphan_watch_pid=$!
-    trap orphan_end EXIT
-}
-# The watchdog ends with the run. A later `trap ... EXIT` replaces this one, so it calls this itself.
-orphan_end() {
-    [ -n "${orphan_watch_pid:-}" ] && kill "$orphan_watch_pid" 2>/dev/null
-    return 0
-}
-orphan_begin "$PPID"
-# --- end host orphan guard ---
-'@
+
     $remoteScript = @"
 set -u
 orphan_dir="`$HOME/$($cfg.hostWorkRoot)/.remote-runs"
@@ -2931,6 +3084,7 @@ if ! flock -n 6; then
         echo "HOST_LOCK_HOLDERS=`$(tree_lock_holders)"
         echo "HOST_CHECKOUT_WAIT_MS=`$(( (`$(date +%s%N) - tree_wait_started_ns) / 1000000 ))"
         echo 'HOST_NOSLOT=checkout'
+        echo "[camel-remote] to end it: internal/tools/camel-remote.ps1 -Cancel -CancelCheckout '$name' -- the lock records: `$(tree_holder)"
         exit 4
     fi
     echo "[camel-remote] this checkout is held; waiting for it (-QueueOnTreeLock, at most $SlotWaitSeconds s): `$(tree_busy_note)"
@@ -2942,6 +3096,7 @@ if ! flock -n 6; then
         echo "HOST_LOCK_HOLDERS=`$(tree_lock_holders)"
             echo "HOST_CHECKOUT_WAIT_MS=`$(( (`$(date +%s%N) - tree_wait_started_ns) / 1000000 ))"
             echo 'HOST_NOSLOT=checkout'
+        echo "[camel-remote] to end it: internal/tools/camel-remote.ps1 -Cancel -CancelCheckout '$name' -- the lock records: `$(tree_holder)"
             exit 4
         fi
         sleep 5
