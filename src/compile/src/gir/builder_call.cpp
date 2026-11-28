@@ -809,7 +809,48 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                     continue;
                 }
                 const bool usable  = usableExpected(wanted);
-                withInputs[i].node = visitInPosition(withInputs[i].expr, usable ? wanted : nullptr);
+                if (!usable && isElementFunction(withInputs[i].expr)) {
+                    // A comprehension's element function stands where no position can give it a
+                    // type: no entry of the callee fits the ordinary arguments (the source is
+                    // neither an array nor a range), so the lambda has no function type to take
+                    // its parameters from. What the program got wrong is the source, and that is
+                    // what the report names: "the source has type 'int', which has no elements to
+                    // take". Reporting the parameter here instead would say "nothing here expects
+                    // a function type", which is true of the position and says nothing about the
+                    // source the program actually wrote.
+                    const Type *source = normInputTypes.empty() ? nullptr : normInputTypes.front();
+                    diags_->of(SemanticDiag::ComprehensionSourceRefused)
+                        .atOrigin(withInputs[i].expr->origin())
+                        .commit(source != nullptr ? source->toString() : std::string("void"));
+                    throw BuildAbortException();
+                }
+                const size_t diagsBefore = diags_->count();
+                try {
+                    withInputs[i].node =
+                        visitInPosition(withInputs[i].expr, usable ? wanted : nullptr);
+                } catch (const BuildAbortException &) {
+                    // The element expression of a comprehension failed: the report names the
+                    // element and where it is, and says which comprehension's elements were being
+                    // built -- the secondary label an instance of a generic function carries
+                    // (instantiateGeneric), so the reader is told the element type beside the
+                    // error. The element type is the source array's (`[e for x in xs]` with `xs:
+                    // string[]` has elements of type `string`).
+                    if (isElementFunction(withInputs[i].expr) && !normInputTypes.empty()) {
+                        const ArrayType *source = asArrayType(normInputTypes.front());
+                        if (source != nullptr) {
+                            diags_->addRelatedToErrorsFrom(
+                                diagsBefore,
+                                DiagLabel{
+                                    SourceRange{withInputs[i].expr->origin()},
+                                    std::format(
+                                        "in a list comprehension whose elements have type '{}'",
+                                        source->elemType()->toString()),
+                                    ""},
+                                3);
+                        }
+                    }
+                    throw;
+                }
                 if (!usable && pattern != nullptr) {
                     // The value's own type is what this position gives the variables: an `int`
                     // literal makes the accumulator an `int`, and the lambda takes that type.
