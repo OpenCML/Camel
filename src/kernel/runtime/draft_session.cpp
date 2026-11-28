@@ -1741,7 +1741,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         // is not read as a write of its own closing.
         const bool written    = draft.mutations() > entry.deliveredMutations;
         const bool normalized = draft.writings().empty() && draft.normalizeChainPlaces() > 0;
-        const bool dissolved  = draft.settleGates();
+        const bool dissolved  = draft.dissolveUnorderedGates() > 0;
         // An order edge whose two ends a rewrite left in different control regions is written on
         // the node that owns the region the deeper end runs in (docs/design/effects/edges.cn.md
         // 4.6). It is the last thing a commit does to the edges: dissolving gates above splices
@@ -1805,7 +1805,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
     const auto encode = [&](GCGraph *graph) {
         const DraftEntry &entry = *drafts_.at(graph);
         auto &draft             = entry.transaction->edit();
-        (void)draft.settleGates(); // the gate hygiene a commit owes the graph (draft.h)
+        draft.setFlags(draft.flags() | kGraphFlagGatesDissolved);
         encodeDraftGraph(
             context_,
             entry.identity,

@@ -426,15 +426,13 @@ class EncodeSession {
 
         // The front-end freeze dissolves a GATE that waits on nothing and has a value user: it is
         // plain forwarding, and both places a graph is submitted dissolve it.
-        // The runtime commit runs the same routine (`settleGates`, draft.h); this is the freeze's
-        // half, so validateRuntimeGraphPayload below never sees such a gate.
+        // The runtime commit already does it (src/runtime/draft_session.cpp, dissolveUnorderedGates);
+        // this is the freeze's half, so validateRuntimeGraphPayload below never sees such a gate.
         // Whether an effect was dropped beside it is reportDroppedEffects' to say, not this
         // structural check's. A gate that still waits -- on the sync chain's tail or on a control
         // input -- and one with no value input are not this case and keep their node.
         graph->edit().normalizeChainPlaces();
-        // The same routine the runtime commit runs (draft.h, `settleGates`): the gates are
-        // dissolved and the graph is marked as looked at, so both paths leave the same graph.
-        graph->edit().settleGates();
+        graph->edit().dissolveUnorderedGates();
 
         // The runtime graph is the part of the draft that its roots reach; the draft keeps the
         // rest (a rewrite need not have erased a node nothing reads) and the graph does not name

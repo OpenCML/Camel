@@ -1111,17 +1111,6 @@ class GraphDraft : public camel::graph::Graph {
     /// head or tail of a branch arm is kept; when it waits on nothing it is made to wait on its
     /// BRCH. Returns the number removed.
     size_t dissolveUnorderedGates();
-  /// The gate hygiene every commit owes the graph it hands on, in one place: gates that wait on
-  /// nothing are plain forwarding and are dissolved, and the graph is marked as looked at
-  /// (`kGraphFlagGatesDissolved`), so the first commit that reaches it later leaves it alone. The
-  /// runtime session's commit and the front end's freeze both call this instead of doing half of it
-  /// each: the two paths used to dissolve without recording it, and a graph made by one path then
-  /// differed from the same graph made by the other in its flags alone.
-  bool settleGates() {
-      const bool dissolved = dissolveUnorderedGates() > 0;
-      setFlags(static_cast<uint8_t>(flags() | kGraphFlagGatesDissolved));
-      return dissolved;
-  }
     /// Writes every order edge that reaches into a control region on the node that owns that
     /// region (docs/design/effects/edges.cn.md 4.6): an arm or a part of a loop runs as a whole
     /// with its BRCH or LOOP, so the order it has with the code around it is an order on that
