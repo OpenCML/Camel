@@ -252,7 +252,7 @@ export const RULES = [
         level: 'wake',
         hold: 5,
         cooldown: 30,
-        check: ({ m }) => {
+        check: ({ m, mentioning }) => {
             const c = readable(m.checkout) && m.checkout
             if (!c) return null
             if (/^(lane|seat|trial|b|meta)\//.test(c.head)) {
@@ -263,9 +263,13 @@ export const RULES = [
             }
             if (c.head === 'develop' && c.dirty > 0) {
                 const paths = (c.paths || []).join('、')
+                const suspects = typeof mentioning === 'function' ? mentioning(c.paths || []) : []
+                const named = suspects.length > 0
+                    ? `最近一小时的工具调用里提到这些文件的会话：${suspects.map((one) => `${one.who}（${one.line}）`).join('；')}。`
+                    : ''
                 return {
                     key: `dirty:${paths}`,
-                    text: `主检出 D:\\Projects\\Camel 在 develop 上有 ${c.dirty} 处未提交改动${paths ? `（${paths}）` : ''}：按路径找到写进来的车道复原（git -C <绝对路径> checkout -- <路径>），写文件一律用绝对路径。若是负责人自己的改动，不动。`,
+                    text: `主检出 D:\\Projects\\Camel 在 develop 上有 ${c.dirty} 处未提交改动${paths ? `（${paths}）` : ''}：${named}按路径找到写进来的车道复原（git -C <绝对路径> checkout -- <路径>），写文件一律用绝对路径。若是负责人自己的改动，不动。`,
                 }
             }
             return null
