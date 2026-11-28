@@ -81,6 +81,13 @@ bool orderBearingNode(const OrderBearingAdapter &, NodeRef);
 
 **验收读数（开枝后）**：`test/plans/feat/opt/edges.plan.toml`（含 `order_edge_on_a_pure_node_is_refused`、`order_edge_orders_the_nodes_that_run`、`order_edges_survive_a_removed_node`）、`feat/linear/order_edges*`、`feat/modules/graph_edits`、`probe/editview`。基线读数见 §5。
 
+**"cast 是缺陷"必须变成读数（负责人 2026-11-28 要求）**——否则它只是判断：
+1. `order_edge_survives_the_commit` 五条：改前 `[PASS]` 原文 + 改后 `[PASS]` 原文；
+2. 一个最小对证明"**草案侧也问得出 cast**"：同一程序分别走草案路径与冻结图路径，`orderBearingNode` 的结论相同，贴两行原文。
+**若问不出来**：说明"草案按 `:op/cast` 问"只是假设，页里这一条退回"假设"标签，不得写成结论。
+
+**编码器那段过滤要删（决策者 2026-11-28，硬判）**：`graph_encode.cpp:320-325` 的 `OrderDropped` 回调**整体删掉**——"编码器只编码、不判定"，留着就是替上游藏错；`firstDifference(draftView, frozenView, orderDropped)` 改成不带过滤的比较（`orderDropped` 参数消失或恒不丢）。判据：删掉后 `order_edge_on_a_pure_node_is_refused` 应由红转绿；**若它仍红，贴新 fail 原文，不改判据**——那说明不止一处藏错。删过滤可能把以前被吞掉的坏边暴露成别的红，**逐名逐条原文贴，不许把过滤加回去**。
+
 ## 4 `examples/case-study/edits.cml` 逐行改写（默认写法已按负责人裁定）
 
 **默认（负责人 2026-11-28）**：① 块写法里"主动不提交"取"**不改稿就提交**"（可测、不引入新语义）；② 体内**裸 `return` 先按不允许**处理（要么诊断拒绝，要么页里明写"结束块并丢弃草稿"）——宁可响亮拒绝，不许静默丢弃。
@@ -93,17 +100,34 @@ bool orderBearingNode(const OrderBearingAdapter &, NodeRef);
 | `L87-93 func erased::<F>(d: Draft<F>, hits: Node[]) => F! sync { …commit(d) }` | **删**（体搬进 `drop_print` 的块） |
 | `L95-100 func declined::<F>(d: Draft<F>, p: F) … { abort(d); return p }` | **删**（默认①：不改稿就是提交） |
 | `L102-106 func swapped::<F>(d, old, new) … { replace(old,new); return commit(d) }` | **删** |
-| `L108-114 list`：`all_nodes(p)->foreach<func (n: Node) { println(looks(n)) }>` | `return view d = p { all_nodes(d)->foreach<func (n: Node) { println(looks(n)) }> }`（`view` 的值=体的值=void；`return` 交回 `p` 不变？——**见待确认 a**） |
+| `L108-114 list`：`all_nodes(p)->foreach<func (n: Node) { println(looks(n)) }>` | 两条语句：`view d = p { all_nodes(d)->foreach<func (n: Node) { println(looks(n)) }> }` ／ `return p` —— **不能写成 `return view …`**：`view` 的块值=体末表达式=`foreach` 的 `void`（默认 b），函数返回 `F!`，类型不符 |
 | `L116-121 drop_print`：`let d = open(p)` / `let prints = draft_nodes(d)->filter<is_print>` / `return if len(prints)==0 then declined(d,p) else erased(d,prints)` | `return edit d = p { all_nodes(d)->filter<is_print>->foreach<func (n: Node) => void { erase(n) }> }`（空集合=不改稿=原样提交） |
 | `L136-149 break_rate`：`let d = open(p)` / `let where = graphs(d)->filter<holds_the_pair>` / 三层 `match` + `declined`/`swapped` | `return edit d = p {`<br>`    graphs(d)->filter<holds_the_pair>->foreach<func (g: Graph) => void {`<br>`        replace(floats_in(g)[0], models_in(g)[0])`<br>`    }>`<br>`}` |
 | `L77-80 one_graph` / `L82-85 one_node` | **删**（"必须是 1"已由 `holds_the_pair` 保证，`[0]` 因此安全） |
 
 **改写后 `break_rate` 为什么仍是同一件事**：`holds_the_pair(g)` = `len(floats_in(g))==1 && len(models_in(g))==1`（L72-75，未改），所以 `[0]` 恰是"唯一的那一个"；没有这样的图时 `foreach` 体一次也不跑，草稿没写，块照常提交 ⇒ 程序原样。这与今天 `declined` 的可观察结果相同（程序不变、exit 0、读数为空），差别只在"提交了一份没改的副本"（默认①已裁定）。
 
-**待确认（页里没写、我不自定）**
-- **a**：`view` 块当语句用、值没人要，是否也报"结果没人用"（L56 只对 `edit` 说了）。若报，`list` 改为 `view d = p { … }` 之后的 `return p` 处就要另找写法；`list` 本身也可改成 `edit` 块并空提交，但那是另一条语义选择。
-- **b**：`view` 的块值类型由体推出（L55），`all_nodes(d)->foreach<…>` 的值是否为 `void` 决定 a 的答案。
-- **c**：`foreach` 的 lambda 形参 `g: Graph` 在块内是"句柄绑定"，句柄不得出 lambda——本页写法里它不出（只在体内用），符合 §4。
+**三条已定（负责人 2026-11-28，已上报作者）**
+- **a**：`view` 块当语句用、值没人要 ⇒ **不报"结果没人用"**（块的目的就是查看；要报也只报 fallible 值那种，见 `UnusedFallibleValue` 口径）。⇒ `list` 用"`view` 语句 + `return p`"。
+- **b**：`view` 的块值 = **体末表达式的类型**（`foreach` 是 `void` 就是 `void`）⇒ `return view …` 只在体值非 `void` 时有意义，`list` 因此不能写成 `return view …`。
+- **c**：`foreach` 的 lambda 形参 `g: Graph` **不算句柄逃逸**：句柄没有离开块（lambda 在块内被消费，没存进别处、没返回出去）。判据是"**块结束后还有没有活引用**"，不是"有没有被写成变量名"。
+
+## 4.1 块体里的 `return`：一处新判、六处旧字（文档那笔的落点）
+
+**新判（决策者 2026-11-28）**：块体里的 `return` **一律编译错误**，诊断原文「**块走到尾才结束；不想改就不写编辑**」。理由：它会跳过块尾的提交。
+
+**落点不成立**：负责人说"设计页第 4 节补这一句"，但 `docs/design/graph-editing/README.cn.md` 的 **§4 是「句柄出不了块」（L72-86）**，`return` 的规矩根本不在那儿，而在下面三处 —— 而且**三处都写着相反的读法**：
+
+| 位置 | 现在的原文（片段） | 按新判要改成 |
+|---|---|---|
+| 设计页 `:53`（§2） | "…`return` 结束的是块本身（与原则 3.4 同步块当值同一规则）。…体里最后一个表达式不是块的值，`return` **只是提前走到块尾、照常提交**。" | "…`return` **在块体里是编译错误**——「块走到尾才结束；不想改就不写编辑」，因为它会跳过块尾的提交。块的值两种块不同：…" |
+| 设计页 `:90`（§5） | "提交写在闭包里面，所以**块体里写的 `return` 结束的是块体、提交照样执行**；" | "提交写在闭包里面；**块体里不许写 `return`**（第 2 节），所以闭包里不会有块体自己的 return；" |
+| 设计页 `:302`（§15.1） | "…`edit` 块的值是提交得到的新函数（`G!`），体里的 `return` **只是提前走到块尾、照常提交**。" | 同 §2 口径 |
+| `internal/backlog.md:930`（`D-1126-108`） | "…体里最后表达式不是值、`return` 只是走到块尾并照常提交…" | 该行是**已决记录**，加一句"（2026-11-28 改判：块体里的 `return` 是编译错误）"，不改历史结论 |
+| `test/cases/probe/editview/body_return.cml` | 注释与用例**断的就是旧读法**（体里 `return 100`、块照常提交、`answer= 6`） | **属代码那笔**：改成 `expect_error`（诊断原文）或删；不是文档笔 |
+| `test/plans/probe/editview.plan.toml:74` | desc 写"…and the block still commits (design 15.1)…"；`expect_exit = 0`、`expect_stdout_contains = ["after the block", "answer= 6"]` | 同上，随用例翻 |
+
+**要一句在 §4 只有一种写法**：交叉引用——"（块体里不许写 `return`，见第 2 节）"。**规范句写进 §2**，§5、§15.1 同步改口径。**这条不是"补一句"，是"改三处口径 + 翻一条绿用例"**；只补 §4 会让同一页自相矛盾三处，并让 `editview.body_return`（今天绿）继续断旧读法。
 
 ## 5 基线读数（`origin/integration@6aaf4555da`，`BUILD_EXIT=0`，`[TREE] clean`，tier fast，jobs 2）
 
