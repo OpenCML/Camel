@@ -54,7 +54,7 @@ struct DebuggerState {
     context_ptr_t ctx;
     std::shared_ptr<UserDefinedModule> mainModule;
     std::shared_ptr<camel::parse::CamelParser> parser;
-    /// Pass 列表：与 CLI 的 Run::targetFiles[1:] 一致，空时 applyPasses 使用 std::default
+    /// Pass 列表：与 CLI 的 Run::targetFiles[1:] 一致，空时 applyPasses 使用 std::run
     std::vector<std::string> runPasses;
     /// Values for the parameters of `main`, as on the command line (`name=value`).
     std::vector<std::string> runArgs;

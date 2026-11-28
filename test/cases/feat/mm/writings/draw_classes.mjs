@@ -31,7 +31,7 @@
  *
  * Every pipeline that draws the state ends in `std::nop`, which is the recipe design principles 9.1
  * gives for looking at a graph without running it: a dump hands the program on, so without the
- * `std::nop` the pipeline falls through to `std::default`, which is a pass that executes and is
+ * `std::nop` the pipeline falls through to `std::run`, which is a pass that executes and is
  * therefore refused with `PassNeedsExtraction` -- and its complaint would be printed into the dump
  * this case reads.
  *

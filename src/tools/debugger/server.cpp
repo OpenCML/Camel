@@ -1171,14 +1171,14 @@ void DebuggerServer::httpServerLoop() {
                 return;
             if (requireWorkerForLocal(res))
                 return;
-            // Worker: return compile stages + runPasses (empty => std::default) + GIR-Z
+            // Worker: return compile stages + runPasses (empty => std::run) + GIR-Z
             json j;
             json stages = json::array();
             for (const char *id : {"CTS", "CST", "AST", "GCT"})
                 stages.push_back({{"id", id}, {"label", id}});
             const auto &passes = getState().runPasses;
             if (passes.empty()) {
-                stages.push_back({{"id", "std::default"}, {"label", "fallback"}});
+                stages.push_back({{"id", "std::run"}, {"label", "fallback"}});
             } else {
                 for (const auto &p : passes) {
                     std::string label = p;

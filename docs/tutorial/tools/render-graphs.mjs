@@ -63,7 +63,7 @@ const DOT = option('dot', process.env.DOT || 'dot');
 // which is the recipe design principles 9.1 gives for looking at a graph without running it. A
 // sheet therefore holds no `std::nop` of its own: the stop belongs to the command the tool builds,
 // so a sheet copied elsewhere cannot pick up a second one. A dump hands the program on, so a sheet
-// that stopped at `std::rgir` would fall through to `std::default` and the program would run -- its
+// that stopped at `std::rgir` would fall through to `std::run` and the program would run -- its
 // output would
 // land in the dump the picture is normalised from (the `01_hello` sheet keeps no cluster, so that
 // output would end up in the `.dot` file) and, on a program with several writings, the run would

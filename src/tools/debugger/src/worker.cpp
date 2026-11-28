@@ -81,7 +81,7 @@ std::string getEnvValue(const char *name) {
 
 /// 父进程 POST /api/run 触发一次执行，由 WorkerRunHandler 置位、主循环消费。
 /// body 可含 passes（字符串数组），与 CLI 的 Run::targetFiles[1:] 一致；空则 applyPasses 用
-/// std::default。
+/// std::run。
 struct PendingRun {
     bool hasRun  = false;
     bool hasLoad = false; // compile only (POST /api/debug/load)

@@ -275,7 +275,7 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
     };
 
     try {
-        static const std::vector<std::string> defaultFallback{"std::default"};
+        static const std::vector<std::string> defaultFallback{"std::run"};
         st.ctx->clearProcessExitCode();
 
         requireKnownPasses(passes, st.ctx);

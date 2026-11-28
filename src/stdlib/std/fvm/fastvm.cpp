@@ -248,7 +248,8 @@ void FastVMSchedPass::populateFunctionClosureFrame(Frame *calleeFrame, Function 
 }
 
 void FastVMSchedPass::populateIndirectCallFrame(
-    Frame *callerFrame, Frame *calleeFrame, Function *func, data_arr_t nargs, data_arr_t wargs) {
+    Frame *callerFrame, Frame *calleeFrame, Function *func, data_arr_t nargs, data_arr_t wargs,
+    camel::runtime::gc_data_idx_t callResult) {
     GUARD(callerFrame != nullptr, "FastVM indirect call source frame is null.");
     GUARD(calleeFrame != nullptr, "FastVM indirect call target frame is null.");
     GUARD(func != nullptr, "FastVM indirect call callee Function is null.");
@@ -256,14 +257,42 @@ void FastVMSchedPass::populateIndirectCallFrame(
     GUARD(targetGraph != nullptr, "FastVM indirect call target graph is null.");
     GUARD(!wargs.empty(), "FastVM indirect CALL requires with-arg[0] as Function.");
 
+    const auto *callerGraph = callerFrame->graph();
+    GUARD(callerGraph != nullptr, "FastVM indirect call source frame has no runtime graph.");
+
+    // The caller's position of the call: the node whose result slot the instruction writes. The
+    // plan's row table is the translation the node-form back ends share, but the framed JIT exit
+    // runs instructions that table does not carry, so the graph is asked directly -- and only when
+    // a check fails, so the call path pays nothing for a message it usually does not write.
+    const auto callPosition = [&] {
+        for (camel::runtime::gc_cnt_t at = 0; at < callerGraph->nodeCount(); ++at) {
+            const auto *one = callerGraph->node(at);
+            if (one != nullptr && one->kind == camel::runtime::GCNodeKind::Call &&
+                one->dataIndex == callResult) {
+                return std::format("node {}", at);
+            }
+        }
+        return std::format("node ? (result slot {})", callResult);
+    };
+
+    // A call site whose arguments and target ports disagree is a defect of the *rewrite* that wrote
+    // the call: the program is wrong, the machine is not. It is reported the way the node VM
+    // reports it (`fillFrameForIndirectCall`, src/stdlib/std/exec/graph_runtime_support.cpp) -- the
+    // pass fails with the caller's position and the counts, and the run exits 1. Aborting here cost
+    // a report: `callee_arity.commit_accepts_the_call` pins the node VM's diagnostic and met a
+    // `Camel Invariant Violation` with exit 134 from this back end instead.
     const auto normPorts = targetGraph->normPorts();
-    GUARD(
-        nargs.size() == normPorts.size(),
-        std::format(
-            "FastVM indirect call norm-arity mismatch for graph '{}': expected {}, got {}.",
-            targetGraph->name(),
-            normPorts.size(),
-            nargs.size()));
+    if (nargs.size() != normPorts.size()) {
+        throw std::runtime_error(
+            std::format(
+                "Runtime indirect call norm-arity mismatch: caller graph '{}' {} has {} args, "
+                "target graph '{}' has {} norm ports.",
+                callerGraph->name(),
+                callPosition(),
+                nargs.size(),
+                targetGraph->name(),
+                normPorts.size()));
+    }
     for (size_t i = 0; i < normPorts.size(); ++i) {
         const auto *port = targetGraph->node(normPorts[i]);
         GUARD(port != nullptr, "FastVM indirect call norm port is null.");
@@ -271,13 +300,17 @@ void FastVMSchedPass::populateIndirectCallFrame(
     }
 
     const auto withPorts = targetGraph->withPorts();
-    GUARD(
-        wargs.size() - 1 == withPorts.size(),
-        std::format(
-            "FastVM indirect call with-arity mismatch for graph '{}': expected {}, got {}.",
-            targetGraph->name(),
-            withPorts.size(),
-            wargs.size() - 1));
+    if (wargs.size() - 1 != withPorts.size()) {
+        throw std::runtime_error(
+            std::format(
+                "Runtime indirect call with-arity mismatch: caller graph '{}' {} has {} "
+                "explicit with args, target graph '{}' has {} with ports.",
+                callerGraph->name(),
+                callPosition(),
+                wargs.size() - 1,
+                targetGraph->name(),
+                withPorts.size()));
+    }
     for (size_t i = 0; i < withPorts.size(); ++i) {
         const auto *port = targetGraph->node(withPorts[i]);
         GUARD(port != nullptr, "FastVM indirect call with port is null.");
@@ -1167,7 +1200,7 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                         const uint32_t callCount = noteIndirectCall(target);
                         requireNestedCallRoom(cur);
                         Frame *callee = framePool_.acquire(target->frameLayout());
-                        populateIndirectCallFrame(cur, callee, function, nargs, wargs);
+                        populateIndirectCallFrame(cur, callee, function, nargs, wargs, bc->result);
                         ++nestedCalls_;
                         const slot_t value = invokeCallOrJit(
                             graphEntryPc(target),

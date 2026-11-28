@@ -68,7 +68,7 @@ ONNX_TERMINAL = "onnx::export"
 MODULE_PASSES = {"tensor::fuse": "tensor", "onnx::export": "onnx"}
 
 SCHEDULING_PASSES = {"std::nvm", "std::fvm", "std::jit", "std::tf", "std::nodevm", "std::fastvm",
-                     "std::taskflow", "std::default", "std::linear", "std::parallel"}
+                     "std::taskflow", "std::run", "std::linear", "std::parallel"}
 
 RANDOM_SEED = 20261004
 RANDOM_PER_TERMINAL = 20
