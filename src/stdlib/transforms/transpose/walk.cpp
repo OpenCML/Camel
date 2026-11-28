@@ -2931,7 +2931,14 @@ bool buildTransposeMember(
                 // differentiates a stream or a flag -- so neither is carried by the reverse loop.
                 // A loop that iterates a sequence carries the element first and its states after
                 // it, and has no machine of its own.
-                const size_t stateCount = regionPorts.size() - (iterates ? 1 : 2);
+                //
+                // The ports are the loop's state list as the runtime reads it (`runtime/loop.cpp`,
+                // `LoopView::stateCount_`: the norm inputs, less the one the sequence takes when
+                // the loop iterates; the sibling walk in `jvp.cpp` reads a body region's ports the
+                // same way). A `while` loop has no stream to pull, so its ports are its states and
+                // nothing else: subtracting the two machine values a stream loop has would answer
+                // one state for a loop that carries three.
+                const size_t stateCount = iterates ? regionPorts.size() - 1 : regionPorts.size();
                 if (regionPorts.size() > 0 && regionPorts.size() < (iterates ? 2u : 3u)) {
                     refuse(TransposeRefusalCause::State);
                     os << " node=" << ref << " origin=" << regionOrigin
