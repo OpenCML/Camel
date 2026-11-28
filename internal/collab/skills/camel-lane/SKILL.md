@@ -610,13 +610,13 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
 · **头注释的行数会移动金标行号，那条 entry 因此假红。**`test/plans/feat/modules/onnx.plan.toml:2310` 钉的是
   `expect_diagnostic_line = 22`（`:2311` 钉 `expect_diagnostic_column = 9`），指的是
   `test/cases/modules/onnx/export_loop_carried_array_field.cml:22` 的 `walk(x, { xs: [0], k: 0 })`。
-  把文件头注释从 5 行写成 7 行（+2 行），那条调用就落到第 24 行 —— entry 只差位置就整条红。
+  把文件头注释从 5 行写成 7 行（+2 行），那条调用就从第 22 行落到第 24 行（按钉子行 22 复算；那条车道当时的记录只写 "a longer header moved it"、未给数，故此处以可复算的 24 为准）—— entry 只差位置就整条红。
   **假红与真红的区别：真红是诊断变了（文本/诊断名/code 其一），假红是诊断一字未改、只有行号对不上。**
   规矩：改用例头注释前先看该 entry 有没有 `line`/`column` 钉子，改完数一遍行数再跑（`lane/loop-tape-values` 因此把头注释保持 5 行，提交原文 "The header keeps its five lines: the entry pins the located diagnostic at line 22, column 9, and a longer header moved it."）。
 · **跨行拼接的字面量让行级 grep 说谎。**`src/stdlib/onnx/exporter.cpp:2088-2093` 那句拒绝是五个相邻字面量拼的，
   **整句**行级 grep 改前改后都是 0（`a recursive call changes argument 2 …: it is` base=0 head=0）⇒「搜不到」不等于「没改」。
   正确做法是按片段搜、给 before → after 的计数表：`whose length changes from` 1→0、`one round to the next (the body appends` 1→0、
-  `shape is the same on every ` 2→0，新片段 `this exporter does not yet carry an array` 0→7（`0ed8967a43` 前后，`git grep -c -F`）。
+  `shape is the same on every ` 2→0（提交正文自报 1、实测 2 —— 另一处在 `:1434` 的注释里），新片段 `this exporter does not yet carry an array` 0→7（`0ed8967a43` 前后，`git grep -c -F`）。
   自证的形状 = **片段 + 前后计数 + 一句「整句行级 grep 为 0 是因为跨行拼接」**；缺了最后一句，「搜不到」就会被当成「没改」。
 ```
 
