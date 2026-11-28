@@ -125,6 +125,46 @@ no assertion was changed.
 
 ## seeds 48 and 94 (`lane-witness`: `fold`, four back ends, two cells each)
 
+### The crossing edge of seed 71, from the draft graph itself
+
+A temporary print (`CAMEL_DUMP_DRAFT=1`, added for one round and **removed again**: `git grep
+CAMEL_DUMP_DRAFT` is empty on this lane, nothing committed) dumped the committed draft of the two
+statement program, node by node. `main`, 17 nodes:
+
+```
+DATA 0 | region the body (region 0) | norm[] with[] wait[] out[2]
+JOIN 1 | region the body (region 0) | norm[2] with[9 16] wait[11] out[]
+BRCH 2 | region the body (region 0) | norm[0] with[] wait[] out[1] | BRCH join 1 arms[1 4]
+DATA 3 | region the body (region 0) | norm[] with[] wait[] out[4]
+OPER 4 (:op/copy) | region arm 0 of BRCH 2 (region 1) | norm[3] with[] wait[2] out[5 16]
+OPER 5 (:var/new) | region arm 0 of BRCH 2 (region 1) | norm[4] with[] wait[] out[7 11]
+DATA 6 | region the body (region 0) | norm[] with[] wait[] out[10]
+OPER 7 (:var/get) | region arm 0 of BRCH 10 (region 2) | norm[5] with[] wait[10] out[]
+DATA 8 | region the body (region 0) | norm[] with[] wait[] out[]
+JOIN 9 | region arm 0 of BRCH 2 (region 1) | norm[10] with[7 8] wait[] out[11]
+BRCH 10 | region arm 0 of BRCH 2 (region 1) | norm[6] with[] wait[2] out[9] | BRCH join 9 arms[2 3]
+OPER 11 (:op/assn_b) | region arm 0 of BRCH 2 (region 1) | norm[5 9] with[] wait[9] out[]
+DATA 12 | region the body (region 0) | norm[] with[] wait[] out[13]
+OPER 13 (:io/println) | region arm 1 of BRCH 2 (region 4) | norm[12] with[] wait[2] out[16]
+DATA 14 | region the body (region 0) | norm[] with[] wait[] out[15]
+GATE 15 | region the body (region 0) | norm[14] with[] wait[1] out[]
+GATE 16 | region arm 1 of BRCH 2 (region 4) | norm[4 13] with[] wait[] out[]
+```
+
+**`GATE 16` is arm 1's value gate (region 4) and its first operand is node `4`, the `:op/copy` that
+lives in arm 0 (region 1).** That is exactly the reported violation, and it is one edge: the else arm's
+gate was handed the *other* arm's copy as its value. `JOIN 1` reads that gate (`with[9 16]`), which is
+what the check sees as "belongs to two arms".
+
+So the introducing step is not where the copy is made — `builder_control.cpp:268 copyNodeOf`, and the
+copy is where it belongs, in arm 0, waiting on the BRCH — it is where **the arm's value gate is built
+with the arm-0 copy as its value operand**. `addArm` → `readArmCellValue`
+(`builder_control.cpp:2212`, `:862`) is the code that hands an arm's value out and is the next thing to
+read: the copy reaches the gate instead of a `:var/get` of that arm's own cell, and the arm the gate
+belongs to holds no cell at all.
+
+## seeds 48 and 94, and the reading that says nothing
+
 Same batch, same re-pointing. A probe run of the two seeds against the tip build (`17:06`, `c014edb0ca`,
 `BUILD_EXIT=0`) reads:
 
