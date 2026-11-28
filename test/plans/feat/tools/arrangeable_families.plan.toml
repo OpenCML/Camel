@@ -40,7 +40,10 @@ const want = {
     oper_no_record: [1, 1, 0],
     call: [17, 0, 17],
     brch: [11, 0, 11],
-    loop: [11, 7, 4],
+    // The fifth part of `no_write` (no write lands on a resource the node reads) reaches the
+    // loop body too: the loop reads a resource something writes, so the family has no node a
+    // pass may freely arrange. Measured: `loop.free is 0, the measured reading is 7`.
+    loop: [11, 0, 11],
     gate: [1, 0, 1],
 }
 const cols = ['nodes', 'free', 'kept']
