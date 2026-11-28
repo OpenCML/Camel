@@ -1,7 +1,7 @@
 
 ## 待建卡（任务板满 256，腾出槽位即建）
 
-**基线现状（引用本页任何判据前先读这三句）**：**72 已放行**（`develop` 已快进到 `0967afd6159a`，`promotion-72.record.json` 的 `pushed_develop_sha` 非空）；**基线 = 72 表 141 名**（`internal/reports/2026-11-28-promotion-72-reds.tsv`，逐名比按 `plan_id` + 用例名，详见 `baseline-73.md`）；**72 里唯一那条"乙"（`modules.onnx.export_loop_carried_array_field`）按过渡重钉读**（`ba4d1ec233` 只把 `expect_diagnostic_column` 从 81 改钉到 9，它断言的前提已被 `D-1128-39` 撤回），**不许写成"修复"**。
+**基线现状（引用本页任何判据前先读这三句）**：**73 已放行**（`develop` 已由 `0967afd6159a` 快进到 `cca900c611`，`promotion-73.record.json` 的 `pushed_develop_sha` 非空）；**基线 = 73 表 141 名**（`internal/reports/2026-11-28-promotion-73-reds.tsv`，141 行 / 40 个 `plan_id`，对 72 表 `甲 ∅ / 乙 ∅ / 丙 141` 同一集合，逐名比按 `plan_id` + 用例名，详见 `baseline-74.md`）；**71→72 那条"乙"（`modules.onnx.export_loop_carried_array_field`）在 73 表里仍绿、仍按过渡重钉读**（`ba4d1ec233` 只把 `expect_diagnostic_column` 从 81 改钉到 9，它断言的前提已被 `D-1128-39` 撤回），**不许写成"修复"**。
 
 ### A. `liftedLoopBodyResult` 读源图的错 + 多态体成套三处口径统一（源自 `task-344` 收敛失败，cap-probe 交回 2026-11-28）
 - 读图错：`liftedLoopBodyResult` 里 `nodeOf(function, exitCopy)` 用**源图**查**本 draft** 的节点号；改成 `draft.header(exitCopy)->dataType` 只把断点移动，不解决问题
