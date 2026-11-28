@@ -283,3 +283,35 @@ bool Record::accessesOutsideProgram() const {
 2. **但那枝仍留了两份拼装**：`ResourceSignature::pure()` 自己把 `!ambient.empty()` / `allocates.has_value()` / `external && ambient.empty()` 翻成四格，`Record::pure()` 自己把 `!uses.stated() || declaresWrite()` / `accessesOutsideProgram()` / … 翻成四格 —— 两边各拼一次。这正是决策者说的"要被删的两份真相之一"。第 1 刀要做的是：**`declaresNoWrite(...)` 只留一份拼装**，两个读者各自只交出自己那份事实（记录：子句；签名：测量出的部件），四格的拼装与判定不重复。
 3. **`accessesOutsideProgram` 不新增为记录的第二个方法**：它是同一句"读的必须是程序自己的"在记录侧的又一次拼装；若保留，只能作为 `declaresNoWrite` 的**输入之一**，不许再自成一份判定。
 4. **pre-publish 自检那一笔已被取代**：`bbed9dd32b`（`pure && (writes || allocates || externalEffect || functionOperand)` ⇒ 拒绝，用 `std::any_of` 内联问 `sem::writes`）后来由 `lane/c4-round-source` **改动 `63384055bc`**（枝尖 `ae14f65247`）改成 `sem::writesSomething(sem::signatureOf(r, 0))` + 文案 `a pure operator writes a resource`。第 1 刀以那一版为准（它是合并位那一批），`bbed9dd32b` 只作形状参考。
+
+## 9 第 1 刀的调用面清点（落枝前就绪；`git grep -n "\.pure()\|->pure()" -- src` 全量 = 30 处代码 + 2 处文档注释）
+
+**这里有四个不同的 `pure()` 答案，不是两个** —— 第 1 刀只合其中 2、3 两处，别的**一律不动**：
+
+| # | 定义 | 读者（全部） | 第 1 刀动不动 |
+|---|---|---|---|
+| 1 | `AST::ResourceClauseLoad::pure()`（`src/parse/include/camel/parse/ast/type.h:254`，直接读 `pure_` 字段）—— **源码里写的那个词** | `gct/builder.cpp:1214`、`:1218`、`:1222`、`:1415` | **不动**（它就是"声明"本身） |
+| 2 | `ops::Record::pure()`（`operator_record.h:487-492`） | `introspect.cpp:284`（`clause_pure` 列）、`facts.cpp:1324`（`Arrangeable::pure` 这一项） | **改成调 `declaresNoWrite(...)`** |
+| 3 | `sem::ResourceSignature::pure()`（`resource_semantics.h:378-382`） | `builder_diagnostics.cpp:200`（`func->resources()`）、`:242`、`:284`、`:1075`（`promised`）、`builder_modules.cpp:421`（`signature`）、`:558`（`written`）、`builder_resources.cpp:500`（`at->site.clause`）、`builder_when.cpp:2291`（`signature.resources()`）、`resource_semantics.cpp:618`（`target`）、`:802`（`signature`）、`type/text.cpp:104`、`:318`、`:321`、`test/commit_checks.cpp:298`（`type->resources()`） | **改成调 `declaresNoWrite(...)`** |
+| 4 | `runtime::fact::EffectSummary::pure()`（`effects.h:40`，`!external && !writesVariables`） | `execute/pass.cpp:1052`、`stdlib/graph/read.cpp:591`、`:599`、`std/cml/cml.cpp:1429`、`:1434`、`test/block_body.cpp:416`、`tiles/src/compiler.cpp:461` | **不动**（实测摘要，不是承诺） |
+
+另有 `CppRegistration::pure()`（`operator_record.cpp:68`，builder DSL 的登记位）与两处文档注释（`operator_table.h:1028`、`operator_record.h:639`），都不是判定。
+
+**名字核对**：`git grep -n "operatorPure" -- src` **退出码 1，这个名字不存在**；`operatorArrangeable` 有 6 处出现：定义 `facts.cpp:1533`、声明 `arrangeable.h:92`、读者 `runtime/graph.cpp:231`、`compile/src/gir/builder_helpers.h:769`、`test/block_body.cpp:509`、`test/facts_compare.cpp:229`。第 1 刀**不碰** `operatorArrangeable`（第五项是第 2 刀）。
+
+**落枝即改的两行（形状；命名以决策者 §7 的 `declaresNoWrite` 为准，`two-bits-model` 里叫 `keepsPurePromise`，同一形状）**：
+- `Record::pure()` → `sem::declaresNoWrite(!uses.stated() || declaresWrite(), /*accessesOutside=*/<记录侧那一格>, uses.value.allocates.has_value(), uses.value.externalEffect || uses.value.functionOperand)`（未声明子句的保守读法保持今天的样子）。
+- `ResourceSignature::pure()` → `mode == Concrete && sem::declaresNoWrite(writesSomething(*this), !ambient.empty(), allocates.has_value(), external && ambient.empty())`。
+- 实现**一处**：放在 `resource_semantics.h` 紧邻 `writesSomething`（`:422` 那一带），inline，四格全非才算守住承诺。
+
+## 10 换底前的基线读数（第 1 刀"新增红 0"的对照；**底 = `625bfa13dc`，`src/` 等于 `integration@4f59be8265`**）
+
+> 这一组是**换底前**的现场，第 1 刀落枝后要按**同一选法**逐名比；比的是名字，不是数字。读数在宿主 `88zjwei` 上取，`[provenance] tip 625bfa13dc…`。
+
+- `test/plans/feat/tools/facts.plan.toml`：**11/11 通过，0 红**。
+- `test/plans/feat/tools/facts_compare.plan.toml`：**2/2 通过，0 红**。
+- `test/plans/feat/modules`（整目录）：`[SUMMARY] total: 2096, pass: 2068, fail: 20, skip: 4, known failures: 4`。
+  - **20 条 FAIL（换底前的红，逐名）**：`op_stats.table.nvm`、`op_stats.table.fvm`、`export_unsupported_op`、`export_impure_op`、`pass_export_refusal_located.request_in_arm_json`、`as_refusal.constant_fails.pass`、`as_refusal.constant_fails.operator`、`slice_runtime`、`si_as_fails`、`si_as_fails_fvm`、`si_as_fails_jit`、`si_as_fails_prl`、`fusion_group.profile.none`、`npy_generic_wrapper_mismatch`、`rename.env_graph_identity`、`rename.process_graph_identity`、`types_and_node_kind`、`node_kinds_match_the_graph`、`outline_delivers_the_graph_it_makes`、`outline_delivers_a_graph_the_bytecode_vm_can_compile`。
+  - **4 条 XFAIL（已知失败，不是红）**：`second_order_refused_vjp`、`ort_loop_values_dynamic`、`conv2d_shaped.derived_input_states_the_input_extents.nvm`、`conv2d_shaped.kernel_builds_what_it_derived.nvm`。
+  - 第 1 刀后的判据是：这 20 条**一条不多、一条不少**（新增红 0），4 条 XFAIL 不动。
+- **注意**：这组底不是最新 integration（`c4-round-source` 未落地，integration 已到 `a5b8663744`）；换底后按 §7 的规矩**重取**一遍再把行号/读数改掉。
