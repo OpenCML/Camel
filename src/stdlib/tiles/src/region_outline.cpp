@@ -470,6 +470,11 @@ const runtime::Program *outlineRegions(
     core::mm::NoCollectionScope noCollection;
     rt::RuntimeGraphDraftSession session(context.shared_from_this(), program, root);
     count             = 0;
+    // Every graph this pass names by a function constant, with the graph that holds the constant.
+    // The reference is stated on the graph's draft as the region is written, and stated again from
+    // this list right before the commit reads the drafts: the commit encodes the draft it holds,
+    // and `addStaticGraphRef` refuses a duplicate, so the second statement costs nothing.
+    std::vector<std::pair<rt::GCGraph *, rt::GraphId>> namedCallees;
     const auto graphs = session.collectReachableRuntimeGraphs();
     // A `#gpu` scope promises that the device runs everything written in it, and (GPU design 2.3,
     // 2.4) the functions it calls are part of that scope. Code written in an arm or a loop of a
@@ -840,6 +845,7 @@ const runtime::Program *outlineRegions(
             // the call is written against a graph the reference table does not name, and every
             // reader that walks the table -- the commit's closure first of all -- cannot reach it.
             draft.addStaticGraphRef(callee->id());
+            namedCallees.emplace_back(graph, callee->id());
             auto *type = callee->funcType()->exitType();
             std::vector<rt::gc_node_ref_t> args(
                 extracted.parameters.begin(),
@@ -1035,6 +1041,12 @@ const runtime::Program *outlineRegions(
     for (auto &[graph, effects] : orders) {
         if (effects.hasEffects())
             effects.finish(session.edit(graph).edit());
+    }
+    // The draft the commit reads is the draft this session holds now, so the references this pass
+    // stated while the regions were written are stated once more here, on that same draft and the
+    // same graph, and the commit carries them out with the rest of the edit.
+    for (const auto &[graph, callee] : namedCallees) {
+        session.edit(graph).edit().addStaticGraphRef(callee);
     }
     return session.commit();
 }
