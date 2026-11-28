@@ -2724,6 +2724,7 @@ cpu_budget_ms = 960000
 # capped at 1800 s, and the wall clock this used to be judged on (the runner's 4x margin) read the
 # neighbours rather than this test.
 timeout_ms = 3600000
+cores = 3
 
 [[tests]]
 name = "resnetbn_gradient_relu_kinks_vs_torch64"
@@ -2753,6 +2754,7 @@ cpu_budget_ms = 2200000
 # 60 min, by the measurement above: liveness only. This model does more work (batch_norm), each
 # Camel run inside the referee is capped at 1800 s, and the wall clock no longer decides it.
 timeout_ms = 3600000
+cores = 2
 
 [[tests]]
 name = "grad_first_with_parameter.macro.nvm"
