@@ -4,6 +4,7 @@
 #pragma once
 
 #include "allocator.h"
+#include "asan_region.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/brpred.h"
 #include "header.h"
@@ -41,6 +42,10 @@ class FreeListAllocator : public IAllocator {
         freeList_       = reinterpret_cast<FreeBlock *>(start_);
         freeList_->size = aligned_capacity;
         freeList_->next = nullptr;
+        // ASAN: the arena starts out entirely free. Only the first link of the free list stays
+        // readable; every byte the allocator has not handed out is unreadable from here on, so a
+        // write into it is reported where it happens (`asan_region.h`).
+        poisonFreePayload(freeList_);
     }
 
     void *alloc(size_t size, size_t align = alignof(slot_t)) override {
@@ -72,6 +77,12 @@ class FreeListAllocator : public IAllocator {
                 const size_t blockSize = curr->size;
                 size_t remaining       = blockSize - total_size;
 
+                // ASAN: the block was unreadable while it was free (its first link only was
+                // readable). It is being handed out, so take the poison off before the object
+                // header and the caller's payload are written into it; the part that stays free
+                // goes back under the shadow below.
+                asan_region::unpoison(blockStart, blockSize);
+
                 if (LIKELY(remaining >= sizeof(FreeBlock))) {
                     // Split the block.
                     installHeader(blockStart, total_size);
@@ -81,6 +92,7 @@ class FreeListAllocator : public IAllocator {
                     newBlock->next      = next;
 
                     *prevPtr = newBlock;
+                    poisonFreePayload(newBlock);
                 } else {
                     // Allocate the whole block.
                     installHeader(blockStart, blockSize);
@@ -168,7 +180,9 @@ class FreeListAllocator : public IAllocator {
             }
         });
 
-        insertAndCoalesce(blockData, total_size);
+        // ASAN: what the space has just taken back becomes unreadable again, so the next write
+        // through a pointer that still names it is reported there (`asan_region.h`).
+        poisonFreePayload(insertAndCoalesce(blockData, total_size));
     }
 
     void freeBulk(const std::vector<ObjectHeader *> &objects) override {
@@ -238,6 +252,7 @@ class FreeListAllocator : public IAllocator {
         FreeBlock *resumeAt = nullptr;
         for (const auto &[addr, size] : blocks) {
             resumeAt = insertAndCoalesce(addr, size, resumeAt);
+            poisonFreePayload(resumeAt);
         }
     }
 
@@ -256,6 +271,7 @@ class FreeListAllocator : public IAllocator {
         freeList_->size       = total_capacity;
         freeList_->next       = nullptr;
         allocatedSizes_.clear();
+        poisonFreePayload(freeList_);
     }
 
     size_t available() const override {
@@ -474,6 +490,20 @@ class FreeListAllocator : public IAllocator {
     ObjectHeader *headerOf(void *ptr) const {
         return reinterpret_cast<ObjectHeader *>(
             static_cast<std::byte *>(ptr) - sizeof(ObjectHeader));
+    }
+
+    // ASAN: a block's free-list link (size and next, at its start) has to stay readable -- the
+    // allocator walks it, and a report from inside the allocator would name the allocator rather
+    // than the write that corrupted it. Everything after the link is memory the space has taken
+    // back, so it goes under the shadow: a write there is reported at the write, and the stack
+    // that handed the block out says which graph held it before (`asan_region.h`).
+    static void poisonFreePayload(FreeBlock *block) noexcept {
+        if (block == nullptr || block->size <= sizeof(FreeBlock)) {
+            return;
+        }
+        asan_region::poison(
+            reinterpret_cast<std::byte *>(block) + sizeof(FreeBlock),
+            block->size - sizeof(FreeBlock));
     }
 
     // Core helper: insert and coalesce a free block. Returns the free block that now holds it.
