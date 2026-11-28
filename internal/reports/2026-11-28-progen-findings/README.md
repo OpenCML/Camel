@@ -127,8 +127,8 @@ no assertion was changed.
 
 ### The crossing edge of seed 71, from the draft graph itself
 
-A temporary print (`CAMEL_DUMP_DRAFT=1`, added for one round and **removed again**: `git grep
-CAMEL_DUMP_DRAFT` is empty on this lane, nothing committed) dumped the committed draft of the two
+A temporary environment-gated print in the commit check (added for one round and **removed again**,
+not committed: the source tree carries no trace of it) dumped the committed draft of the two
 statement program, node by node. `main`, 17 nodes:
 
 ```
