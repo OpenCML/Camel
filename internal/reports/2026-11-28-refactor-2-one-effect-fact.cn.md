@@ -1,9 +1,12 @@
 # 重构 2「效应事实只有一份」第一笔：要删的清单 / 替换后的形状 / 比对语料
 
+> **状态（2026-11-28 18:1x）：本页定稿**，不含 `src/` 改动。三样交付齐（§2 删的清单、§3 替换的形状、§4 比对语料），第 1 刀的写死范围与四条判据在 §7；开工前提未满足（`lane/c4-round-source` 未进 integration，枝尖 `ae14f65247` / 改动 `63384055bc`，正在换底重做）。§8 记的是 `lane/two-bits-model` 的参考原文（该枝只作材料、已删）。
+
 - 依据：`internal/plans/2026-11-28-refactor-not-patch.cn.md`（`fsh-dev@68fcfc6a57`）第 2 件。
-- 底：`origin/integration@9e8d7303ad`（2026-11-28 17:26:16）。枝 `lane/draft-read-decl` 已 `reset --hard` 到这里，本页是该枝第一笔。
+- 底：枝 `lane/draft-read-cut` 建在 `origin/integration@4f59be8265d2b69c900ee3b6ee7189d4441f423a`（建枝时的尖端；integration 现已推进到 `c6c2afe53f`，第一刀开工前 rebase 再取一次行号）。本页首先生于 `integration@9e8d7303ad`，后随枝重挂；**`src/` 全文未动**，行号相对 integration 仍成立。
 - 行号在这一底上逐条核对过（`mayBeWritten` `operator_table.cpp:146`、`accessesWritableResource` `:1275-1290`、第五项 `facts.cpp:1332`、`Arrangeable` 的五个字段 `arrangeable.h:62/74/78` 都在同一位置）；在 `lane/arrangeable-two-bits@6b5c132e8f` 上同形。`src/` 一动就要重取。
-- 材料：`internal/collab/pure-and-footprint-two-bits.md`（一位拆两位的契约，含 `pure()` 读者全量清点）、`lane/c4-round-source@63384055bc`（自检已改成"纯 ⇒ 不许写"的那一笔）、§6 记的两笔被取代的提交（38 个查询纯度那一版，**不进合并队**，转为本件的材料）。
+- 材料：`internal/collab/pure-and-footprint-two-bits.md`（一位拆两位的契约，含 `pure()` 读者全量清点）、`lane/c4-round-source`、§6 记的两笔被取代的提交（38 个查询纯度那一版，**不进合并队**，转为本件的材料）。
+- **sha 写法（全页统一）**：写 `c4-round-source@63384055bc` 指**改动那一笔**（自检改成"纯 ⇒ 不许写"，`operator_table.cpp:1012` 的 `a pure operator writes a resource` 在它里面）；**枝尖 = `ae14f65247`**，是它的子提交，只多一页 `internal/collab/g3-block-callback-erase.zh.md`（`+36 −5`），**`src/` 零差异**。合并位按枝尖取，改动的引用一律用 `63384055bc`。
 
 ## 0 一句话
 
@@ -199,10 +202,10 @@
 
 1. **81 表逐名新增红 0**（同一选法相比，选法不同不比 —— 见 `pure-and-footprint-two-bits.md` §4 那条读数规则）。
 2. `camel inspect --ops test/cases/modules/stdlib/registry_all.cml` 的 **38 个查询的 `pure`/`read` 列与改前逐字相同**（贴 `diff` 空）。
-3. `test/plans/feat/modules/resources.plan.toml` 的 `pure_touches` 文案按 `lane/c4-round-source@63384055bc` 那句：`a pure operator writes a resource`。
+3. `test/plans/feat/modules/resources.plan.toml` 的 `pure_touches` 文案按 `lane/c4-round-source` 那句：`a pure operator writes a resource` —— **改动在 `63384055bc`**（`operator_table.cpp:1012`），**枝尖 `ae14f65247`** 只多一页 collab 文档、`src/` 零差异。
 4. `BUILD_EXIT=0`、`dirty 0`、`git diff --numstat` 贴出、不 push；读数在宿主 `88zjwei` 上取，标题带 sha。
 
-**开工前提（现在未满足，故未开工）**：`origin/integration` 尚未包含 `lane/c4-round-source@ae14f65247`（2026-11-28 17:5x 核对：`merge-base --is-ancestor ae14f65247 origin/integration` 退出码 1，只有 `lane/c4-round-source` 带着它）。落地后本枝 rebase 到新 integration 尖端，第一条按 §7 的范围动手。
+**开工前提（现在未满足，故未开工）**：`origin/integration` 尚未包含 `lane/c4-round-source` —— **枝尖 `ae14f65247`**，改动 `63384055bc`。2026-11-28 18:1x 核对：integration = `c6c2afe53f`，`merge-base --is-ancestor ae14f65247 origin/integration` 退出码 1（只有 `lane/c4-round-source` 带着它）；那条枝**正在换底重做**（合并位停手交上来的冲突：`handleAccessKey` 与 `draftKeyOf` 两半合到一处），落点已定。**换底落地并合进 integration 之后**本枝 rebase 到新尖端，第一条按本节范围动手。
 
 **同批的边界（已核，不撞）**：`lane-enter-shape` 的 `lane/jgir-accesses`（`git diff --stat origin/integration...lane/jgir-accesses`）只动 `src/stdlib/std/gir/dot/graphviz.cpp`、`src/stdlib/std/gir/json/gir.cpp`、`docs/technical/gir-interchange.md`、`docs/technical/61_capture_census.md`、`scripts/check-capture-census.mjs` 与 `test/cases/trans/*`、几个 `.jgir` 黄金 —— **没有动 `src/kernel/facts/` 的足迹接口，也没有动 `operator_record.h` / `resource_semantics.h`**。它管 jgir 那一份事实，本件管判定函数；第 2 刀（第五项按值）之前再核一次。
 
@@ -279,4 +282,4 @@ bool Record::accessesOutsideProgram() const {
 1. **`keepsPurePromise` 的四格是要的形状**：承诺 = 不写、访问都在程序内、不分配、不依赖程序外 —— 已经是**一处判定**。
 2. **但那枝仍留了两份拼装**：`ResourceSignature::pure()` 自己把 `!ambient.empty()` / `allocates.has_value()` / `external && ambient.empty()` 翻成四格，`Record::pure()` 自己把 `!uses.stated() || declaresWrite()` / `accessesOutsideProgram()` / … 翻成四格 —— 两边各拼一次。这正是决策者说的"要被删的两份真相之一"。第 1 刀要做的是：**`declaresNoWrite(...)` 只留一份拼装**，两个读者各自只交出自己那份事实（记录：子句；签名：测量出的部件），四格的拼装与判定不重复。
 3. **`accessesOutsideProgram` 不新增为记录的第二个方法**：它是同一句"读的必须是程序自己的"在记录侧的又一次拼装；若保留，只能作为 `declaresNoWrite` 的**输入之一**，不许再自成一份判定。
-4. **pre-publish 自检那一笔已被取代**：`bbed9dd32b`（`pure && (writes || allocates || externalEffect || functionOperand)` ⇒ 拒绝，用 `std::any_of` 内联问 `sem::writes`）后来由 `lane/c4-round-source@63384055bc` 改成 `sem::writesSomething(sem::signatureOf(r, 0))` + 文案 `a pure operator writes a resource`。第 1 刀以 `c4-round-source` 那一版为准（它是合并位那一批），`bbed9dd32b` 只作形状参考。
+4. **pre-publish 自检那一笔已被取代**：`bbed9dd32b`（`pure && (writes || allocates || externalEffect || functionOperand)` ⇒ 拒绝，用 `std::any_of` 内联问 `sem::writes`）后来由 `lane/c4-round-source` **改动 `63384055bc`**（枝尖 `ae14f65247`）改成 `sem::writesSomething(sem::signatureOf(r, 0))` + 文案 `a pure operator writes a resource`。第 1 刀以那一版为准（它是合并位那一批），`bbed9dd32b` 只作形状参考。
