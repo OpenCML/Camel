@@ -9,10 +9,22 @@
 
 | 位 | 名字 | 回答什么 | 出处（唯一） |
 |---|---|---|---|
-| ① | **承诺** `pure` | "这个算子的子句**声明了**它不写任何资源" | `src/kernel/ops/include/camel/ops/operator_record.h:482` 的 `pure()` —— **一字不动**（它今天就是 `uses.stated() && uses.value.none()`，正好是"子句声明了不写"） |
+| ① | **承诺** `pure` | "这个算子的子句**声明了**它不写任何资源" | `src/kernel/ops/include/camel/ops/operator_record.h:482` 的 `pure()` —— **定义要改一个字**：由 `uses.stated() && uses.value.none()`（"没有任何访问"）改成 `uses.stated() && 没有一条 mode != Read 的访问`（"**没有写**"）。`none()` 与"没有写"**不是一回事**：读只读资源的算子今天被 `none()` 判成不纯，这正是要拆掉的那一位 |
 | ② | **足迹** `accessesWritableResource` | "这次调用访问的资源里，**有没有一个资源会被写**" | 新读法，两半各一个出处：<br>(a) **哪些资源**：算子自己声明的 accesses（`Record::uses` 的每一条 `ResourceAccess`）<br>(b) **那个资源会不会被写**：`mayBeWritten(Resource)` —— 由**所有**声明里 `mode != Read` 的 access 算出来的一个全局答案，**不是按类硬编码**（不许写死 `graph` / `spelling`） |
 
 **关键区分（这是全部症结）**：`graph`、`spelling` 这类**只读资源永远不会被写** ⇒ 读它们的节点**仍然可摆**。读草稿（一个**可写**的 `Handle`）的节点不可摆，但**仍可丢弃、仍可重算**。`ResourceClass::Handle` 同时覆盖草稿与只读 handle，**所以"可写"不能从类上静态得出**，只能从"谁声明了写它"得出 —— 这就是 ②(b) 必须是一个全局扫描、而不是一句 `cls == Handle` 的原因。
+
+## 0b 一处必须跟着动的旧检查（否则新形状自相矛盾）
+
+`src/compile/src/gct/builder.cpp:1218` 今天是：
+
+```cpp
+if (clause->pure() && !clause->uses().empty())   // 声明写了 pure，却带了 accesses ⇒ 诊断 + throw
+```
+
+这条的前提是"纯 = 没有任何访问"。按新的 ①（纯 = **没有写**），"声明了 `pure` 且只读一个永远不被写的资源"是**合法且正是我们要的**，所以这条检查要改成**只拒绝"声明了不写、却声明了写"**（按新定义这类子句自相矛盾），而"读只读资源"**必须放行**。同一段的 `UsesPromiseViolated`（`:1260-1276`，查 var 参数）照旧保留。
+
+改完 `pure` 的承诺由两处共同保证：**声明面**（本条检查）与**实现面**（`UsesPromiseViolated`）。**不许**为了让它绿把 `pure` 收回去。
 
 ## 1 四类读者，各读该读的那一位
 
