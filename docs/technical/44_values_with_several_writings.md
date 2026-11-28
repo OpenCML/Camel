@@ -143,7 +143,7 @@ extraction, because the cost is the target library's judgement and the kernel ha
 ends the pipeline without a run (design principles 9.1), so the state never reaches anything that
 would have to choose a writing, and nothing has to be extracted on the way. That is what makes
 "look at the saturated graph and stop" spellable: a dump hands the program on, so a pipeline that
-ended at the dump would fall through to `std::default` — a pass that executes — and be refused
+ended at the dump would fall through to `std::run` — a pass that executes — and be refused
 with `PassNeedsExtraction`. `camel f.cml std::cxx::saturate std::gir std::nop` prints the classes
 and executes nothing. Nothing else is widened by it: every pass that reads the program keeps
 answering `PassNeedsExtraction`, and `camel f.cml std::cxx::saturate std::opt` is still refused.

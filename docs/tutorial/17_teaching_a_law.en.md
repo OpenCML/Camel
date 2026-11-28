@@ -117,7 +117,7 @@ The `doubled` half of `camel docs/tutorial/examples/17_rule.cml std::cxx::satura
 ![doubled: the several writings of x * 2 + x * 2 stay in one equivalence class each](images/17_rule_saturate.svg)
 
 The `std::nop` at the end is what stops the pipeline there: a dump hands the program on, so without it the run
-would fall through to `std::default` and execute the program, and this saturated program nothing may execute
+would fall through to `std::run` and execute the program, and this saturated program nothing may execute
 without choosing a writing first.
 
 Each dashed box is **one class of equivalent values** (a `class`): the nodes inside are different writings of the

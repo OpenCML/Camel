@@ -356,17 +356,20 @@ def main() -> int:
             "the operator table has no neg row",
         )
     elif mode == "none":
-        # The same command line the golden was captured with: no scheduling pass named, so the
-        # default back end (std::nvm) runs and the report's last phase line is the same.
+        # The same command line the golden was captured with, and the back end named: the golden is a
+        # record of the **node VM's** report -- the reference every other back end is read against
+        # (design principles 9.2) -- so the case writes `std::nvm` instead of leaving the choice to
+        # the fallback the run configuration decides. The report's last phase line is the pass written
+        # here, which is why the golden says `std::nvm`.
         steps = ["--arg", "steps=3"]
-        code, text = run(NONE, [], None, steps + ["std::profile", "top=0"])
+        code, text = run(NONE, [], None, steps + ["std::profile", "top=0", "std::nvm"])
         check(code == 0, f"exit code 0 (got {code})")
         check(
             normalize_text(text) == GOLDEN_TEXT.read_text(encoding="utf-8"),
             "the report is the recorded report, byte for byte apart from the measured numbers",
         )
 
-        _, _, doc = profile_json(NONE, [], steps)
+        _, _, doc = profile_json(NONE, ["std::nvm"], steps)
         check("fusion_groups" not in doc, "the JSON has no fusion group")
         check("operator_executions" not in doc, "the JSON has no operator-executions key")
         check(

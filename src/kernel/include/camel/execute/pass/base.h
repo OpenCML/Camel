@@ -119,6 +119,18 @@ struct PassApplyResult {
 };
 
 /**
+ * The scheduling pass `std::run` stands for. `std::run` is the step that runs the program, written
+ * when which back end runs it is not the point; its target is `std::fastvm` unless the run
+ * configuration names another scheduling pass (`passes.run` in `.opencmlrc`). A front end that
+ * reads a configuration calls `setRunPassTarget` with that value, before any pass list is checked
+ * or run; an empty name leaves the default. The value has to name a scheduling pass: a run whose
+ * `std::run` would not run the program is refused before anything runs, and the diagnostic names
+ * `passes.run` (see `requireKnownPasses`).
+ */
+void setRunPassTarget(const std::string &name);
+std::string runPassTarget();
+
+/**
  * Checks every name of a pass list, after alias resolution, before anything runs. Passes
  * contributed by modules ("tensor::fuse", "onnx::export_model") exist once the program's modules
  * are loaded, so this is called after compilation. Throws RuntimeDiag::UnrecognizedGraphPass
@@ -130,6 +142,9 @@ struct PassApplyResult {
  * `import` of it would: a pass named on the command line is available to the program, which
  * need not import a module it does not use. A module
  * that cannot be found leaves the name unknown, which is reported as before.
+ *
+ * A list that names `std::run` also checks the pass `std::run` stands for: it must be a
+ * scheduling pass, and the diagnostic for one that is not names `passes.run`.
  */
 void requireKnownPasses(
     const std::vector<std::string> &passes,

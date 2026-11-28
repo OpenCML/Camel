@@ -25,7 +25,7 @@
 // `argumentAt == 1`) wrote the transposed call with that callee in the call's first ordinary input and no
 // `with` input, which `src/runtime/graph.cpp` refuses to run:
 //
-//     error[RuntimeDiag::PassInternalError]: Pass 'std::default' failed with an internal error:
+//     error[RuntimeDiag::PassInternalError]: Pass 'std::run' failed with an internal error:
 //     Runtime graph 'transpose_of_f' has CALL node 2 without callee input.
 //
 // That was a compiler defect, not the program's fault, and it is fixed: the walk no longer asks a call's

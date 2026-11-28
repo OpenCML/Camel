@@ -75,4 +75,4 @@ compilation - self time by phase
  gir fusion_group_none <time>
  encode <time>
  pass std::profile top=0 <time>
- pass std::default <time>
+ pass std::nvm <time>

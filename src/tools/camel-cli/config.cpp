@@ -20,6 +20,7 @@
 #include "camel/execute/cpu_isa.h"
 #include "camel/execute/devices.h"
 #include "camel/execute/limits.h"
+#include "camel/execute/pass.h"
 #include "camel/execute/pass/params.h"
 #include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
@@ -356,7 +357,8 @@ string timeitSpec               = ""; // raw --timeit "std::jit/10"
 string inputFile                = ""; // from --input (alternative to first positional as file)
 string resolvedInputPath        = ""; // computed: inputFile or targetFiles[0]
 vector<string> resolvedPassList = {}; // computed: passes or derived from targetFiles
-vector<string> fallbackPasses   = {"std::default"};
+vector<string> fallbackPasses   = {"std::run"};
+string runPassTarget            = ""; // passes.run; "" = the kernel's default target
 string timeitPass               = "";
 unsigned int timeitIterations   = 0;
 bool timeitEnabled              = false;
@@ -1203,7 +1205,12 @@ bool parseArgs(int argc, char *argv[]) {
             cwd,
             scriptDir,
             Run::resolvedPassList,
-            &Run::fallbackPasses);
+            &Run::fallbackPasses,
+            &Run::runPassTarget);
+        // The pass `std::run` stands for, when the rc names one. The pipeline is resolved after
+        // this point, so the value is in place before any pass name is checked or run; an empty
+        // value leaves the kernel's default (`std::fastvm`).
+        ::setRunPassTarget(Run::runPassTarget);
 
         // The two depth limits: the option only. A value that is not an integer in range is
         // refused here, before anything is compiled or run.

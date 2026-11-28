@@ -204,9 +204,12 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     void populateFunctionClosureFrame(ctx::Frame *calleeFrame, Function *func);
 
   public:
+    // `callResult` is the destination slot of the instruction that makes the call: the failure
+    // the checks below report names the caller's position of that call, which is the node whose
+    // result slot this is.
     void populateIndirectCallFrame(
         ctx::Frame *callerFrame, ctx::Frame *calleeFrame, Function *func, data_arr_t nargs,
-        data_arr_t wargs);
+        data_arr_t wargs, camel::runtime::gc_data_idx_t callResult);
 
   private:
     // Frame pool used by the interpreter and JIT trampolines.
