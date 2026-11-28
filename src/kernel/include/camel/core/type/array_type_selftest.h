@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The diagnostic self-test of the core array type's dimensions (`std::type::array`). It checks
+ * The diagnostic self-test of the core array type's dimensions (`std::arraytype`). It checks
  * the invariants the rest of the system relies on: one interned object per shape, the relations
  * (equality, assignability, the checked conversion, unification, widening), the call-site
  * binding of dimension names and packs, and the runtime shape check that moved from the tensor
