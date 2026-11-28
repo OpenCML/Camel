@@ -39,7 +39,7 @@ const want = {
     oper_may_fault: [17, 0, 17],
     oper_no_record: [1, 1, 0],
     call: [17, 0, 17],
-    brch: [11, 0, 11],
+    brch: [11, 6, 5],
     loop: [11, 7, 4],
     gate: [1, 0, 1],
 }
@@ -190,7 +190,7 @@ assert(line, 'no answers line')
 const num = (t, n) => { const m = t.match(new RegExp(n + '=([0-9]+)')); assert(m, `${n} is missing from: ${t}`); return Number(m[1]) }
 const brch = fam.find(l => l.includes(' family=brch '))
 assert(brch, `the program branches and there is no brch row: ${fam.join(' ; ')}`)
-assert(num(brch, 'nodes') === 1 && num(brch, 'free') === 0 && num(brch, 'kept') === 1,
+assert(num(brch, 'nodes') === 1 && num(brch, 'free') === 1 && num(brch, 'kept') === 0,
     `a branch whose arms hold no order was kept: ${brch}`)
 assert(num(line, 'no_fact') === 0, `a node got no answer from the kind: ${line}`)
 assert(fam.reduce((acc, l) => acc + num(l, 'nodes'), 0) === num(line, 'nodes'),
