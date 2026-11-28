@@ -1,0 +1,61 @@
+// `^`'s derivative on one program, two routes, with both numbers printed.
+//
+// Two groups, and they use different second routes on purpose:
+//
+//   * `p(x) = x ^ 2.0` at `x = 3` with `dx = 1`. The forward route is `jvp`, the transform in
+//     src/stdlib/transforms/jvp.cpp walking `jvp_pow` (src/stdlib/rulesets/jvp.cml, tangent
+//     `w * x^(w-1) * dx + x^w * log(x) * dw`); the second route is the engine's `with_grad`, which
+//     differentiates the first `with` parameter. Both answer the value `9.0` and the tangent
+//     `2 * 3 * 1 = 6.0`. The exponent is a constant, so a constant's tangent is a zero constant and
+//     the law's second term is arithmetically nothing here: this group alone cannot separate a law
+//     that dropped the exponent's term.
+//   * `s(x) = x ^ x` at `x = 3` with `dx = 1`, where both terms are live: the tangent is
+//     `x^x (ln x + 1) = 27 * (1.0986122886681098 + 1) = 56.66253179403897`, and a law with the
+//     exponent's term dropped answers the value `27.0` instead. The second route here is the
+//     library's `vjp` (`transpose . split . jvp`, whose reverse law is `pow_t`), **not** the
+//     engine: `with_grad` refuses a varying exponent, and the refusal is the reading that put the
+//     library on this group -- `Derivative of ':op/pow_d' requires a constant exponent. The pass
+//     gave up without a diagnostic` (the case cannot call it and stay green; the sentence is
+//     quoted, not pinned).
+//
+// Every number is exact in binary floating point here (`== 0.0` over the differences, the reading
+// `neg_gradient_both_legs.cml` takes), so "equal" means equal.
+import { with_grad } from autodiff
+import { abs } from math
+import rulesets.jvp
+import { jvp } from transforms
+import { vjp } from vjp
+
+/// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
+with <x: float>
+func p_with() => float {
+    return x ^ 2.0
+}
+
+/// The forward and library spelling: the same function with the value as an ordinary parameter.
+func p(x: float) => float {
+    return x ^ 2.0
+}
+
+func s(x: float) => float {
+    return x ^ x
+}
+
+func main() sync {
+    let (pValue, pTangent) = jvp(p)(3.0, 1.0)
+    let (pEngineValue, pEngine) = with_grad(p_with)<3.0>()
+    let (_, pPullback) = vjp(p)(3.0)
+    let pLibrary = pPullback(1.0).0
+    `pow p value={} tangent={}`->format<pValue, pTangent>->println
+    `pow p engine value={} tangent={}`->format<pEngineValue, pEngine>->println
+    let pSame = abs(pTangent - pEngine) == 0.0
+    let pSameLibrary = abs(pTangent - pLibrary) == 0.0
+    `pow p: forward={} engine={} same={} library={} same_library={}`->format<pTangent, pEngine, pSame, pLibrary, pSameLibrary>->println
+
+    let (sValue, sTangent) = jvp(s)(3.0, 1.0)
+    let (_, sPullback) = vjp(s)(3.0)
+    let sLibrary = sPullback(1.0).0
+    `pow s value={} tangent={}`->format<sValue, sTangent>->println
+    let sSameLibrary = abs(sTangent - sLibrary) == 0.0
+    `pow s: forward={} library={} same={}`->format<sTangent, sLibrary, sSameLibrary>->println
+}
