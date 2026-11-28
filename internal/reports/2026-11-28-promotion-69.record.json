@@ -1,0 +1,67 @@
+{
+  "kind": "promotion",
+  "promotion": 69,
+  "tip": "2689335c47edd8746d92816f4a6d32b2a5975567",
+  "measured_tip": "2689335c47edd8746d92816f4a6d32b2a5975567",
+  "pushed_develop_sha": "2689335c47edd8746d92816f4a6d32b2a5975567",
+  "note": "the layer was measured at 2689335c47, two commits above the tip the merge seat reported for this batch (689c2fecc9) and those two are the batch's own merge and one backlog row; it carries the main-effects batch and seat/g17, and not lane/editview-commit, which was not an ancestor when the run started. develop advances to the tip that was measured",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at 2689335c47; load 1m 43.56 at the start of the run",
+  "binary_built": "2026-11-28T08:19:07+08:00",
+  "readings": {
+    "total": 9887,
+    "pass": 9683,
+    "fail": 143,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 2,
+    "re_run": 2,
+    "re_run_passed": 0,
+    "load_before": "1m 43.56, 5m 42.66, 15m 42.52",
+    "load_warning": "[load] WARNING: 1m load 39.31 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth to sixty-eighth layers carried; a promotion does not wait on load, D-1128-36)"
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-68-reds.tsv (the sixty-eighth promotion, 147 names)",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], with the plan aliases transforms/compile.transforms and stated_extents/compile.stated_extents read as the same plan, since the runner and the merge comparison spell two of them differently",
+    "still_red": 143,
+    "turned_green": 4,
+    "turned_green_names": [
+      "examples.case_study.break_rate.fvm",
+      "examples.case_study.break_rate.jit",
+      "examples.case_study.break_rate.nvm",
+      "examples.case_study.break_rate.prl"
+    ],
+    "new_reds": 0,
+    "new_reds_names": [],
+    "vanished_reds": 0,
+    "arithmetic": "147 names before: 4 turned green, 0 vanished, 0 appeared, 143 remain red; 143 = this reading red case names",
+    "notes": [
+      "the four that turned green are the case-study break_rate examples, and the main-effects batch is the change that repaired them: the entry now declares no value and the returns that carried one went with it",
+      "fault_deep.prl_off is not in this red set for the third round in a row; the scheduler root-cause fix holds and no known-flaky allowance was used",
+      "the two timeouts are the two transpose_loop_escape cases, rows of the sixty-eighth table; they were run alone at this tip and stayed red"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 2,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [
+      "transpose_loop_escape.second_state_of_the_same_loop.nvm",
+      "transpose_loop_escape.two_states_before_the_escape.nvm"
+    ],
+    "how": "node test/tools/run-tests.mjs test/plans/feat/compile/transforms.plan.toml --tier fast --jobs 1 --entry of each of the two, at the same tip 2689335c47"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-69-reds.tsv",
+  "red_table_rows": 143,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-69-reds.tsv",
+  "new_red_names": [],
+  "pushed_as": "develop, fast-forwarded from a7687dfd27 to 2689335c47, the tip this layer measured",
+  "develop_before": "a7687dfd27e36c06928bde5f9dbe3a9ff9d45bab",
+  "develop_after": "2689335c47edd8746d92816f4a6d32b2a5975567",
+  "commits_brought_in": 37,
+  "commits_touching_src": 12
+}
