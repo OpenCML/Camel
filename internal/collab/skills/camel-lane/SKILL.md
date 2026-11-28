@@ -584,3 +584,5 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
 · **浮点文本的参考实现是"最短可回读"，不是字面 `%g`**（2026-11-28）：判"打印对不对"时，参考是 `repr`/Ryu/`std::to_chars` shortest（设计原则 7.7 的可回读要求）；字面 C `%g` 会丢数字（`1.0→1`、`-0.0→-0`、`1.0+ulp→1`），拿它当参考等于要求破坏可回读。读数实例：Camel 与 Python `repr` 十值逐字相同、与字面 `%g` 有 4/10 不同 —— 那 4 处不是缺陷。
 
 · **跑 `std::cpp` 生成的程序要两件事，缺一就误判成"桥接/导出坏了"**（2026-11-28实测）：① 链接行必须**显式写出 install 自带的 `$LIBSTD/libstdc++.so.6`**（`-L` 顺序提前**不够**，驱动的 `-lstdc++` 仍会挑编译器自带的旧版 ⇒ `GLIBCXX_3.4.35/.36` 未定义）；② 运行要给 `CAMEL_HOME=$TREE/out/latest`（或把二进制放到 install 的 `bin/` 旁），否则运行时从可执行文件目录找模块、抛 `camel::core::error::Diagnostic`。这两条都不是桥接代码或导出表的问题。
+
+· **PowerShell 里 `git grep -A 5 pattern` 会把 `-A` 当成 revision 而失败**：写成 `git grep --after-context=5 pattern`（同理 `--before-context=`），或直接用 grep 工具。同类陷阱：`git log -S` 的 `-S` 正常，但任何单字母选项都可能被 PowerShell 抢参，长选项最稳。
