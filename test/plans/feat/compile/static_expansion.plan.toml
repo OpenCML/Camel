@@ -943,7 +943,7 @@ kind = "behavior"
 case = "../../../cases/compile/static_expansion/type_expression_positions.cml"
 args = ["${case}", "std::fvm"]
 expect_exit = 0
-expect_stdout_exact = "ok\n(1.0, ())\n(1.0, ())\ntrue\nfloat and unit\ntwo floats\n{ t: (1.0, 2.0), n: 3 }\n(0.0, 0.0)\n(4.0, 5.0)\ntrue\n"
+expect_stdout_exact = "ok\n(1.0, 0)\n(1.0, 0)\ntrue\nfloat and int\ntwo floats\n{ t: (1.0, 2.0), n: 3 }\n(0.0, 0.0)\n(4.0, 5.0)\ntrue\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -954,7 +954,7 @@ kind = "behavior"
 case = "../../../cases/compile/static_expansion/literal_head_type_expression.cml"
 args = ["${case}", "std::fvm"]
 expect_exit = 0
-expect_stdout_exact = "true\n(0.0, ())\n(0.0, 0.0)\n"
+expect_stdout_exact = "true\n(0.0, 0)\n(0.0, 0.0)\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -965,7 +965,7 @@ kind = "behavior"
 case = "../../../cases/compile/static_expansion/literal_head_type_variable.cml"
 args = ["${case}", "std::fvm"]
 expect_exit = 0
-expect_stdout_exact = "(0.0, ())\n{ a: 0.0, b: 0.0 }\n"
+expect_stdout_exact = "(0.0, 0)\n{ a: 0.0, b: 0.0 }\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -1302,7 +1302,7 @@ kind = "behavior"
 case = "../../../cases/compile/static_expansion/typeof_derived_type.cml"
 args = ["${case}", "std::fvm"]
 expect_exit = 0
-expect_stdout_exact = "3\n4\n6\ntrue\ntrue\n12.0\n"
+expect_stdout_exact = "3\n4\n6\ntrue\ntrue\nfalse\n12.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 

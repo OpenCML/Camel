@@ -1,11 +1,13 @@
-/** Refused: the function returns an int, not a float (9.9). */
+/** Refused: the function returns a string, and a string holds no gradient (9.9). */
 import { grad } from autodiff
 
 with <x: float>
-func rounded() => int {
-    return int(x)
+func rounded() => string {
+    let _ = x
+    return "x"
 }
 
 func main() sync {
     println(grad(rounded)<3.0>())
 }
+

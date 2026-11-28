@@ -1753,7 +1753,7 @@ kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_with_int.cml"
 args = ["${case}", "std::fvm"]
 expect_exit = 0
-expect_output_contains = ["6.0", "([2.0, 3.0], ())"]
+expect_output_contains = ["6.0", "([2.0, 3.0], 0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 15000
 
@@ -1763,13 +1763,13 @@ timeout_ms = 15000
 # wrong shape or refuses, and never reaches the numbers.
 [[tests]]
 name = "grad_array_int_parameter_first"
-desc = "`f(n, xs) = xs[n]` at (1, [3.0, 2.0]) through `vjp`: 2.0, `()` for the `int` -- an empty member of the answer, since `Tangent<int>` is `()` and the pullback answers one slot per parameter -- and `[0.0, 1.0]` for `xs`. The backward half's type is `((), float[])` and its one port is `dxs`, which is parameter 1: a port index read as a parameter index names `n`, so this is where the two readings differ. The `()` answers a member and takes no port -- nobody can pass a value where there is none."
+desc = "`f(n, xs) = xs[n]` at (1, [3.0, 2.0]) through `vjp`: 2.0, `0` for the `int` -- the zero of its own type, since a discrete value's gradient is that value's zero and `Tangent<int>` is `int` -- and `[0.0, 1.0]` for `xs`. The backward half's type is `(int, float[])` and its one port is `dxs`, which is parameter 1: a port index read as a parameter index names `n`, so this is where the two readings differ. The `int` answers a member and takes no port: nothing can be passed for a value that is always zero."
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_int_parameter_first.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 0
-expect_output_contains = ["2.0", "()", "[0.0, 1.0]"]
+expect_output_contains = ["2.0", "\n0\n", "[0.0, 1.0]"]
 expect_output_not_contains = ["skip="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
@@ -2079,7 +2079,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "tangent_of_a_pack_keeps_every_parameter"
-desc = "A type function applied to a pack answers one member per member. `...Tangent<ParamsOf<F>>` in a function type's parameter list -- the splice `types` writes to declare `Jvp<F>` and `Vjp<F>` -- read as the empty tuple for every parameter, so a function whose parameters are arrays declared no tangent at all and the call that its own declaration asked for was refused. `Tangent<float[...]>` is `float[...]` and `Tangent<int[...]>` is `()`, so the reading agrees with the declared type for a function of `int`, `string` and `bool` (where every tangent is `()`) and disagrees only for a parameter that has something to differentiate: `(a: float[...], b: int[...], c: int[...]) => float` is six parameters at `(...ParamsOf<F>, ...Tangent<ParamsOf<F>>)`, three values and then the tangent of each, with both `int[...]` parameters still in place though their tangents are the same type. `Vjp<F3>` then equals the type written out by hand, pullback and all. The last line is the case that must not change: a function of two floats keeps two tangents, both `float` -- the reading that already worked, and the one a splice that merged members by type would have broken."
+desc = "A type function applied to a pack answers one member per member. `...Tangent<ParamsOf<F>>` in a function type's parameter list -- the splice `types` writes to declare `Jvp<F>` and `Vjp<F>` -- read as the empty tuple for every parameter, so a function whose parameters are arrays declared no tangent at all and the call that its own declaration asked for was refused. `Tangent<T>` is the tangent the user differentiates in: `Tangent<float[...]>` is `float[...]` and `Tangent<int[...]>` is `int[...]` -- a discrete value's gradient is the zero of its own type, not an empty slot -- so the splice keeps one member per parameter, in the parameters' order, and `(a: float[...], b: int[...], c: int[...]) => float` is six parameters at `(...ParamsOf<F>, ...Tangent<ParamsOf<F>>)`, three values and then the tangent of each, with both `int[...]` parameters still in place though their tangents are the same type. `Vjp<F3>` then equals the type written out by hand, pullback and all. The last line is the case that must not change: a function of two floats keeps two tangents, both `float` -- the reading that already worked, and the one a splice that merged members by type would have broken. The law this pins changed from the empty tuple to the value's own type; the expectation followed the same run."
 kind = "behavior"
 case = "../../../cases/compile/transforms/tangent_of_a_pack_keeps_every_parameter.cml"
 args = ["${case}", "${backend}"]
@@ -3497,5 +3497,28 @@ case = "../../../cases/compile/transforms/transpose_loop_condition_reads_state.c
 args = ["--trace", "transforms", "${case}", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["TRANSPOSE function=halve skip=state node=", "origin=0", "why=this-version-does-not-yet-recompute-the-rounds-of-a-loop-whose-condition-reads-a-state", "transpose has no transpose for this function"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vjp.cotangent_of_a_discrete_result"
+desc = "A discrete result's cotangent is the zero of its own type (design principles 9.9). `gt` answers a `bool`, so `jvp(gt)(2.0, 1.0)` hands back `(true, false)` and `vjp(gt)(2.0)` takes a `bool` cotangent and answers the `float` parameter's gradient, `0.0`: a value with no tangent space contributes no cotangent, that is the zero, and adding a zero changes nothing. The four lines pin both halves -- a refusal, a tangent of another type, or a pullback that answered anything but the zero reads differently."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_discrete_cotangent.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_exact = "true\nfalse\ntrue\n0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+[[tests]]
+name = "transforms.gradient_of_array_pow_through_the_library"
+desc = "The array power, both halves: `pow(lhs, rhs)` on two tensors is `tensor:pow`, the elementwise power whose record the engine answers with `powVjp`, and the library's `jvp_pow_tensor` and `pow_tensor_t` are read through one `vjp` call each. Three programs, value then cotangent of ones: `sum(xs ^ [3, 3, 3])` gives `36.0` and `3 * x^2 = [3, 12, 27]`; `sum([2, 2] ^ ys)` gives `6.0` and `2^y * ln(2) = [1.3862943611198906, 2.772588722239781]`, the branch the engine's own rule refuses; `sum(xs ^ [2, 2, 2])` gives `14.0` and `2 * x = [2, 4, 6]`. Red when either half refuses `tensor:pow`, or any number is anything but the derivative of the power."
+kind = "behavior"
+case = "../../../cases/compile/transforms/gradient_of_array_pow_through_the_library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+expect_exit = 0
+expect_stdout_exact = "36.0\n([3.0, 12.0, 27.0])\n6.0\n([1.3862943611198906, 2.772588722239781])\n14.0\n([2.0, 4.0, 6.0])\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

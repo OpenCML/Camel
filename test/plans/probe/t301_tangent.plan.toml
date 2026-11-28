@@ -1,0 +1,39 @@
+id = "probe.t301"
+order = 999
+tier = "fast"
+tags = ["probe"]
+desc = "A discrete result is the user's gradient (design principles 9.9), so jvp lifts it with the zero of its own type; a string result still has none."
+
+[defaults]
+kind = "behavior"
+args = ["${case}"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 60000
+
+[[tests]]
+name = "a_bool_result_keeps_its_zero"
+case = "../../cases/probe/t301/bool.cml"
+expect_exit = 0
+expect_stdout = "true\nfalse\n"
+
+[[tests]]
+name = "an_int_result_keeps_its_zero"
+case = "../../cases/probe/t301/int.cml"
+expect_exit = 0
+expect_stdout = "2\n0\n"
+
+# The reverse half is pinned, but not here: `vjp` and `grad` of a discrete result are behaviour the
+# derivative plans own, and their cases are
+# `test/cases/compile/transforms/vjp_discrete_cotangent.cml`
+# (`feat/compile/transforms.plan.toml#vjp.cotangent_of_a_discrete_result`) and
+# `test/cases/modules/autodiff/grad_discrete_zero.cml`
+# (`feat/modules/autodiff.plan.toml#grad_discrete_zero`). This file keeps the forward readings: the
+# lift's pair, and the refusal a string result still gets.
+
+[[tests]]
+name = "a_string_result_still_has_no_tangent"
+kind = "negative"
+case = "../../cases/probe/t301/string.cml"
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["`jvp` takes a function whose result has a tangent space", "which has none"]

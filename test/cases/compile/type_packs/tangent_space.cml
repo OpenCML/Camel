@@ -1,7 +1,8 @@
 /// The tangent space of a type (design principles 9.9): a float and a tensor of floats are their
-/// own tangent space, a tuple and a struct take the tangent space of each member in the member's
-/// own place, and a value that carries no continuous quantity -- an integer, a `bool`, a `string`
-/// -- takes the empty tuple.
+/// own tangent space, a number and a `bool` are their own (the gradient of a discrete value is the
+/// zero of its own shape and element type), a tuple and a struct take the tangent space of each
+/// member in the member's own place, and a `string`, which has no tangent space, takes the empty
+/// tuple.
 import { is_same, Tangent } from types
 
 type Point = { x: float, y: int }
@@ -14,7 +15,7 @@ func main() sync {
     println(is_same::<Tangent<int>, int>())
     println(is_same::<Tangent<int>, ()>())
     println(is_same::<Tangent<string>, ()>())
-    println(is_same::<Tangent<Pair>, (float, ())>())
-    println(is_same::<Tangent<(float, int)>, (float, ())>())
+    println(is_same::<Tangent<Pair>, (float, int)>())
+    println(is_same::<Tangent<(float, int)>, (float, int)>())
     println(is_same::<Tangent<Point>, Point>())
 }

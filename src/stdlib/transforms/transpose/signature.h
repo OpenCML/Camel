@@ -44,4 +44,19 @@ std::optional<size_t> unstatedParameterBehind(
     const camel::graph::GraphView *function, camel::runtime::gc_node_ref_t value,
     const std::vector<size_t> &portParameter, size_t paramCount, size_t nodeCount);
 
+/// Which parameters take a port, in port order: `normPorts()` position `i` belongs to the parameter
+/// `portParametersOf(...)[i]`. **This is the one place the rule is written.** A parameter takes a
+/// port when it is an argument the half is handed: a `()` place is an answer the half gives and
+/// never an argument it takes (`split.cpp#buildSplitGraph`: "a () slot is an answer this half
+/// gives, never an argument it takes"), so it takes none; every other parameter takes one -- a
+/// discrete parameter included, whose place is its own type and whose value is the zero of that
+/// type (design principles 9.9).
+///
+/// Both halves read this list and neither derives it again: `buildSplitGraph` declares the half's
+/// ports from it, and `walk.cpp`'s `portOfParameter` says which parameter a port belongs to. The
+/// two used to answer it separately, and answered differently the moment a discrete place took a
+/// port: a port's position and its parameter's position then differed by one, and the walk read one
+/// parameter's cotangent into another's member.
+std::vector<size_t> portParametersOf(const camel::core::type::FunctionType *function);
+
 } // namespace camel::transforms

@@ -106,9 +106,6 @@ cast	engine-autodiff	the conversion the front end introduces (`:op/cast`); the d
 # and the row had stopped holding a difference. The engine keeps its rule, and 9.9 is still why it
 # answers zero; what changed is that the file states that fact and the comparison now reads it.
 
-zeros_like	engine-autodiff	locally constant in its operand: the zero array is the same for every value
-ones_like	engine-autodiff	locally constant in its operand: the ones array is the same for every value
-one_hot	engine-autodiff	its input is a label: locally constant, the rows do not move with it
 
 # ---- 丙: the engine answers and the library's forward half cannot reach it ----------------------
 #
@@ -135,7 +132,6 @@ one_hot	engine-autodiff	its input is a label: locally constant, the rows do not 
 # they were recording a file no line of the comparison opened.
 
 
-pow	lane-rulesets	`tensor:pow`'s only spelling is `tensor`'s exported `pow`, and both rulesets bind the bare name `pow` to **`math`'s** scalar kernel (`import { ..., pow, ... } from math`), which is the operator whose key is `pow_d`; the array form has no declaration in the tensor module's CML, so no rule can name it. The spelling a program writes, `^`, answers both halves since 2026-11-25 (`rulesets/jvp.cml#jvp_pow`, `rulesets/transpose.cml#pow_t`), so no reading in the tree is refused for want of this key
 slice_sub	lane-rulesets	no `jvp_slice_sub`: the library's forward half stops a program before the reverse is asked
 idx_take	lane-rulesets	the subscript read's forward law is `jvp_idx_arr` for the two-word form; the slab form has no `jvp_*`
 

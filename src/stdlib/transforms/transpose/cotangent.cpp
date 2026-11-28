@@ -76,15 +76,26 @@ std::string addUriFor(const camel::graph::GraphView *function, gc_node_ref_t ref
 /// diagnosis uses; empty when it has one.
 ///
 /// **The law and its refusal are one function on purpose.** A `bool` gate here and a paragraph of
-/// prose in `transpose_operator.cpp` spelling the gate's rule a second time would let "the result has
-/// no cotangent" be said about a pair that has one. A judgement and its message drift apart
+/// prose in `transpose_operator.cpp` spelling the gate's rule a second time would let "the result
+/// has no cotangent" be said about a pair that has one. A judgement and its message drift apart
 /// exactly when they are written twice.
 ///
 /// The law (design principles 9.9): **every result type
-/// whose tangent space this file can add is accepted** -- a tuple or a struct when every member is,
-/// an array when its space registers an array addition (`:tangent/add_arr`, `tensor:add`), a float
-/// of any width when its space registers that width's addition (`:op/add_d`, `:op/add_f`). The
-/// cotangent the caller passes is that space, not a `float` the space would have to be read into.
+/// a cotangent is answered for is accepted** -- a tuple or a struct when every member is, an array
+/// when its space registers an array addition (`:tangent/add_arr`, `tensor:add`), a float of any
+/// width when its space registers that width's addition (`:op/add_d`, `:op/add_f`), and a discrete
+/// value, whose cotangent is the zero of its own type. The cotangent the caller passes is that
+/// space, not a `float` the space would have to be read into.
+///
+/// **A value with no tangent space contributes no cotangent: that is the zero, and adding a zero
+/// changes nothing.** So a result whose derivative is zero by definition still has a cotangent the
+/// caller passes -- the *user's*, the value's own type at zero (`gradientTypeOf`; a number and a
+/// boolean are their own gradient, design principles 9.9). The machinery's answer
+/// (`tangentSpaceOf`) is narrower on purpose: no space is registered for `bool` because the
+/// machinery never adds one, and the walk's accumulation asks the machinery only for a value that
+/// holds a cotangent at all. Reading the machinery's silence as "no cotangent here" is what made
+/// the user-facing half refuse a value the user's law answers; what is refused is a result that no
+/// audience answers -- a string, a function.
 ///
 /// A refusal names **the position that does not hold a cotangent**, because "this result type is
 /// not supported" is true of every failure and therefore says nothing: which member, and of which
@@ -95,8 +106,17 @@ std::string resultCotangentRefusalImpl(const Type *result) {
     }
     const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(result);
     if (!space.hasSpace() || space.space == nullptr) {
+        const camel::core::type::TypeCode code = result->code();
+        const bool discrete = code != camel::core::type::TypeCode::Tuple &&
+                              code != camel::core::type::TypeCode::Struct &&
+                              code != camel::core::type::TypeCode::Array &&
+                              camel::core::gradientTypeOf(const_cast<Type *>(result)) != nullptr;
+        if (discrete) {
+            return {};
+        }
         return "`" + result->toString() +
-               "` has no tangent space, and a value with no tangent space holds no cotangent";
+               "` has no tangent space and no gradient, and a value neither answer names holds no "
+               "cotangent";
     }
     const camel::core::type::TypeCode code = result->code();
     if (code == camel::core::type::TypeCode::Tuple || code == camel::core::type::TypeCode::Struct) {
@@ -138,24 +158,34 @@ bool hasResultCotangent(const Type *result) { return resultCotangentRefusalImpl(
 /// what `transpose` accepts cannot leave a `float` where an `f32` is promised (design principles
 /// 9.9, and the drift `jvp`'s four sites were fixed for).
 ///
-/// `nullptr` for a result with no tangent space. The gate above (`hasResultCotangent`) refuses such
-/// a function before a signature is built from it, so a caller that meets a nullptr here is inside
-/// a build the gate already admitted: it refuses rather than answer with a `float`.
+/// **A result the machinery keeps no space for still has a cotangent when the user's law answers
+/// one**: a discrete value's cotangent is its own type, at zero (`gradientTypeOf`, design
+/// principles 9.9), and the walk's accumulation contributes that zero without asking for an
+/// addition. Answering it here is what keeps the parameter of the transposed function the type the
+/// gate admitted -- a `float` invented for a `bool` would be a cotangent of a type nothing
+/// promises.
+///
+/// `nullptr` for a result **neither** answer names. The gate above (`hasResultCotangent`) refuses
+/// such a function before a signature is built from it, so a caller that meets a nullptr here is
+/// inside a build the gate already admitted: it refuses rather than answer with a `float`.
 ///
 /// GUARD, so that the `nullptr` is not read as a reading nobody took: the gate asks
-/// `tangentSpaceOf` of **the same type** (`function->exitType()`) and refuses the whole function
-/// when there is no space, and every caller here is inside a member built after that answer. A
-/// `nullptr` therefore says "a member is being built for a function the gate never admitted", which
-/// is this walk's own defect and not a state a program can be in -- so it refuses by name instead
-/// of answering a `float`. Anything that builds a signature without going through the gate (a
-/// caller that writes `cotangentTypeOfResultType` into a new path) meets the gate's question only
-/// if it asks it: check that it does before assuming this cannot answer `nullptr`.
+/// `tangentSpaceOf` and `gradientTypeOf` of **the same type** (`function->exitType()`) and refuses
+/// the whole function when neither answers, and every caller here is inside a member built after
+/// that answer. A `nullptr` therefore says "a member is being built for a function the gate never
+/// admitted", which is this walk's own defect and not a state a program can be in -- so it refuses
+/// by name instead of answering a `float`. Anything that builds a signature without going through
+/// the gate (a caller that writes `cotangentTypeOfResultType` into a new path) meets the gate's
+/// question only if it asks it: check that it does before assuming this cannot answer `nullptr`.
 Type *cotangentTypeOfResultType(const Type *result) {
     if (result == nullptr) {
         return nullptr;
     }
     const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(result);
-    return space.hasSpace() ? space.space : nullptr;
+    if (space.hasSpace()) {
+        return space.space;
+    }
+    return camel::core::gradientTypeOf(const_cast<Type *>(result));
 }
 
 Type *resultCotangentType(const FunctionType *function) {
