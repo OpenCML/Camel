@@ -544,3 +544,12 @@ git worktree add --detach <旧提交>
 
 **13. 任务板的例行清理：超过 230 张就清一次 `completed`。**
 决策者 2026-11-28 定（`D-1128-62`，起因是 `team_task_create` 报 `Team task limit 256 reached`，派不出新卡）：板上总数**超过 230** 就清 `completed`，**只删 `completed`，`in_progress`/`pending`/`blocked` 一张不动**；**不用先列 id 给他** —— 卡的记录在 `internal/backlog.md` 与提交里，卡只是派活的把手。清的时候按 `team_task_list({status:"completed"})` 分页取 `id + revision`，逐张 `team_task_update({action:"delete", expected_revision})`。清到 230 以下即可继续派活；不要一次清空（每次删 20–30 张，观察两轮再说）。
+
+**14. 「甲」的尺子必须是**同一份计划、同一个跑法**；68 表只是**fast 集合**的尺子。**
+`lane-ssa-residue` 在整文件跑 `test/plans/feat/modules/onnx.plan.toml` 时得到三条红（`pass_export_equals_export_model`、`ort_core_slice`、`export_loop_for`），它们在已发布的 `2026-11-28-promotion-68-reds.tsv`（147 名）里**查不到** —— 但**不是它带来的**：那张表是按 `feat/modules` 的 fast 集合登记的，整文件运行还会启动**表外**的慢层/tier 条目。正确的判法是**同一份计划的改前/改后读数对账**：`150/119/30` → `150/118/31`，三条在改前改后都在红名单里，真正新增的只有 `export_unsupported_op`（31−30=1）。⇒ 凡"整文件跑出来的红"要判甲，先取改前读数；拿 68 表查不到就说"甲"是错的。
+
+**15. 生成文件（`ast_hashes.txt`）在换底时的处理：冲突统一取一侧，重放完再一次重生成，单列一笔。**
+26 笔重放撞在 `test/plans/feat/parse/golden/ast_hashes.txt` 上 —— 它没有语义可解。定法是：冲突时对这份文件统一 `git checkout --theirs`（rebase 里 `--theirs` = 被重放的那笔），**不逐笔看内容**；全部重放走完后 `-UpdateAstHashes` 一次、**单列一笔**（"golden: the AST record regenerated after the rebase onto `<sha>`"，不 amend 进语义提交），再单跑 `feat/parse` 证明绿。
+
+**16. 别用字符串替换去改 `verify_*` 的 JS 行。**
+同一手法连坏三次（引号、反引号模板串、转义），每次都只坏"断言那一行"而读数本身是对的，浪费三轮。改法：**整块重写那个 `[[tests]]` 条目**，写完先单跑该用例再提交。
