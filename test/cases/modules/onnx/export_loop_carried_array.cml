@@ -1,11 +1,11 @@
 /**
  * Exported: a tail recursion whose depth depends on the model input carries an int array whose
- * length is the same on every call — `[k]` is one element each round. Whether a Loop can keep a
- * value is a fact about the loop body (the shape of the carried state does not change from one
- * round to the next), not what the type prints, so the export is written. The trip count is a
- * constant here (`k >= 3`), so the export unrolls the recursion and keeps the input-dependent If;
- * the spelling of the type
- * used to refuse this case.
+ * length is the same on every call — `[k]` is one element each round. A Loop carries a state as a
+ * tensor, so one extent for every round is what a carried value needs, and this body keeps it -- a
+ * value the body grew would take a sequence, which this exporter does not build yet -- and the
+ * spelling the type prints decides nothing, so the export is written. The trip count is a constant
+ * here (`k >= 3`), so the export unrolls the recursion and keeps the input-dependent If; the type's
+ * `[]` spelling used to refuse this case.
  */
 import { get_env } from env
 import { export_model } from onnx

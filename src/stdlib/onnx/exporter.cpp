@@ -1368,12 +1368,13 @@ Value rebuildValue(const Value &like, std::span<const Value> leaves, size_t &nex
 }
 
 /// Whether a value is one a Loop can keep as a state, by its kind: a tensor (any rank, whatever
-/// the type states about its shape), or a numeric / bool scalar. What a Loop additionally needs is
-/// not a property of the type at all but a *fact about the loop*: the shape of the carried value is
-/// the same on every round. The fact is checked where the body's next state
-/// and the state are both in hand (`loopBodyShapeChange`, `emitLoop`'s body, `The shape of a
-/// carried value` below): a rank-1 value whose length the type leaves open is kept when the body
-/// keeps its length, and the type printer's `[]` spelling decides nothing.
+/// the type states about its shape), or a numeric / bool scalar. A tensor state is carried as a
+/// tensor, so its extent is the same on every round; a value the body grows -- an array it appends
+/// to or concatenates -- has no such extent, and the way a Loop carries one is a sequence, which
+/// this exporter does not build yet. The checks that know both the state and the body's next value
+/// ask that fact where both are in hand (`shapeIsKept`, `emitLoop`'s body): a rank-1 value whose
+/// length the type leaves open is kept when the body keeps its length, and the type printer's `[]`
+/// spelling decides nothing.
 bool isCarriable(const Value &v) {
     if (v.isSymbolic()) {
         // A sequence is carried as `sequence` (not as a tensor of a fixed shape): its length is the
@@ -1394,9 +1395,10 @@ bool isCarriable(const Value &v) {
 
 /// Whether the model can hold `v` as a value a Loop carries: a tensor or a scalar, or an int
 /// array the model writes as an int64 vector, whose dtype and shape its facts state. The kind
-/// alone is not the criterion: an int array whose length is the same on every
-/// round is carried like a tensor, and what decides is that the shape holds — the checks that
-/// know both values (`shapeIsKept`, the two paths' facts) ask for it before this one is reached.
+/// alone is not the criterion: an int array is carried like a tensor exactly when its facts state
+/// a shape and the checks that know both values (`shapeIsKept`, the two paths' facts) found that
+/// the body keeps it; a value the body grows states neither, and a sequence is how a Loop carries
+/// one -- which this exporter does not build yet.
 bool carriesAsTensor(const Value &v) {
     if (isCarriable(v)) {
         return true;
@@ -1431,9 +1433,9 @@ bool growsItsExtent(const graph::GraphView &g, graph::NodeRef ref) {
 }
 
 /// Whether a Loop can keep the value the body gives the recursive call in the place of `before`:
-/// the *fact* the rule asks for is that its shape is the same on every round, so both must state
-/// a dtype and a shape, the same ones. A length that only the value has — an array the body grows —
-/// states none, or a different one, and a Loop state input has one shape for every round.
+/// the model carries a state as a tensor, so both must state a dtype and a shape, the same ones.
+/// A value the body grows states none, or a different one, and carrying it would take a sequence,
+/// which this exporter does not build yet.
 bool shapeIsKept(const Value &before, const Value &next, std::string &why) {
     const TensorFacts in = factsOf(before), out = factsOf(next);
     if (!in.dtype || !out.dtype) {
@@ -1445,7 +1447,7 @@ bool shapeIsKept(const Value &before, const Value &next, std::string &why) {
         return false;
     }
     if (!in.shape || !out.shape || *in.shape != *out.shape) {
-        why = "its shape is not the same on every round of the recursion";
+        why = "its length changes from one round of the recursion to the next";
         return false;
     }
     return true;
@@ -1889,8 +1891,8 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
                         std::format(
                             "a recursive call changes argument {} of a recursion whose depth "
                             "depends on the model input (counting from 1, `with` parameters "
-                            "first): it is {}, and {}; a Loop carries a state whose dtype and "
-                            "shape are the same on every round",
+                            "first): it is {}, and {}; this exporter does not yet carry an array "
+                            "whose length changes between rounds as an ONNX sequence",
                             k + 1,
                             spelledLeaf(bad, place),
                             why));
@@ -2086,10 +2088,9 @@ Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
                             act,
                             std::format(
                                 "a recursive call changes argument {} of a recursion whose depth "
-                                "depends on the model input: it is {}, whose length changes from "
-                                "one round to the next (the body appends to it or concatenates "
-                                "it), and a Loop carries a state whose shape is the same on every "
-                                "round",
+                                "depends on the model input: it is {}; this exporter does not yet "
+                                "carry an array whose length changes between rounds as an ONNX "
+                                "sequence",
                                 k + 1,
                                 growingLeafName(
                                     g->node(loop.ports[k]) == nullptr
@@ -2285,7 +2286,9 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
             // A struct or tuple argument is carried leaf by leaf, in the order of its fields
             // (docs/technical/25_tensor_stack_and_onnx_export.md 3.6): the Loop state holds the
             // leaves, and the body rebuilt from them is the struct the program wrote. Every leaf
-            // must keep its dtype and shape.
+            // is carried as a tensor, so its dtype and extent must be the ones the body gives. A
+            // leaf the body grows states no extent, and a sequence, which this exporter does not
+            // build yet, is how a Loop carries one.
             std::vector<Value> inLeaves, outLeaves;
             carriableLeaves(inputs[k], inLeaves);
             flattenValue(outcome.next[k], outLeaves);
@@ -2294,7 +2297,8 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
                 unsupported(
                     act,
                     "the number of values a recursion carries changes from one call to the "
-                    "next; a loop can only carry values of a fixed dtype and shape");
+                    "next; this exporter does not yet carry an array whose length changes "
+                    "between rounds as an ONNX sequence");
             }
             for (size_t j = 0; j < inLeaves.size(); ++j) {
                 const TensorFacts in  = factsOf(inLeaves[j]);
@@ -2304,7 +2308,8 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
                     unsupported(
                         act,
                         "the dtype or shape of a value changes from one call of a recursion to "
-                        "the next; a loop can only carry values of a fixed dtype and shape");
+                        "the next; this exporter does not yet carry an array whose length "
+                        "changes between rounds as an ONNX sequence");
                 }
                 stateIn.push_back(valueInfoOf(inLeaves[j].name, in));
                 stateOut.push_back(valueInfoOf(
@@ -2404,7 +2409,9 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
 //   - one recursive call in the function's own graph, and one if / else, on a scalar condition
 //     that depends on the model input, with the call on exactly one side (branches inside that
 //     side that use the call's result on both of their sides belong to E);
-//   - the arguments the call changes are tensors or scalars of fixed dtype and shape;
+//   - the arguments the call changes are tensors or scalars whose dtype and extent the state
+//     and the body's next value agree on; a value the body grows would take a sequence, which
+//     this exporter does not build yet;
 //   - the result's leaves that are not functions are tensors or scalars of fixed dtype and
 //     shape; when the result also holds a function, those leaves are passed through unchanged
 //     by E (true of autodiff's (value, pullback));
@@ -2463,7 +2470,8 @@ Evaluator::LoopEmission Evaluator::emitLoopScanning(
                 unsupported(
                     act,
                     "the dtype or shape of a value changes from one call of a recursion to the "
-                    "next; a loop can only carry values of a fixed dtype and shape");
+                    "next; this exporter does not yet carry an array whose length changes "
+                    "between rounds as an ONNX sequence");
             }
             for (size_t j = 0; j < inLeaves.size(); ++j) {
                 const TensorFacts in  = factsOf(inLeaves[j]);
@@ -2473,7 +2481,8 @@ Evaluator::LoopEmission Evaluator::emitLoopScanning(
                     unsupported(
                         act,
                         "the dtype or shape of a value changes from one call of a recursion to "
-                        "the next; a loop can only carry values of a fixed dtype and shape");
+                        "the next; this exporter does not yet carry an array whose length "
+                        "changes between rounds as an ONNX sequence");
                 }
                 inputs.push_back(valueInfoOf(inLeaves[j].name, inLeaves[j]));
                 if (inLeaves[j].isSequence()) {
@@ -3223,19 +3232,22 @@ Value Evaluator::translateLinear(Activation &act, GCGraph *fn, std::vector<Value
                         unsupported(
                             act,
                             "the kind of a value changes from one call of a recursion to the next; "
-                            "a loop can only carry values of a fixed dtype and shape");
+                            "this exporter does not yet carry an array whose length changes "
+                            "between "
+                            "rounds as an ONNX sequence");
                     }
-                    // The fact the rule asks for: the shape of the value
-                    // the body hands the recursive call is the shape of the state it came from.
-                    // A state input of a Loop has one shape for all its rounds.
+                    // The fact the rule asks for: the value the body hands the recursive call is
+                    // the state it came from, carried as a tensor -- one dtype and one extent for
+                    // every round. A body that grows the value changes its length, and a sequence,
+                    // which this exporter does not build yet, is how a Loop carries one.
                     std::string why;
                     if (!shapeIsKept(state[k], next[k], why)) {
                         unsupported(
                             act,
                             std::format(
                                 "a value carried by a loop changes from one call of the recursion "
-                                "to the next: {}; a loop carries a state whose dtype and shape are "
-                                "the same on every round",
+                                "to the next: {}; this exporter does not yet carry an array whose "
+                                "length changes between rounds as an ONNX sequence",
                                 why));
                     }
                     stepped.push_back(emitter_.operand(next[k], *in.dtype));
