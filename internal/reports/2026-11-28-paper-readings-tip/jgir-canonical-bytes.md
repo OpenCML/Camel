@@ -107,6 +107,43 @@ L259: compare_to = "camel_passes.fold_fault.by_cpp"
 `fold_fault.by_cpp`），也就是它们各自**已经是一对的一端**。把"19 条 `compare_to` + 2 条 `same_text`"相加，
 等于把这两条 run 再数一遍 ⇒ **对数是 19**，不是 21。
 
+## 四类分开（本轮；13、17 的偏移由 Lead 用 host 直连 CLI 取到，见下节）
+
+| 类 | 对数 | 成员 |
+|---|---|---|
+| 图相同（长度 + 哈希级） | **17** | 00–12、14、15、18 |
+| **图相同、只差一个记账位（`flags` 0 vs 2）** | **2** | 13 `fold.by_cpp` ← `.same_text`；17 `cse.after_inline.by_cpp` ← `.by_camel` |
+| 图不同（结构/渲染差异） | **0** | —— 本轮没有这一类 |
+| 不产出图（两侧 0 字节，单列） | **1** | 16 `fold_fault.without_the_pass` ← `fold_fault.same_run` |
+
+⇒ **分母写法**：排除 16 后是 **17 / 18 整份相同**，另 **2 对除一个记账位外整份相同**；把 16 算进来并标"两侧无图"则是 **17 / 19**。
+本页主张前者（**17/18 + 2 差记账位**），并把 16 单列为"不产出图"。
+
+## 那两对到底差在哪（Lead 的 host 直连读数，不经 runner）
+
+```
+树 /home/zjwei/camel-work/promote = fbdc5de8e1（晋级 81 尖端），out/latest 二进制 built 16:02:03，16:26–16:27
+每条一次 CLI：camel <case> <遍按计划原文> std::jgir canonical=true，两侧 rc 0
+
+对 13  fold.same_text（opt::fold）  vs  fold.by_cpp（std::cxx::fold）   case fold_subject.cml
+      18613 / 18613 字节    sha256 4cc0ebb7c2a7… / ff84e9cdc468…
+      第一处差异 offset 15639（84% 处）
+        A(opt::fold)  .."exit": "n7",  "flags": 0,  "id": "g4"..
+        B(cxx::fold)  .."exit": "n7",  "flags": 2,  "id": "g4"..
+
+对 17  cse.after_inline.by_camel（opt::cse） vs .by_cpp（std::cxx::cse）  case cse_after_inline.cml
+      8250 / 8250 字节       sha256 a360c3664029… / e8d3f32e4161…
+      第一处差异 offset 4192
+        A(opt::cse)   .."exit": "n2",  "flags": 0,  "id": "g2"..
+        B(cxx::cse)   .."exit": "n2",  "flags": 2,  "id": "g2"..
+```
+
+**`flags = 2` 是什么**：`src/kernel/include/camel/runtime/graph.h#GCGraphFlag` 里 `kGraphFlagGatesDissolved = 1 << 1`，
+注释原文："A commit looked at the graph's gates: none waits on nothing (`GraphDraft::dissolveUnorderedGates`).
+A graph without it is looked at by the first commit that reaches it; a graph with it is left as it is unless it is edited."
+⇒ 这是"**提交是否已经看过这张图的 gate**"的记账位：C++ 版那遍设了它、Lang 写的遍没设。按注释，
+没有这个位的图**会被下一个到它的提交再看一次**，有就跳过 —— **不是语义差异，是谁扫过 gate 的记账差异**。
+
 ## 三类分开（本轮）
 
 | 类 | 对数 | 成员 |
@@ -131,3 +168,16 @@ camel <case> std::cxx::algebra std::jgir canonical=true std::nop > 13.base.gir 2
 camel <case> std::fold   ...            std::jgir canonical=true std::nop > 13.other.gir 2> 13.other.err
 fc /b 13.base.gir 13.other.gir          # 或 cmp -l
 ```
+
+
+## 能说与不能说（定稿口径）
+
+**可以说**：
+> 19 对里 **17 对整份输出相同**；另 **2 对除图上的一个 `flags` 记账位（`kGraphFlagGatesDissolved`，C++ 版置 2、Lang 版为 0）
+> 外整份相同**；**1 对两侧不产出图**。
+
+**不能说**：
+- "有 2 对图不同" —— 那会误导成渲染或结构差异，实际节点、边、区域、`id` 全同、长度逐对相等；
+- "逐字节相同" —— 这 2 对不是（偏移 15639 / 4192 处各差一个字节值）。
+
+**待补**：Lead 的 `sha256` 只到前 12 位；页里若要全长，向 Lead 要。本页先按 12 位记。
