@@ -60,7 +60,7 @@ type Tensors = {
 }
 
 // The starting parameters of the first tree, in the one tensor spelling the native side takes: a
-// tensor built by ull has a known element type and a known shape, which is what
+// tensor built by full has a known element type and a known shape, which is what
 // test/cases/modules/nn/residual_mlp.cml builds its model from.
 func model_at() => Model {
     return {

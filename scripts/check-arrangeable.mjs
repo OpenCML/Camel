@@ -96,13 +96,14 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 const REPO = path.dirname(HERE)
 const CONCURRENCY = Number(process.env.ARRANGEABLE_JOBS || 8)
 const TIMEOUT_MS = Number(process.env.ARRANGEABLE_TIMEOUT_MS || 60000)
-// The floor under the sweep's coverage, as a fraction of the case corpus and not a count: this tree
-// reads 3,056 of the 4,133 cases under `test/cases` (the fixtures rule leaves 24 more out), and the
-// rest want the arguments or the module roots their own plans give them (the same reason
-// `check-plan-refs.mjs` skips the cases it sweeps that do the same). 70% is well under that reading
-// on purpose, so a case that stops compiling for a real reason moves the number visibly instead of
-// turning the sweep red for a count it never promised -- and it is a fraction, so a corpus that gains
-// a thousand cases raises the floor with them instead of the same number quietly covering less.
+// The floor under the sweep's coverage, as a fraction of the case corpus and not a count. The cases
+// the sweep can read are the ones that compile on their own; the rest want the arguments or the
+// module roots their own plans give them (the same reason `check-plan-refs.mjs` skips the cases it
+// sweeps that do the same), and the fixtures rule leaves another directory out. The floor is a
+// fraction on purpose: a corpus that gains a thousand cases raises it with them, so the same number
+// cannot quietly cover less, and a case that stops compiling for a real reason moves the reading
+// visibly instead of turning the sweep red for a count it never promised. What the tree reads today
+// is a reading, not a promise, so it is not written down here.
 const READ_FRACTION = Number(process.env.ARRANGEABLE_READ_FRACTION || 0.7)
 // An absolute floor, for a run that wants to pin a count on purpose; the fraction is the default.
 const MIN_READ = process.env.ARRANGEABLE_MIN_READ ? Number(process.env.ARRANGEABLE_MIN_READ) : null

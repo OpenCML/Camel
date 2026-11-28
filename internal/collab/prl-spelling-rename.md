@@ -35,4 +35,4 @@
 
 - 20 个改过的 plan 没有逐个跑（`load` 45，`D-1128-123` 说 load < 40 才取新读数），覆盖交给晋级整层；红了按名字找回。
 - `test/plans/feat/opt/pass_params.plan.toml` 的用例**名**仍是 `valid.taskflow_parameters`（`desc` 已写 `std::prl`）。用例名是账上的身份（红表按名字认），改名会让一个绿名从账上消失，所以留在原处；下一轮要清就单独一笔。
-> 2026-11-28 收尾：lane/prl-spelling = 6f276bef1（改名 61 文件）+ a6052b2a0（AST 黄金 1 行），dirty 0。dirty 0 读数为 pass_params.plan.toml 60/60 全绿；eat/parse 重录前 4719? → 1 stale（rontend.ast_record FAIL）、重录后 131/131/0。
+> 2026-11-28 收尾：lane/prl-spelling = e6f276bef1（改名 61 文件）+ a6052b2a0（AST 黄金 1 行），dirty 0。dirty 0 读数为 pass_params.plan.toml 60/60 全绿；feat/parse 重录前 4719? → 1 stale（frontend.ast_record FAIL）、重录后 131/131/0。

@@ -617,10 +617,10 @@ class Store {
     bool aliveLocked(const graph::Graph *graph) const;
     /// Whether this store was ever told about a graph. A store told about one is told when each
     /// ends (graphGone) and clears only through the graphs it still knows are alive; a store nobody
-    /// told (a check's own, in 	est/tools/facts) owns the graphs it reads, so it clears as
-    /// it always did. The flag is not live_.empty(): a graph announced while it is still being
-    /// built has no identity to key a line with, and that announcement still means the store is no
-    /// longer alone.
+    /// told (a check's own, in `test/plans/feat/tools/facts.plan.toml`) owns the graphs it reads,
+    /// so it clears as it always did. The flag is not `alive_.empty()`: a graph announced while it
+    /// is still being built has no identity to key a line with, and that announcement still means
+    /// the store is no longer alone.
     bool toldAboutGraphs_ = false;
 
     GraphAccess graphs_;

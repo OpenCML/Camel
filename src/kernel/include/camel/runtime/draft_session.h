@@ -252,7 +252,7 @@ class RuntimeGraphDraftSession {
     /// How many edits the drafts this session holds have recorded, added up. It answers one
     /// question -- whether a batch of primitive writes went into the record as one named edit or as
     /// one entry per primitive -- and takes part in no decision: the commit reads the record itself
-    /// (ditedRegions, ditTier), never this number.
+    /// (EditedRegions, EditTier), never this number.
     size_t recordedEdits() const;
     /// Encodes the edited closure into a new program and returns it. A session over the
     /// program's root installs it as the program of the context; with `detached` (a private

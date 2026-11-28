@@ -287,7 +287,7 @@ timeout_ms = 20000
 # the numbers then run, and a missing ruleset import is a red rather than a skip.
 [[tests]]
 name = "vjp_arities.nvm"
-desc = "One rule for every arity, seen through the one declaration: jp(f) takes the parameters F has, the body's (...xs) takes them from the instantiated Vjp<F>, and orward(...xs) spreads them into the call. One, two and three parameters, with the value and every cotangent checked."
+desc = "One rule for every arity, seen through the one declaration: vjp(f) takes the parameters F has, the body's (...xs) takes them from the instantiated Vjp<F>, and forward(...xs) spreads them into the call. One, two and three parameters, with the value and every cotangent checked."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_arities.cml"
 args = ["${case}", "std::nvm"]
@@ -298,7 +298,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "vjp_arities.fvm"
-desc = "One rule for every arity, seen through the one declaration: jp(f) takes the parameters F has, the body's (...xs) takes them from the instantiated Vjp<F>, and orward(...xs) spreads them into the call. One, two and three parameters, with the value and every cotangent checked."
+desc = "One rule for every arity, seen through the one declaration: vjp(f) takes the parameters F has, the body's (...xs) takes them from the instantiated Vjp<F>, and forward(...xs) spreads them into the call. One, two and three parameters, with the value and every cotangent checked."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_arities.cml"
 args = ["${case}", "std::fvm"]
@@ -309,7 +309,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "vjp_arities.jit"
-desc = "One rule for every arity, seen through the one declaration: jp(f) takes the parameters F has, the body's (...xs) takes them from the instantiated Vjp<F>, and orward(...xs) spreads them into the call. One, two and three parameters, with the value and every cotangent checked."
+desc = "One rule for every arity, seen through the one declaration: vjp(f) takes the parameters F has, the body's (...xs) takes them from the instantiated Vjp<F>, and forward(...xs) spreads them into the call. One, two and three parameters, with the value and every cotangent checked."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_arities.cml"
 args = ["${case}", "std::jit"]
@@ -320,7 +320,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "vjp_arities.prl"
-desc = "One rule for every arity, seen through the one declaration: jp(f) takes the parameters F has, the body's (...xs) takes them from the instantiated Vjp<F>, and orward(...xs) spreads them into the call. One, two and three parameters, with the value and every cotangent checked."
+desc = "One rule for every arity, seen through the one declaration: vjp(f) takes the parameters F has, the body's (...xs) takes them from the instantiated Vjp<F>, and forward(...xs) spreads them into the call. One, two and three parameters, with the value and every cotangent checked."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_arities.cml"
 args = ["${case}", "std::prl"]

@@ -278,9 +278,8 @@ void FastVMSchedPass::populateIndirectCallFrame(
     // A call site whose arguments and target ports disagree is a defect of the *rewrite* that wrote
     // the call: the program is wrong, the machine is not. It is reported the way the node VM
     // reports it (`fillFrameForIndirectCall`, src/stdlib/std/exec/graph_runtime_support.cpp) -- the
-    // pass fails with the caller's position and the counts, and the run exits 1. Aborting here cost
-    // a report: `callee_arity.commit_accepts_the_call` pins the node VM's diagnostic and met a
-    // `Camel Invariant Violation` with exit 134 from this back end instead.
+    // pass fails with the caller's position and the counts -- and never as an abort: an abort
+    // answers the disagreement with this machine's own verdict, in place of the caller's.
     const auto normPorts = targetGraph->normPorts();
     if (nargs.size() != normPorts.size()) {
         throw std::runtime_error(

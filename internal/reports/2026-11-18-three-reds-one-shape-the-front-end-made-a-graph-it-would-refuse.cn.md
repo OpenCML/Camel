@@ -6,7 +6,7 @@ the pass that was being blamed.
 
 ## One: a transform that only passes a function through declares nothing
 
-` utodiff:with_grad ` takes a function value and returns a function value. Its kernel returns
+` autodiff:with_grad ` takes a function value and returns a function value. Its kernel returns
 the result of building a gradient function, so it runs no body and writes nothing. It was declared
 not pure with no resource set, which the analysis reads as touching every resource, which met a read
 of the cell it passes. Six reds. The compiler's own rejection of the honest alternative names the

@@ -237,7 +237,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "with_pack_wrong_element"
-desc = "The element type of a pack is a guard: with <...ws: int> refuses a loat argument in the angle brackets, naming the pack, the type it takes and the type it was given. Without this the type would be a decoration that never refuses anything."
+desc = "The element type of a pack is a guard: with <...ws: int> refuses a float argument in the angle brackets, naming the pack, the type it takes and the type it was given. Without this the type would be a decoration that never refuses anything."
 kind = "negative"
 case = "../../../cases/compile/rest_params/with_pack_wrong_element.cml"
 args = ["${case}"]
