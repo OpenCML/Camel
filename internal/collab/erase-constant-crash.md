@@ -1,7 +1,7 @@
 # 草稿关闭之后仍被当活着的读：一个测出来的帧，和它修好后的样子
 
 **性质**：实测帧 + 两笔修（`draftOf` / `viewOf` / `nodesKernel` 补 `disposed()` 检查；两例钉进计划）。
-**枝**：`lane/erase-constant-crash`（rebase 到 `origin/integration@1b55a42200` 之后），两笔：
+**枝**：`lane/erase-constant-crash`（rebase 到 `origin/integration@1b55a42200` 之后），三笔：
 `3a7d796893`（实现）、`245da2487a`（用例 + 计划）。`src/` 无遗留探针，`dirty=0`。
 
 ## 1. 最小程序（12 行，块体写法；这就是当时崩的那个）
@@ -62,14 +62,26 @@ rc=0 out=[2]
 4. **`open`/`commit` 写在非 `sync` 的 `main` 里也崩**（`disposed=1`）；同写法在 `sync main` 里绿
    ⇒ 触发条件是"草稿跨帧/语句边界被 dispose 而句柄仍在用"，**块体只是最短写法，不是根因**。
 
-## 4. 修好之后（`1b55a42200` 上重建，`BUILD_EXIT=0`）
+## 4. 修了之后：判据不是"崩不崩"，是"这个状态一定被拒"
 
-**注意一条读数变化**：rebase 到 `1b55a42200` 后，上面那 12 行程序**不再崩**（连跑 10 次全 `rc=0`、输出 `2`），
-新加的检查一次也没抛 ⇒ 那个形状在这棵树上已经不再进入 dispose 状态；崩溃只在早先的两颗二进制上测到，
-而这段区间里 `src/stdlib/graph` 与 `src/kernel/runtime` **没有任何提交** —— 所以这条旧读数的复现与否
-取决于二进制/时序，不能当作本笔的判据。**本笔的判据改用"草稿必然已经关闭"的形状**：
+**口径（这一笔不许宣称修掉了那个 139）**：那 13 行程序今天不崩，不代表那行代码安全。缺陷是**一个可到达的
+悬垂解引用**：`transaction->graph()` 在 `node->draft()` 已经 dispose 之后被调用。它本身就该被拒，与哪一次
+二进制是否踩到坏内存无关；把同一个状态在**所有门**上都变成确定性诊断，在任何时序下都对。
 
-`commit` 之后再用那个节点（草稿一定没了）：
+### 4.1 受控 A/B（同一棵树、只退 `src/` 到 `1b55a42200` 的那几处门，各建一次）
+
+| | 旧 `src/`（无检查，`1b55a42200`） | 新 `src/`（本枝） |
+|---|---|---|
+| 13 行块体程序 ×10 | **`rc=139` ×10/10** | `rc=0` ×10/10（输出 `2`）—— 见口径，**不叫"修好"** |
+| `draft_gone_erase_refused.cml` | **SIGSEGV（rc=139）** | `rc=1` + `graph.erase: the draft was committed or aborted already` |
+| `draft_gone_nodes_refused.cml` | **SIGSEGV（rc=139）** | `rc=1` + `graph.nodes: the draft was committed or aborted already` |
+| `graph_edits.plan.toml` | `total: 9, pass: 7, fail: 2, **killed by a signal: 2**`（`expected exit 1, got signal SIGSEGV (rc=139)`，两条 `both empty: the run produced no explanation`） | `total: 9, pass: 9, fail: 0` |
+
+**读法**：旧树上那个解引用是**可到达的**（10/10、两条用例都 139、计划把它记成"killed by a signal"）；
+新树上同一批程序要么不进入该状态、要么进入后被拒 —— 无论哪种，**"草稿已关闭还被用"不再有解引用的出口**。
+崩溃只出现在无检查的那一支，说明那行代码是缺陷，不是"某个二进制碰巧"。
+
+### 4.2 新判据原文（单程序级，`std::fvm`）
 
 ```
 $ camel draft_gone_erase_refused.cml std::fvm
@@ -83,9 +95,23 @@ error[RuntimeDiag::InvalidArgument]: Invalid argument of 'graph.nodes': the draf
    --> .../draft_gone_nodes_refused.cml:16:17
 ```
 
-两条都在**单程序级**跑过（未起层级）；`graph_edits.plan.toml` 里的两个 `[[tests]]` 已经按
-`expect_exit = 1` + `expect_output_contains = [算子名, 那条消息]` 钉好，**计划还没跑**（等层级放开）。
+计划级（`graph_edits.plan.toml`，`--jobs 1`）：`[SUMMARY] total: 9, pass: 9, fail: 0`，两条新例
+`erase_of_a_gone_draft_is_refused` / `nodes_of_a_gone_draft_is_refused` 各 `[PASS]`。
 
+### 4.3 检查只有一份（`git grep -n requireOpenDraft`）
+
+```
+src/stdlib/graph/read.cpp:238:        requireOpenDraft(handle, "graph.nodes");
+src/stdlib/graph/read.cpp:268:        requireOpenDraft(handle, "graph.params");
+src/stdlib/graph/read.cpp:1052:       requireOpenDraft(handle, site);          // regionOf
+src/stdlib/graph/resolve.h:98:        requireOpenDraft(handle, site);          // viewOf
+src/stdlib/graph/txn.cpp:199:         requireOpenDraft(node, site);            // draftOf
+src/stdlib/graph/txn.cpp:1291: void requireOpenDraft(const Handle *handle, const char *site) {
+src/stdlib/graph/txn.h:31:  void requireOpenDraft(const Handle *handle, const char *site);
+```
+
+新增的 `disposed()` 判断**只在实现里出现一次**；`txn.cpp:171`（`draftResource`）与 `:1164`/`:1220`
+（`commit`/`abort` 自己那支）是既有的，本笔未改。
 ## 5. 动了什么（一笔一条理由）
 
 | 文件 | 改什么 | 为什么 |
