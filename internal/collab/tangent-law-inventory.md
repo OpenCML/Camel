@@ -8,6 +8,12 @@ pinning the answer stay red between these two commits"）。**新法认不认归
 
 ## 1. 正文原句（`src/stdlib/types.cml:153-162`）
 
+> **定性更正（`D-1128-99`）**：`types.cml:153-162` 是**没跟上设计原则的旧文**；按 `docs/design-principles.cn.md`
+> 第 720 行，数字与布尔有切空间、就是它自己的类型，`string`/函数没有，结构体与元组当且仅当每字段都有，
+> 用户梯度与参数同型 ⇒ `Tangent<int> = int`。本页把旧文当"现行规范"引用过，此处更正。
+> 本页下文出现的"旧法"一律只指**这两个文件**（`types.cml` 与 `jvp.cml`），不指原则本身；
+> 那五笔按原则是对的，是旧文没跟上。
+
 ```
 /// The tangent space of `T` (design principles 9.9): the type a tangent of a value of `T` has. A
 /// float and a tensor of floats are their own tangent space; a tuple and a struct take the tangent
@@ -104,6 +110,11 @@ test/plans/feat/compile/transforms.plan.toml:1250
 用例侧的粗计数：`test/plans` 里含 `())` 的行 **94** 条（多数与切空间无关，如 `format`/脚本片段，本页只列与切空间断言直接相关的上面四条）。
 
 ## 5. 一句话总结：若走 (b)（认新法、补规范），要改几处
+
+> **定性更正（`D-1128-99`）**：下面的表是**代价表**，仍然有效；但其中的"旧法"只指 `types.cml:153-162` 与
+> `jvp.cml:46-48/:69` 这两处**没跟上设计原则的旧文**，不指原则本身。按 `docs/design-principles.cn.md` 第 720 行，
+> 数字与布尔有切空间、就是它自己的类型，`string`/函数没有，结构体与元组当且仅当每字段都有，用户梯度与参数同型
+> ⇒ `Tangent<int> = int`，**那五笔按原则是对的、不回退**。决策者已按本表裁 (b)（`D-1128-99`）。
 
 ```
 正文 1 处     types.cml:153-157（"every other type … takes the empty tuple" 整句）
