@@ -1,0 +1,62 @@
+{
+  "kind": "promotion",
+  "promotion": 77,
+  "tip": "fd950804d6cd08fd40e7cdc22e0ef8d5f13beb4e",
+  "measured_tip": "fd950804d6cd08fd40e7cdc22e0ef8d5f13beb4e",
+  "pushed_develop_sha": "fd950804d6cd08fd40e7cdc22e0ef8d5f13beb4e",
+  "landing_tip": "the record is a documentation commit and lands on whatever integration holds at push time. This layer was started in a quiet window on purpose: 1m load 28.72 and 5m load 35.44 were both under 40 at the start, after the all-tier gate finished",
+  "note": "the layer was measured at fd950804d6cd, twenty-eight ledger commits above the seventy-sixth promotion's record merge. Only one of those commits touches a build path: e6b9f187fc, which makes tanh, erf, erfc and gelu state their semantics in the tensor table (32 entries to 36). The lanes that would change verdicts were not merged before this layer started, so this reading is a clean no-drift baseline: 76 and 77 hold the same code for every case in the red set",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at fd950804d6cd; load 1m 28.72 at the start of the run, the first quiet window of the day",
+  "binary_built": "2026-11-28T13:44:41+08:00",
+  "readings": {
+    "total": 9920,
+    "pass": 9718,
+    "fail": 141,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 0,
+    "re_run": 0,
+    "re_run_passed": 0,
+    "load_before": "1m 28.72, 5m 35.44, 15m 41.91",
+    "load_warning": "[load] WARNING: 1m load 28.72 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth to seventy-sixth layers carried; a promotion does not wait on load, D-1128-36). This layer was nevertheless started in the lowest window of the day: 1m and 5m were both under 40"
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-76-reds.tsv (the seventy-sixth promotion, 141 names)",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], with the plan aliases transforms/compile.transforms and stated_extents/compile.stated_extents read as the same plan; this reading writes the bare names transforms (8 rows) and stated_extents (1 row), the same spelling the seventy-sixth table holds",
+    "still_red": 141,
+    "turned_green": 0,
+    "turned_green_names": [],
+    "new_reds": 0,
+    "new_reds_names": [],
+    "vanished_reds": 0,
+    "arithmetic": "141 names before: 0 turned green, 0 vanished, 0 appeared, 141 remain red; the two sets are the same set name for name",
+    "turned_green_note": "the empty green list does not mean the five cases expected from the tensor work failed to turn green: no lane carrying source or plan changes had been merged when this layer started, so there was nothing that could turn them green. This layer's value is the clean baseline itself: it shows no drift between the seventy-sixth and the seventy-seventh layer, so the next layer that does bring those lanes in can be read against it without ambiguity",
+    "total_delta": "none: the layer declares 9920 entries, the same number the seventy-sixth layer declared, and no case changed status against it",
+    "notes": [
+      "no case timed out in this layer and none was re-run; fault_deep.prl_off is absent for the eleventh round running because the scheduler root-cause fix holds",
+      "export_loop_carried_array_field stayed green for the sixth reading running",
+      "the tensor semantics commit e6b9f187fc takes the semantics table from 32 entries to 36 and changed no verdict in this layer"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 0,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [],
+    "how": "the layer reported timed_out 0 and re_run 0, so there was no timeout to run alone"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-77-reds.tsv",
+  "red_table_rows": 141,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-77-reds.tsv",
+  "new_red_names": [],
+  "pushed_as": "develop, fast-forwarded from 57838d1f3cdf to fd950804d6cd, the tip this layer measured",
+  "develop_before": "57838d1f3cdf6a082f67a951430a383b99c3ad94",
+  "develop_after": "fd950804d6cd08fd40e7cdc22e0ef8d5f13beb4e",
+  "commits_brought_in": 28,
+  "commits_touching_src": 1
+}

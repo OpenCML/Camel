@@ -639,3 +639,5 @@ PowerShell 的 Set-Location 只改 `$PWD`（PowerShell 自己的位置），不�
 
 **它抓到了什么**：两条车道（`lane/tensor-pow-law`、`lane/arg-parse-uaf-w`）各自交了「甲 0」，合并位一进整层就各带出**同一组 15 条表外红**（`compile.casts cast_target_type_expression.nvm` 等，根因是 `()` 单位类型被当成 `int`）。隔离实验：只合其中一条 ⇒ 整层 156 红、15 条表外；干净尖端同一计划 17/17 全绿。它们的读数**不是造假** —— 是只跑了自己那几层，表外红根本没进视野；错在**没写范围**，于是被读成整层。
 
+
+**铁律 21 的来由（2026-11-28 下午）**：合并位一小时的八条队列没动。我给它压了三次队列（"七条""八条""第一批只做三条"），每次都只是**再加活**；真正的原因两件，都写在它的树上：① 它本地那个 `Merge lane/facts-version-key into integration`（`fa7fa230bb`）**从没推成功**；② 我 13:35 `interrupt_agent` 打断的那轮，**宿主侧 `run.sh` 还活着**、一直占着 `merge-seat-1` 的 checkout 锁，于是它 13:55/13:57 两次起批都是 `exit 4 checkout held by another run; nothing was pushed and no lane was dropped`。**清场**：按记录过的 PID 杀（动手前先确认其中没有 git 进程）、清完 `free=12 held=12`。**另记一处我判错的**：我一开始说它"树分叉"，核了才发现 `71272d01aa` 是 integration 的祖先 —— **是"本地有未推的合并提交 + 锁被占"，不是分叉**；结论对（那小时读数作废），理由错，照样要更正。

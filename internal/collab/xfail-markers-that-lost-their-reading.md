@@ -79,3 +79,48 @@ files:  ['native_0.npy', 'native_1.npy', 'native_2.npy', 'native_3.npy', 'w.npy'
   changed its mind` 是 runner 在替你看这句话，它一喊，先查"判词是不是丢了"，别急着改期望。
 - 加标记三件套的顺序：`known_fail_reason` 引**树里现存的**那句（不是被撤回的那句）、
   `known_fail_note` 写谁修、`known_fail_msg` 钉**现在的判词文本**。
+
+## 附一：同一个病的四条 slow 红（`tier = "slow"`，promotion 不跑它们）
+
+同一天在 `test/plans/feat/modules/onnx.plan.toml` 里读出 9 条红，其中 5 条在 141 名快层表内，另
+4 条**都不在快层表**里：
+
+| 名 | 判词形状 | 归类 |
+|---|---|---|
+| `modules.onnx/ort_core_slice` | `export failed: … UnhandledError 0x04000051`，`ort core slice: 5 failing` | **既有**（已对拍，见附二） |
+| `modules.onnx/export_loop_for` | `stdout does not contain 'onnx::loop node for: PASS'` | 既有 |
+| `modules.onnx/pass_export_equals_export_model` | `stdout does not contain 'onnx::export_model equiv: PASS'` | 既有 |
+| `modules.onnx/resnetbn_train_step_export` | `251.60 s cpu of 199.00 s budget` | **预算/压力类** |
+
+四条是**同一个病**：用例自己把导出的拒绝吞了（`case error e => println(e); 0` 一类写法，或 fixture
+把 export 的失败当成"值"再继续），于是 `export failed:` 后面跟的是 `UnhandledError`——**判词丢了**，
+和本页正文那条 `ort_loop_loaded_weights` 一模一样。修法也一样：**让拒绝原文能被抛出来**，不是改期望。
+
+## 附二：`ort_core_slice` 的对拍——不是本轮 `:op/slice_sub` 的回归
+
+失败集中在**开区间切片**子例（`posAll` = `t[..]`、`posEnd` = `t[..b]`、`sweep` 扫边界、`negAll` /
+`negOne` 负界），而这一轮恰好给 `:op/slice_sub` 加了 2 条 `kRuleKeyExceptions` 例外，重合得查。
+判据与读数（一次构建、`-Jobs 2`、`-QueueOnTreeLock`、`BUILD_EXIT=0`、两棵树 `TREE_STATE=clean`）：
+
+| 树 | 失败子例集合（`HashSet`） | 计数 |
+|---|---|---|
+| `b3c4a3ff52^1`（`ab522285fa`，`lane/key-tables` 合并**前**） | `negAll, negOne, posAll, posEnd, sweep` | 5 |
+| `44182d9899`（合并后当前尖端） | `negAll, negOne, posAll, posEnd, sweep` | 5 |
+
+- **交 = 5，两边独有 = 0，`ort core slice: 5 failing` 两边同数** ⇒ **两边都红** ⇒ 早已存在，**不是**本轮
+  `kRuleKeyExceptions` 两条 `:op/slice_sub` 带来的回归。（若"合并前绿、现在红"，按规矩要停手报负责人，
+  不自己改。）
+- 复现方式（探针计划跑完即删，不进提交）：`case = "…/cases/modules/onnx/ort_core_slice.py"`，
+  `expect_stdout_contains` 故意写一个不存在的串让 run 判红，再 `-FetchFile
+  'fail/<plan>/ort_core_slice/output.txt' -FromThisRun` 取逐子例的行，按 `^(\w+): export failed`
+  收名字集合。
+- 注意 `[provenance]` 会写 `(dirty: 1 files)`：那 1 个就是探针计划本身，两边相同，不影响对拍结论。
+
+## 附三：账上没有 ≠ 没红（今天第二次）
+
+- **事实**：这 4 条在 `2026-11-28-promotion-74/75/76-reds.tsv`（141 名快层表）里**一条都没有**，但在
+  `internal/reports/2026-11-28-daily-all-reds.tsv`（262 行，全日闸门）里**逐名都在**。
+- **原因**：它们是 `tier = "slow"`，**promotion 的快层根本不跑它们**；红不红只有全日闸门看得见。
+- **口径**：说"表外红 0"必须**说清对哪张表**——对 141 快层表是 0，对 262 全日表也是 0；只对前者说 0
+  会把 slow 层的红当成不存在。这和今天 `--verify-ops` 那句（两侧文本同错所以比出来是绿的）是同一个
+  形状的错：**账上没有，不等于没红；比出来绿，不等于对。**
