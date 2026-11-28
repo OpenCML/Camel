@@ -439,6 +439,16 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
 > （2026-11-27 一次 `BUILD_EXIT=0` 而整层 140 红：模块缺一个 `import` 就整片装不上）。
 > ⇒ **每次交回同时给 `BUILD_EXIT` 与计划 `[SUMMARY]`**，两个都读得过才算绿。
 
+> **还有一条“转绿”不是修复，是过渡重钉**：用例的断言被改钉到**新的拒绝文本或新的位置**，而它断言的那条**前提已被撤回**。
+> 它从红表里消失，缺陷还在 —— 只是这张表不再量它了。
+> 实例：`D-1128-39` 撤回了 “a Loop carries a state whose shape is the same on every round”（ONNX 的 `Loop`
+> **可以**携带 sequence 或长度逐轮变化的张量，只是这个导出器还不会降 —— 实现缺口，不是表达力边界）；
+> `modules.onnx.export_loop_carried_array_field` 在 72 表里“转绿”，实际是 `ba4d1ec233` 把
+> `expect_diagnostic_column` 从 `81` 改钉到 `9`，而 `verify_script` 断言的仍是那句已撤回的前提。按 `D-1128-52`
+> 它要改成正向用例，降级落地前照旧红。
+> ⇒ **交回里不许把它写成“修复”**：写“过渡（钉位置 / 钉文本，前提待撤回方向落地）”或“仍红”。
+> 一句判据：**这次改动有没有让用例开始检查一件仍然成立的事？** 没有 ⇒ 那是过渡，不是修复。
+
 > **二分一个“运行结果”类谓词时，每个判据点有三种结果，不是两种：真 / 假 / 崩。** 中间提交可能根本跑不起来
 > （2026-11-27 一条车道在 `8749ac78c0` 上量到 `expected exit 0, got signal SIGABRT`、`std::jgir did not print JSON` ——
 > 那是它所在侧枝还没补齐，不是“哈希对不上”）。**崩记成 skip，不记成假** —— 这正是 `git bisect skip` 存在的原因；
