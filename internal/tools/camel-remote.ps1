@@ -1443,7 +1443,7 @@ if ($Cancel) {
     # the guard but the start of this run's own watchdog.
     $guardFunctions = [System.Collections.Generic.List[string]]::new()
     foreach ($one in ($orphanGuard -split "`n")) {
-        if ($one -eq 'orphan_begin "$PPID"') { break }
+        if ($one.TrimEnd("`r") -eq 'orphan_begin "$PPID"') { break }
         $guardFunctions.Add($one)
     }
     $cancelScript = ($guardFunctions -join "`n") + @"
@@ -1484,9 +1484,11 @@ if [ -n "`$run_id" ] && [ -d "`$R/test/results" ]; then
             > "`$R/test/results/log/`$run_id/CANCELLED" 2>/dev/null
 fi
 echo "[camel-remote] -Cancel: ending pid `$holder and everything it started (the watchdog's own shutdown)"
-# `0` as the reader: it is not this script's pid, so the watch does not wait for anybody to go away
+# Zero as the reader: it is not this script's pid, so the watch does not wait for anybody to go away
 # and ends the run on its first pass -- freeze, TERM what it started and the groups it leads, KILL.
-orphan_watch 0 "`$holder" /dev/null
+# In a subshell: orphan_watch ends by exiting, which is right for the run it belongs to and
+# wrong here -- this script has lines after it to print.
+( orphan_watch 0 "`$holder" /dev/null )
 if flock -n 6; then
     echo "[camel-remote] -Cancel: the checkout is free"
 else
@@ -1505,7 +1507,10 @@ else
 fi
 exit 0
 "@
-    $cancelScript = $cancelScript -replace "`r`n", "`n"
+    # Every carriage return goes: the guard text is joined from lines that still end with one, and a
+    # CR before a newline makes the remote shell read `fi` as `fi\r` -- the script then ends at its own
+    # syntax error and the checkout stays held, which is the opposite of what -Cancel is for.
+    $cancelScript = $cancelScript -replace "`r", ""
     $cancelOutput = & $sshExe -o ConnectTimeout=20 $sshHost $cancelScript 2>&1
     $cancelExit = $LASTEXITCODE
     foreach ($one in $cancelOutput) { Write-Host $one }
