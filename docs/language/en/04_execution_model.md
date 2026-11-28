@@ -317,7 +317,7 @@ A program is processed by the sequence of passes on the command line: `camel fil
 
 | Pass | What it does |
 |---|---|
-| (none written) | `std::default`, that is, `std::nvm` |
+| (none written) | `std::run`, that is `std::fastvm` (`std::fvm`) |
 | `std::nvm` | Node VM: interprets directly on the graph |
 | `std::fvm` | Bytecode VM |
 | `std::jit` | Bytecode VM with JIT compilation; graphs that cannot be compiled are executed by the interpreter |

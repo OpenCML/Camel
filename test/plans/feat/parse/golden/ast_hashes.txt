@@ -2095,7 +2095,7 @@ baccb3c6e09c0cea ok test/cases/compile/transforms/tanh_gradient_through_the_libr
 ab9247623d7b6fd0 ok test/cases/compile/transforms/transpose_array_product.cml
 03f38b8f83254aea ok test/cases/compile/transforms/transpose_branch.cml
 009869528d4b08f3 ok test/cases/compile/transforms/transpose_call.cml
-bc670486809d1615 ok test/cases/compile/transforms/transpose_call_first_argument_is_a_call.cml
+715db8c78ec774a0 ok test/cases/compile/transforms/transpose_call_first_argument_is_a_call.cml
 dbcd5932f894a22e ok test/cases/compile/transforms/transpose_call_first_argument_is_a_function_value.cml
 53aedc57d67c4ea0 ok test/cases/compile/transforms/transpose_call_of_a_body_closure_with_a_bare_name.cml
 a6354634a828da3c ok test/cases/compile/transforms/transpose_call_of_a_zero_argument_closure_refuses_the_kind.cml

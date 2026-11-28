@@ -105,7 +105,7 @@ dot -Tsvg negated.dot -o negated.svg
 
 ![doubled：x * 2 + x * 2 的几种写法留在一个个等价类里](images/17_rule_saturate.svg)
 
-末尾的 `std::nop` 让流水线停在这里：dump 把图原样交下去，没有它就会落到 `std::default` 把程序跑起来，而这张
+末尾的 `std::nop` 让流水线停在这里：dump 把图原样交下去，没有它就会落到 `std::run` 把程序跑起来，而这张
 保留着多种写法的图，不先选定一种写法是不该执行的。
 
 每个虚线框是**一类等价的值**（`class`）：框里的节点是同一个值的不同写法。图里不标哪一种写法更便宜——

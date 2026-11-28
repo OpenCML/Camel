@@ -94,6 +94,20 @@ void declareCoreTagReaders() {
 }
 
 
+/// The scheduling pass `std::run` stands for: "run this program", written by a pipeline that does
+/// not care which back end runs it. The alias table carries the default target; the run
+/// configuration (`.opencmlrc`'s `passes.run`) may name another scheduling pass, and a front end
+/// that reads one stores it here. The alias is resolved with the other aliases, in
+/// `resolveAlias`; this is the one value that resolution reads from configuration, not a second
+/// table of names.
+constexpr const char *kRunPassName = "std::run";
+constexpr const char *kRunPassDefaultTarget = "std::fastvm";
+
+std::string &runPassTargetOverride() {
+    static std::string target;
+    return target;
+}
+
 const std::map<std::string, std::string> passAliases = {
     // The optimization passes are registered under `std::cxx::` -- the C++ implementations, kept
     // apart from the Camel ones in the module `opt`. Their old spellings (`std::opt::fold`,
@@ -114,7 +128,14 @@ const std::map<std::string, std::string> passAliases = {
     {"std::fastvm::jit::dump::rmir", "std::fastvm::jit_rmir"},
     {"std::fastvm::jit::dump::mir", "std::fastvm::jit_mir"},
     // Standard scheduler aliases
-    {"std::default", "std::nvm"},
+    //
+    // `std::run` is the step that runs the program, written when which back end runs it is not
+    // the point: a reader does not have to learn the back ends to read "compile, rewrite, run".
+    // Its target is `passes.run` when the run configuration names one, and `std::fastvm` -- the
+    // fast VM, which is `std::fvm` -- otherwise. `resolveAlias` reads that configuration; a
+    // target that is not a scheduling pass is refused before anything runs, naming the setting
+    // (`requireKnownPasses` asks `requireRunPassTarget`).
+    {kRunPassName, kRunPassDefaultTarget},
     {"std::linear", "std::nvm"},
     {"std::parallel", "std::taskflow"},
     {"std::tf", "std::taskflow"},
@@ -390,7 +411,21 @@ namespace {
 /// at their own inapplicable declaration instead of falling through.
 std::string resolveAlias(const std::string &name) {
     if (auto it = passAliases.find(name); it != passAliases.end()) {
-        return it->second;
+        std::string target = it->second;
+        if (name == kRunPassName) {
+            // The one alias whose target the run configuration decides. The table's entry is the
+            // default; a configuration that names another scheduling pass replaces it here, and
+            // the target is resolved on through the table so every caller that compares spellings
+            // sees the pass itself (`std::fastvm` is `std::fvm`, `std::jit` is
+            // `std::fastvm::jit`).
+            if (!runPassTargetOverride().empty()) {
+                target = runPassTargetOverride();
+            }
+            if (auto nested = passAliases.find(target); nested != passAliases.end()) {
+                return nested->second;
+            }
+        }
+        return target;
     }
     return name;
 }
@@ -2471,10 +2506,59 @@ std::vector<std::string> expandFixedLoweringSteps(const std::vector<std::string>
 
 } // namespace
 
+void setRunPassTarget(const std::string &name) {
+    runPassTargetOverride() = name;
+}
+
+std::string runPassTarget() {
+    if (!runPassTargetOverride().empty()) {
+        return runPassTargetOverride();
+    }
+    const auto entry = passAliases.find(kRunPassName);
+    return entry == passAliases.end() ? std::string() : entry->second;
+}
+
+namespace {
+
+/// `std::run` runs the program, so the pass it names has to be a scheduling pass. The value is
+/// the run configuration's (`passes.run`), not the pipeline's, so a wrong one is refused before
+/// anything runs and the diagnostic names the setting: the alias is spelled in the pipeline, and
+/// the setting is what has to be changed. The check runs where every other pass name is checked
+/// (`requireKnownPasses`), on the lists a run is about to execute.
+void requireRunPassTarget(const context_ptr_t &ctx) {
+    const std::string target = runPassTarget();
+    const auto resolved      = resolvePassWithModule(target, ctx);
+    if (!resolved.factory) {
+        throw DiagnosticBuilder::of(RuntimeDiag::InvalidPassParameter)
+            .commit(
+                kRunPassName,
+                std::format("`passes.run` names '{}', which is not a pass", target));
+    }
+    const auto pass = constructPass(ctx, target);
+    if (!pass) {
+        return; // construction reported its own problem
+    }
+    if (dynamic_cast<GraphSchedulePass *>(pass.get()) == nullptr) {
+        throw DiagnosticBuilder::of(RuntimeDiag::InvalidPassParameter)
+            .commit(
+                kRunPassName,
+                std::format(
+                    "`passes.run` names '{}', which is not a scheduling pass; `{}` runs the "
+                    "program, so it must name one (std::fvm, std::nvm, std::jit, std::taskflow)",
+                    target,
+                    kRunPassName));
+    }
+}
+
+} // namespace
+
 void requireKnownPasses(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     for (size_t i = 0; i < passes.size(); ++i) {
         const auto &name = passes[i];
-        auto resolved    = resolvePassWithModule(name, ctx);
+        if (specName(name) == kRunPassName) {
+            requireRunPassTarget(ctx);
+        }
+        auto resolved = resolvePassWithModule(name, ctx);
         if (!resolved.factory) {
             // One pass per line of the pipeline (`--passes a,b` or the passes after the file),
             // so a parameter diagnostic points at the line the call is written on.

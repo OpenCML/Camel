@@ -6,7 +6,7 @@
 // A rewriting pass returns a rewritten graph; a translating pass prints or exports and hands the
 // graph on (design principles 9.1, docs/design-principles.cn.md:636); a scheduling pass executes the
 // program and answers with the residual graph or an empty one. The pipeline has one rule: the passes
-// written run in order, and when the graph is still there at the end it goes to `std::default`
+// written run in order, and when the graph is still there at the end it goes to `std::run`
 // (9.2). To look without running, the list ends in `std::nop`.
 //
 // So a plan pipeline whose last pass translates runs the program unless it says `std::nop` -- and a

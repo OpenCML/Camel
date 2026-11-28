@@ -67,7 +67,7 @@ import pipelines as pl  # noqa: E402
 
 EXCLUDED_PLAN_DIRS = ("parse", "format", "perf")
 SCHEDULING = {"std::nvm", "std::fvm", "std::jit", "std::tf", "std::prl", "std::nodevm", "std::fastvm",
-              "std::taskflow", "std::default", "std::linear", "std::parallel"}
+              "std::taskflow", "std::run", "std::linear", "std::parallel"}
 
 # Environment variables the harness sets itself; a plan value for them is not part of a
 # program's environment.

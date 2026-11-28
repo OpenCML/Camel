@@ -4,7 +4,7 @@ tier = "fast"
 tags = ["feat", "linear", "fvm", "nvm", "differential"]
 
 # The two interpreters of one program: `std::nvm` is the reference semantics, and `std::fvm` is the
-# bytecode one that `std::default` points at, so every other back end is read against the reference
+# bytecode one that `std::run` points at, so every other back end is read against the reference
 # (design principles 9.2). Each case here runs one program on both, pins the bytes it prints, and
 # has the runner compare the second back end against the first on its exit code, its diagnostics and
 # its standard output -- byte for byte, which is what `backends_agree` compares. A case is red if

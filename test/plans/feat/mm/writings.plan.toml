@@ -312,7 +312,7 @@ timeout_ms = 30000
 # class at all fails, and `draw_classes.guard` shows the same check refusing a dump of the program
 # without the saturation, naming the case file and the dump line of the writing that stands alone.
 # Every one of those pipelines ends in `std::nop`: a dump hands the program on (design principles
-# 9.1), so a pipeline that ended at the dump would fall through to `std::default`, which executes
+# 9.1), so a pipeline that ended at the dump would fall through to `std::run`, which executes
 # and is therefore refused the state with `PassNeedsExtraction` -- and its complaint would land in
 # the dump the case reads.
 

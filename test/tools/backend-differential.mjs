@@ -11,7 +11,7 @@
  * **What one program is.** A `[[tests]]` block of a plan under `test/plans/` declares a command
  * line: the case, the words before it (a subcommand, an option such as `--arg n=3`), the passes
  * written after it, and as the last of those a scheduling pass -- or none, in which case the run
- * falls through to `std::default` (design principles 9.1). That command line, with the scheduling
+ * falls through to `std::run` (design principles 9.1). That command line, with the scheduling
  * pass taken out, is one program here: the same front end, the same rewriting passes, the same
  * arguments, and only the back end replaced. A case whose plans declare two pipelines is two
  * programs, because a rewriting pass in front of the run is part of the program and dropping it
@@ -31,7 +31,7 @@
  *     program on this back end". This also rules out a program whose standard output is a clock
  *     rather than a value, which cannot agree with itself and would be misread as a disagreement;
  *   - a block whose last scheduling pass is neither side (`std::jit`, `std::prl`, `std::tf`) or is a
- *     rewriting pass -- the run then falls through to `std::default`, which is a third program this
+ *     rewriting pass -- the run then falls through to `std::run`, which is a third program this
  *     tool does not measure; a scheduling pass that carries `with` parameters, because a parameter
  *     is not necessarily one both sides accept, so the two halves would no longer be one program;
  *   - a pipeline that ends in `std::nop`, or that runs a pass that prints the graph before it runs:
@@ -156,7 +156,7 @@ const PROBE_PLANS = path.join(PLAN_ROOT, 'probe')
 const VARS_PATH = path.join(REPO_ROOT, 'test', 'vars.toml')
 const IS_WINDOWS = process.platform === 'win32'
 
-/// The two sides. `std::default` is a third name a block may write, and it is not a side: a block
+/// The two sides. `std::run` is a third name a block may write, and it is not a side: a block
 /// that writes it asks for whatever the default is, so its two halves are the two sides below.
 const SIDES = [
     { name: 'nvm', pass: 'std::nvm' },
@@ -171,7 +171,7 @@ const SIDE_OF_PASS = new Map([
     ['std::linear', 'nvm'],
     ['std::fvm', 'fvm'],
     ['std::fastvm', 'fvm'],
-    ['std::default', 'default']
+    ['std::run', 'run']
 ])
 /// A pass whose whole job is to write the graph out: a program that ends in one, or that runs one
 /// before it runs, has a drawing in its standard output rather than a value.
