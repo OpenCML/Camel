@@ -335,6 +335,38 @@ FactStoreTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     store.invalidateGraph(f2);
     probe(os, store, "invalidated_graph", k.kind, {Anchor{program2, f2, 1}});
 
+    // ---- A fact on a graph a later commit did not change: a pin, not a red->green -----------
+    //
+    // This is a **pin**, not a case that was red before the change it guards. Measured on the
+    // tree before the change (`origin/integration` at 0fb33bc32f, probe run of this pass):
+    //
+    //   FACTS probe_two_commits_f valid ; FACTS probe_old_program_f valid ; FACTS probe_same_program_f valid
+    //
+    // A fact recorded on a graph no commit changed was already found after a further commit, and
+    // found through the program that recorded it as well, because a commit copies a graph keeping
+    // its GraphId and its revision (draft_session.cpp, GCGraphBuildAccess::inheritRevision) and a
+    // stamp is the closure hash of those ids and revisions (reachable.cpp, closureRevision): a
+    // different Program holding the same unchanged graphs is the same stamp. So this reading says
+    // what an `Anchor` may stop carrying without losing anything, and the change that takes the
+    // Program out of the anchor's identity must keep these lines as they are.
+    store.put<int>(k.kind, Anchor{program2, f2, 0}, 4242);
+    {
+        RuntimeGraphDraftSession later(context_, program2);
+        (void)later.edit(main2).edit().materializeStaticValue(
+            camel::core::rtdata::toSlot<int64_t>(9), camel::core::type::Type::Int64());
+        const camel::runtime::Program *program3 = later.commit();
+        auto *root3                             = program3->root();
+        auto *f3                                = named(*program3, root3, "f");
+        auto *main3                             = named(*program3, root3, "main");
+        os << "FACTS two_commits_f_id " << (f3->id() == f2->id() ? "kept" : "new") << "\n";
+        os << "FACTS two_commits_f_revision "
+           << (f3->revision() == f2->revision() ? "kept" : "new") << "\n";
+        os << "FACTS two_commits_main_revision "
+           << (main3->revision() == main2->revision() ? "kept" : "new") << "\n";
+        probe(os, store, "two_commits_f", k.kind, {Anchor{program3, f3, 0}});
+        probe(os, store, "two_commits_same_program_f", k.kind, {Anchor{program2, f2, 0}});
+    }
+
     const Counts c = store.counts();
     os << std::format(
         "FACTS counts puts={} hits={} misses={} stale={} revalidated={} computed={}\n",
