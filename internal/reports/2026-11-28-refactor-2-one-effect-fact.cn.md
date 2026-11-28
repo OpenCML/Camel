@@ -366,3 +366,31 @@ FACTS probe third_f_id kept ; FACTS probe third_f_revision kept ; FACTS probe th
 - `src/stdlib/graph/facts.cpp:65`：`std::graph` 模块的 `publishedAnchor(handle, site, node)`（`Anchor{handle->program(), &graph, node ? handle->index() : kInvalidNodeRef}`），服务 `graph.arrangeable` / `graph.effects` 那一族查询。
 
 ⇒ 那件改完**不能只看 tiles**：`feat/modules/tiles.plan.toml` 与 **`feat/modules/graph.plan.toml` 的读数都要带上**（`graph.plan.toml` 今天已有 2 条红：`types_and_node_kind`、`node_kinds_match_the_graph`，见 §10）。
+
+## 12 `feat/modules/graph.plan.toml` 那两条红的诊断（只读：不改 plan、不改期望、不动 `src/`）
+
+读数：`test/plans/feat/modules/graph.plan.toml` 于枝 `lane/draft-read-cut@71d180500e`（`src/` 同 §10 的底），宿主 `88zjwei`，`[SUMMARY] total: 80, pass: 78, fail: 2`，失败正是这两条；`BUILD_EXIT=0`、`TREE_STATE=clean`。实得 stdout 用 `-FetchFile ... -FromThisRun` 取回（运行名 `20261128_185829_38844_idpp`，本地落 `test/results/fetched/fail/modules.graph/node_kinds_match_the_graph/stdout.txt`）。
+
+### 12.1 `types_and_node_kind` —— **计数漂移**
+
+- 断言侧：**`expect_stdout_exact`**（`graph.plan.toml:14`；`:13` `expect_exit = 0` **没报差异**）。诊断原文：
+  `[INFO] expect_stdout_exact differs: first difference at offset 26 (expected 44 chars, got 44 chars): expected "…1\n47\nNodeKind::Oper\n", got "…1\n60\nNodeKind::Oper\n"`
+- 差异逐字：两侧**都 44 字符**，`offset 26` 起差一个数：期望 **`47`**、实得 **`60`**，其余 42 字符一致。这一行是 case 里的第 7 句 `println(creation_id(graph_of(p)))`（`test/cases/modules/graph_types.cml:14`），即**图的创建 id**。
+- 判类：**id/计数漂移**（`47 → 60`，**+13**）。不是行为变化、不是缺陷。
+
+### 12.2 `node_kinds_match_the_graph` —— **同一计数漂移 + 期望过期（两件事叠在一条上）**
+
+- 断言侧：**`expect_stdout_exact`**（`graph.plan.toml:24`；`:23` `expect_exit = 0` 没报差异；`stderr` 空）。诊断原文：
+  `[INFO] expect_stdout_exact differs: first difference at offset 34 (expected 727 chars, got 711 chars): expected "…[pick, total, kinds, main, __g_51__, __g_52__, __g_53__, __g_55__]\n…", got "…[pick, total, kinds, main, __g_64__, __g_65__, __g_66__, __g_68__]\n…"`
+- 逐行比（期望 vs 实得，共 4 行，只有第 2、3 行不同）：
+  - **第 2 行（图名）**：长度**都是 66**，只有四个自动名变了：`__g_51__/52/53/55` → `__g_64__/65/66/68`，**每项 +13**，相对间距不变 ⇒ **与 12.1 同一个计数器**。
+  - **第 3 行（kind 列表）**：`656 → 640`，**少 16 字符**，恰是 `"NodeKind::Data, "` 一项的 16 字符；逐项读，`main` 那张图从
+    期望 `Data, Data, Data, Func, Oper, Oper, Data, Data, Oper, Oper, Oper, Oper, Gate`（**13** 项）
+    变成 `Data, Data, Func, Oper, Oper, Data, Data, Oper, Oper, Oper, Oper, Gate`（**12** 项）—— **少一个 `NodeKind::Data`**；其余 7 张图的列表逐项一致。
+  - 总长 `727 → 711`（**−16**）= 上述一项 `NodeKind::Data` 的宽度；名字那 4 项等长，不贡献长度差。
+- 判类：**两件事** —— ① 名字里的 `+13` 是**同一计数漂移**（与 12.1 同因）；② `main` 少一个 `Data` 是**期望过期**（树的行为按设计变了，不是缺陷）：`test/cases/modules/graph_kinds.cml` 在 **`ee550f53dc`**（"main: the entry declares no value, and the returns that carried one go with it"，2026-11-28 08:04）把 `main` 的 `return 0` 删了 —— 那个 `0` 字面量就是 main 图里少掉的那个 `Data` 节点；而这一行期望是 **`9cdb0c9458`**（"feat(prelude): the map and set operators are the prelude's declarations"）定下的，那时 `main` 还 `return 0`。
+- **若要修，修在测试侧**：`graph.plan.toml:24` 的期望改成实得（`__g_64__/65/66/68` + main 的 12 项列表）；同理 `:14` 的 `47` 改成 `60`。**不是 `src/` 的缺陷**，本轮不改（期望改动要负责人点头）。
+
+### 12.3 同因结论
+
+`types_and_node_kind` 的 `47→60` 与 `node_kinds_match_the_graph` 第 2 行的 `__g_51__… → __g_64__…` **同因**：同一个**图创建 id 计数器整体 +13**（两处都是 +13，且相对间距不变）。`node_kinds_match_the_graph` **额外**还有第 3 行 `main` 少一个 `Data` 的**期望过期**（由 `ee550f53dc` 删 `return 0` 造成），这一项与计数器无关。**+13 是哪一笔记出来的，我没定位到**（只在 `9cdb0c9458` 定期望之后、当前底之前；要定位得二分，这次没做）。
