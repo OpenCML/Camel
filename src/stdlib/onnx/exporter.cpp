@@ -148,11 +148,15 @@ class FoldArgsView final : public ArgsView {
     std::vector<type::Type *> types_;
 };
 
-ValueInfo valueInfoOf(const std::string &name, const TensorFacts &facts) {
+ValueInfo valueInfoOf(const std::string &name, const TensorFacts &facts, bool isSequence = false) {
     if (!facts.dtype) {
         throw ExportError(std::format("the dtype of '{}' is not known statically", name));
     }
-    ValueInfo info{.name = name, .type = elemTypeOf(*facts.dtype), .shape = std::nullopt};
+    ValueInfo info{
+        .name       = name,
+        .type       = elemTypeOf(*facts.dtype),
+        .shape      = std::nullopt,
+        .isSequence = isSequence};
     if (facts.shape) {
         std::vector<Dim> dims;
         for (size_t i = 0; i < facts.shape->size(); ++i) {
@@ -162,6 +166,12 @@ ValueInfo valueInfoOf(const std::string &name, const TensorFacts &facts) {
         info.shape = std::move(dims);
     }
     return info;
+}
+
+/// The `ValueInfo` of a value the export states: a sequence says so, and its shape is the
+/// element's.
+ValueInfo valueInfoOf(const std::string &name, const Value &value) {
+    return valueInfoOf(name, factsOf(value), value.isSequence());
 }
 
 /// The elements of the constant tuple or struct `slot` of type `ty`.
@@ -1366,7 +1376,12 @@ Value rebuildValue(const Value &like, std::span<const Value> leaves, size_t &nex
 /// keeps its length, and the type printer's `[]` spelling decides nothing.
 bool isCarriable(const Value &v) {
     if (v.isSymbolic()) {
-        return v.form == Value::Form::Tensor || v.form == Value::Form::Scalar;
+        // A sequence is carried as `sequence` (not as a tensor of a fixed shape): its length is the
+        // run's, which is exactly what a Loop cannot keep fixed. The carry path in
+        // `emitLoopScanning` states the type, and the body gives the next sequence, so no
+        // `Identity` wraps it.
+        return v.form == Value::Form::Tensor || v.form == Value::Form::Scalar ||
+               v.form == Value::Form::Sequence;
     }
     if (v.ty == nullptr) {
         return false;
@@ -1457,6 +1472,11 @@ Value placeholderLike(const Value &like, std::string name) {
         return Value::symbolicScalar(std::move(name), scalar);
     }
     const TensorFacts facts = factsOf(like);
+    if (like.isSequence()) {
+        // A sequence keeps its form through a placeholder: the dtype and shape are the element's
+        // and the Loop's state input/output has to say `sequence`, not tensor.
+        return Value::symbolicSequence(std::move(name), *facts.dtype, facts.shape);
+    }
     return Value::symbolic(std::move(name), facts.dtype, facts.shape);
 }
 
@@ -2455,14 +2475,22 @@ Evaluator::LoopEmission Evaluator::emitLoopScanning(
                         "the dtype or shape of a value changes from one call of a recursion to "
                         "the next; a loop can only carry values of a fixed dtype and shape");
                 }
-                inputs.push_back(valueInfoOf(inLeaves[j].name, in));
-                outputs.push_back(valueInfoOf(
-                    emitter_.node(
-                        "Identity",
-                        {emitter_.operand(outLeaves[j], *in.dtype)},
-                        {},
-                        "state_out"),
-                    in));
+                inputs.push_back(valueInfoOf(inLeaves[j].name, inLeaves[j]));
+                if (inLeaves[j].isSequence()) {
+                    // A carried sequence's body output is the next sequence itself: `Identity` has
+                    // no sequence-typed schema at opset 11, and the node that grew the sequence
+                    // already names the value, so the body output takes that name.
+                    const std::string name = emitter_.operand(outLeaves[j], *in.dtype);
+                    outputs.push_back(valueInfoOf(name, outLeaves[j]));
+                } else {
+                    outputs.push_back(valueInfoOf(
+                        emitter_.node(
+                            "Identity",
+                            {emitter_.operand(outLeaves[j], *in.dtype)},
+                            {},
+                            "state_out"),
+                        in));
+                }
                 leafArgument.push_back(k);
             }
         }
@@ -4758,6 +4786,17 @@ Value Evaluator::evalFill(
             closure.fields[slot] = values[k];
         }
         return closure;
+    }
+    if (targetType->code() == TypeCode::Function && closuresWanted_ == 0) {
+        // A closure the aggregate *captures* while nothing on the export path calls it -- the same
+        // shape the element deferral above handles (a branch arm's (value, pullback) tuple whose
+        // pullback is never called on the exported path). It has no ONNX representation and emits
+        // nothing, so it is deferred instead of failing the aggregate that carries it: a value is
+        // materialised only if something reads it back. `closuresWanted_` is raised exactly where a
+        // value is about to be called or probed (`linearBody`, `probeSpecialClosure`,
+        // `evalEagerBranch`, `evalIndirectCall`, `applyClosure`), so 0 here means this path does
+        // not call it, and there is no value to materialise.
+        return Value::constant(NullSlot, targetType);
     }
     if (!source.isConstant() || !allConst) {
         unsupported(
