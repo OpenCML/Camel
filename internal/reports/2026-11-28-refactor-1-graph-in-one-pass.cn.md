@@ -156,6 +156,27 @@
 
 ⇒ 因此**"只动 `visitVariNode` + `readVariable` 两处"做不到**：第二刀（`addArm`/`setArmResult`）是必需的。这一条把 §二 的形状与"开工第一笔"的范围一起改了：**第一笔只能覆盖"既不平直也不需要第二刀"的那一小块，其余必须等第二刀**。
 
+### 2·0 落点更正（读代码后纠）：`visitVariNode` 不建格子
+
+**页里 §二 原先写"`visitVariNode`（`builder_variables.cpp:61`）变成两条绑定"，位置不准。** 读原文（`builder_variables.cpp:61-72`）：它只做四件事 —— 置 `varied_`/`declaresVariable_` 两个标志、访问初值（`visit(gct->at(0))`）、还原标志、返回。**它不调 `newVariable`、不造 `:var/new`。**
+
+真正的落点：
+
+| 动作 | 落点 |
+|------|------|
+| `var` 绑定时建格子 | **`src/compile/src/gir/builder_expr.cpp:515`**（调 `newVariable`） |
+| 写的记账 | `builder_expr.cpp:586`（`writesOf_`） |
+| 读格子 | `builder_variables.cpp:237 readVariable` |
+| 折叠（今天做的活） | `builder_variables.cpp:347 collapseNonEscapingVariableReads` |
+
+**第一刀的真实形状 = 惰性绑定 + 物化**（因为"平直"在建图那一刻不可知）：
+
+- `var x = e`：**绑一个版本**（名字 → `e` 的节点），不建格子；
+- 写 `x = f`：命中版本绑定时**改绑**到 `f` 的节点，不造 `:op/assn`；
+- 读 `x`：命中版本绑定时**返回版本节点**，不造 `:var/get`；
+- **物化点**：读/写发生在"已不平直"的上下文（臂内、循环体内、闭包体内 —— 用一个纪元计数器判定）时，先用当前版本把 `:var/new` 建出来、灌进去，**之后走老路**（`escapingVariables_`、`carriedVersions_` 一行不碰，那是第 2–4 刀）。
+- **判据的两种可能**（先量再定，见 §3.8）：**甲** = 今天平直 `var` 的 canonical 里本来就没有 `/var/get`（`variableReadSource_` 那套已折掉）⇒ 逐字节相同成立；**乙** = canonical 里有这些节点 ⇒ 第一刀只能"节点照旧造、机制换掉"，删格子留第二刀。
+
 ## 二·二 迁移期并存：编译期开关，运行期只有一条路
 
 新路径（从类型完整的树直接降成 SSA，不建格子、不抹除）**与旧路径并存**，但并存是**编译期选择**：一个临时常量（例如 `src/compile/src/gir/builder_variables.cpp` 顶部的 `constexpr bool kVarLoweringSsa = false;`），**运行期只有一条路**，没有任何运行时分支。
