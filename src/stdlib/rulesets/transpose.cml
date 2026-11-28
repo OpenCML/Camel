@@ -41,7 +41,12 @@ import {
 // `log as math_log`, for the reason `rulesets.jvp` records: the plain `log` here is the **array**
 // one (`log_t` files its law below), and a second import of one name hides the first instead of
 // overloading it, so `pow_d_t`'s scalar `log(x)` is spelled `math_log`.
-import { erfc as math_erfc, erf as math_erf, exp as math_exp, log as math_log, pow, sqrt as math_sqrt } from math
+//
+// `pow as math_pow` for the same reason: the plain `pow` is the **array** one -- the two-operand
+// `tensor:pow` whose law is `pow_tensor_t` below -- and the scalar power `pow_d_t` and `pow_t` write
+// in their bodies is `math`'s, which is the same arithmetic at a scalar type and a different
+// operator.
+import { erfc as math_erfc, erf as math_erf, exp as math_exp, log as math_log, pow as math_pow, sqrt as math_sqrt } from math
 // The `nn` module's primitives and the gradients they answer with: this module's left sides spell
 // the operators (`conv2d(x, w, b)`) and its right sides are the engine's own gradient operators, so
 // both halves of each law name `nn`'s declarations and nothing else. The direction is the one
@@ -49,7 +54,7 @@ import { erfc as math_erfc, erf as math_erf, exp as math_exp, log as math_log, p
 // layering the build enforces is the C++ kernel's, 10.5) and `rulesets.jvp` records the same
 // import from the forward side.
 import { avg_pool2d, avg_pool2d_grad, conv2d, conv2d_bias_grad, conv2d_bias_grad_shaped, conv2d_input_grad, conv2d_input_grad_shaped, conv2d_kernel_grad, conv2d_kernel_grad_shaped, embedding, embedding_table_grad, max_pool2d, max_pool2d_grad, softmax_cross_entropy, softmax_cross_entropy_grad } from nn
-import { abs, add_stated, broadcast_like, div_stated, erf, erfc, exp, full, gelu, layer_norm, layer_norm_grad, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, numel, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, softmax_grad, sqrt, subtract, subtract_stated, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
+import { abs, add_stated, broadcast_like, div_stated, erf, erfc, exp, full, gelu, layer_norm, layer_norm_grad, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, numel, permute, pick_at, pow, relu, reshape, rsqrt, shape, sigmoid, softmax, softmax_grad, sqrt, subtract, subtract_stated, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 import { is_float } from types
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
@@ -1282,13 +1287,13 @@ export rule mean_axis_from_type_t::<T, X, A, B, C>(t: X, axis: A, keepdims: B, a
 /// `pow(x, w)`: what `math:pow_d` means, and the left side this rule is filed under.
 /// @example pow_d(2.0, 3.0)    // 8.0
 func pow_d(x: float, y: float) => float {
-    return pow(x, y)
+    return math_pow(x, y)
 }
 
 /// The transpose of `pow(x, w)`: `ct * w * x^(w-1)` for the base, `ct * x^w * ln(x)` for the exponent.
 /// Its numbers are pinned by `pow_gradient_through_the_library.cml`.
 export rule pow_d_t(x: float, y: float) { pow_d(x, y) => func (ct: float) {
-    (ct * y * pow(x, y - 1.0), ct * pow(x, y) * math_log(x))
+    (ct * y * math_pow(x, y - 1.0), ct * math_pow(x, y) * math_log(x))
 } }
 
 // ---- the transpose rule of `^` (`:op/pow_d`, `:op/pow_f`) ----
@@ -1313,7 +1318,37 @@ export rule pow_d_t(x: float, y: float) { pow_d(x, y) => func (ct: float) {
 // builds the term and the number the two legs answer is the base's alone: the wider law is not a
 // different number on the programs both legs can run.
 export rule pow_t::<T>(x: T, w: T) when is_float::<T>() { x ^ w => func (ct: T) {
-    (ct * (w * pow(x, w - T(1))), ct * pow(x, w) * math_log(x))
+    (ct * (w * math_pow(x, w - T(1))), ct * math_pow(x, w) * math_log(x))
+} }
+
+// ---- the transpose rule of `pow` on two tensors (`tensor:pow`) ----
+//
+// The array form of the same arithmetic as `^`: `pow(lhs, rhs)` broadcasts its two operands. It is a
+// different operator from the written token on two numbers (`:op/pow_d`, `pow_t` above) and from the
+// scalar function (`math:pow_d`, `pow_d_t` above) -- three spellings, three keys -- and this is the
+// library's half of the third one, the operator the engine answers with `powVjp`
+// (`lib/tensor/ops/elementwise_ops.cpp`). The operator's own spellings are `__pow__` and the infix
+// `^`, neither of which is a call a left side can be written with, so the law is filed under the
+// stand-in declaration below -- the shape `divide` above records for the same reason.
+//
+// The two cotangents are the two terms of the same derivative -- `ct * w * x^(w-1)` for the base and
+// `ct * x^w * ln(x)` for the exponent -- and each is reduced to *its own* operand's shape with
+// `sum_to`, because the two operands may have been broadcast (the reason `mul_tensor_t` records).
+// The exponent's term is `NaN` for `x <= 0`, where no real power has a slope to state, which is the
+// reading `pow_d_t` and `pow_t` both give; neither a guarded zero nor a refusal, because a program
+// whose exponent has no tangent never builds the term.
+
+/// `pow(x, w)` on two tensors: what `tensor:pow` is, and the name its rule is filed under.
+/// @example pow([2.0, 3.0] as float[], 2.0)    // [4.0, 9.0]
+func pow::<T>(x: T[...], w: T[...]) => T[...] when is_float::<T>() {
+    return x ^ w
+}
+
+
+/// The transpose of `pow(x, w)` on two tensors: `ct * w * x^(w-1)` for the base and
+/// `ct * x^w * ln(x)` for the exponent, each reduced to its own operand's extent.
+export rule pow_tensor_t::<T, X, W>(x: X, w: W) when is_float::<T>() { pow(x, w) => func (ct: T[...]) {
+    (sum_to(ct * w * (x ^ (w - 1.0)), shape(x)), sum_to(ct * (x ^ w) * log(x), shape(w)))
 } }
 
 /// `log(x)`: what `math:log_d` means, and the left side this rule is filed under.
