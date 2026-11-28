@@ -17,7 +17,7 @@
 
 [[tests]]
 name = "arrangeable_families.loops_and_branches"
-desc = "The whole table at once, on the program that carries every family: 210 nodes, and the eight family rows that cover them. `brch` 11 kept and `loop` 11 kept answer the same way for the same reason: a branch stands for its arms and a loop for its regions, and what runs inside them holds a node this kind declines for -- a call, a gate -- so no branch or loop of this program is free. That is a reading of this program's arms: `branch_and_effect` below carries a branch whose arms hold no such node and reads it free. `oper_may_fault` 17 kept and `oper_no_record` 1 free are the operator record read for what it states: a division may fault where it is written, and a FILL names no operator, so the fact answers it by the operation the node performs. `value` 132, `oper` 20, `call` 17 and `gate` 1 are the four other families, and the rows add up to the total. The draft answers the same 210 nodes the same way, so this is a reading of the model and not of one representation of it."
+desc = "The whole table at once, on the program that carries every family: 210 nodes, and the eight family rows that cover them. `brch` 11 with 5 kept is the branch whose arm carries an exit GATE -- the branch is then a statement on the chain its arm runs on, and a pass that moved it would move the order it holds (3.4). `loop` 11 with 7 free is the other side of the same principle: a bounded `for` over a body that cannot fault and reaches nothing is known to end, so 3.4 tells nothing a pass may not move about, while the 4 kept ones carry their order inside them. `oper_may_fault` 17 kept and `oper_no_record` 1 free are the operator record read for what it states: a division may fault where it is written, and a FILL names no operator, so the fact answers it by the operation the node performs. `value` 132, `oper` 20, `call` 17 and `gate` 1 are the four other families, and the rows add up to the total. The draft answers the same 210 nodes the same way, so this is a reading of the model and not of one representation of it."
 kind = "behavior"
 case = "../../../cases/loops/arm_loops.cml"
 args = ["${case}", "test::facts_compare"]
@@ -39,8 +39,8 @@ const want = {
     oper_may_fault: [17, 0, 17],
     oper_no_record: [1, 1, 0],
     call: [17, 0, 17],
-    brch: [11, 0, 11],
-    loop: [11, 0, 11],
+    brch: [11, 6, 5],
+    loop: [11, 7, 4],
     gate: [1, 0, 1],
 }
 const cols = ['nodes', 'free', 'kept']
@@ -59,14 +59,14 @@ assert(fam.reduce((acc, l) => acc + num(l, 'nodes'), 0) === num(line, 'nodes'),
     `the family rows do not cover the nodes: ${fam.join(' ; ')}`)
 assert(num(line, 'nodes') === 210, `the program's node count moved: ${line}`)
 assert(num(line, 'no_fact') === 0, `a node got no answer from the kind at all: ${line}`)
-assert(num(line, 'free') === 153 && num(line, 'kept') === 57,
+assert(num(line, 'free') === 166 && num(line, 'kept') === 44,
     `the two answers no longer split the program the way the rows do: ${line}`)
-// The two rows the batch exists for, by name: what a branch and a loop answer when what runs inside
-// them holds a node the kind declines for.
+// The two rows the batch exists for, by name: the branch whose arm holds an order, and the bounded
+// loop over a pure body.
 const brch = fam.find(l => l.includes(' family=brch '))
-assert(num(brch, 'kept') === 11, `a branch of this program is free: ${brch}`)
+assert(num(brch, 'kept') === 5, `the branch whose arm carries an exit GATE is not kept: ${brch}`)
 const loop = fam.find(l => l.includes(' family=loop '))
-assert(num(loop, 'free') === 0, `a loop of this program is free: ${loop}`)
+assert(num(loop, 'free') === 7, `a bounded loop over a pure body is not free: ${loop}`)
 // The draft answers the same families the same way: the graph an editing session holds is the one the
 // freeze and the passes ask, so a count that holds on the frozen side alone is a fact of one
 // representation and not of the model.
@@ -190,7 +190,7 @@ assert(line, 'no answers line')
 const num = (t, n) => { const m = t.match(new RegExp(n + '=([0-9]+)')); assert(m, `${n} is missing from: ${t}`); return Number(m[1]) }
 const brch = fam.find(l => l.includes(' family=brch '))
 assert(brch, `the program branches and there is no brch row: ${fam.join(' ; ')}`)
-assert(num(brch, 'nodes') === 1 && num(brch, 'free') === 0 && num(brch, 'kept') === 1,
+assert(num(brch, 'nodes') === 1 && num(brch, 'free') === 1 && num(brch, 'kept') === 0,
     `a branch whose arms hold no order was kept: ${brch}`)
 assert(num(line, 'no_fact') === 0, `a node got no answer from the kind: ${line}`)
 assert(fam.reduce((acc, l) => acc + num(l, 'nodes'), 0) === num(line, 'nodes'),
