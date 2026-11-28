@@ -295,6 +295,7 @@ export async function measure({ repo, fetch = true, stateDir = '', buildHost = '
             const porcelain = await git(['status', '--porcelain'])
             const lines = porcelain === '' ? [] : porcelain.split('\n')
             return {
+                path: repo,
                 head: await git(['rev-parse', '--abbrev-ref', 'HEAD']),
                 dirty: lines.length,
                 // The paths themselves, so a reminder can say where a write landed (the first few).

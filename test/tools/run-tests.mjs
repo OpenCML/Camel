@@ -857,6 +857,15 @@ const RERUN_SECOND_DIR = 'rerun/second'
 // kills the child at it either way, so a test that really runs too long still fails.
 export const NO_CPU_TIME_SKIP = 'skipped: this host reports no CPU time'
 
+// The verdicts that are not red: a pass, a `flaky` case that passed on its second attempt, a skip and
+// an expected failure. Every other verdict is red, including any the runner adds later. The summary
+// row states the answer (`red`) so that a reader of the summary does not keep its own list.
+const NOT_RED_STATUSES = new Set(['pass', 'flaky', 'skip', 'xfail'])
+
+export function isRedStatus(status) {
+    return !NOT_RED_STATUSES.has(status)
+}
+
 // What a case's record says about the CPU time it cost. A record carries a figure or a sentence
 // saying why there is none; it never carries 0, which a reader would take as "this case is free"
 // while the truth is "nobody measured it". The figure comes from the wrapper the runner already
@@ -4787,6 +4796,7 @@ function slotTiming(entry, clock, marks, windows) {
         // known intermittent defect may explain from one it cannot.
         flaky: entry.test.__flaky ?? null,
         status: entry.outcome ? entry.outcome.status : 'fail',
+        red: isRedStatus(entry.outcome ? entry.outcome.status : 'fail'),
         // The child was ended at its limit: what separates a case that is slow from one that is wrong.
         timed_out: result ? result.timedOut === true : false,
         serial: clock.serial === true,
