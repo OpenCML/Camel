@@ -1,0 +1,4 @@
+pair 16
+camel_passes.fold_fault.without_the_pass
+camel_passes.fold_fault.same_run
+identical: 0 bytes
