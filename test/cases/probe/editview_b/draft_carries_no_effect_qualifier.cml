@@ -1,0 +1,20 @@
+// An effect qualifier is a subtype relation, not part of what a function type is (design principles
+// 5.2): `(x: int) => int` and `(x: int) => int pure` are one type, so they are one draft type as
+// well, and a draft opened on a function the compiler proved pure commits through a call that
+// writes the type without the qualifier. The commit answers with the type it was opened on.
+//
+// This is the face of `Draft<F>` the type identity decides: the draft's type argument is read
+// through `typeEqualsIgnoringResources`, and the intern key of the draft type is the signature with
+// its resource clause left unwritten, so the two writings are one entry of the type table.
+import { commit, open } from graph
+
+func inc(x: int) => int {
+    return x + 1
+}
+
+func main() sync {
+    let d = open(inc)
+    // The draft is `Draft<(x: int) => int pure>`; the type written here is `(x: int) => int`.
+    let g = commit::<(x: int) => int>(d) !! inc
+    println(g(4))
+}

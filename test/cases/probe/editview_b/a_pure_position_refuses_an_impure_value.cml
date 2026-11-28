@@ -1,0 +1,22 @@
+// The other direction of the same principle (design principles 5.2): an effect qualifier is a
+// subtype relation, and it only runs one way. A `pure` function fits a position that writes no
+// effect -- that is the case beside this one -- but a function that touches a resource does not
+// fit a position that promises `pure`. The promise is a promise to the caller, so it is checked
+// where the value meets it.
+//
+// `loud` writes to the console, so its type is not pure; `takes_pure` states `pure` on its
+// parameter, and the call `takes_pure(loud)` is the type error this case reads.
+import { println } from io
+
+func loud(x: int) => int sync {
+    println(x)
+    return x
+}
+
+func takes_pure(g: (x: int) => int pure) => int {
+    return g(1)
+}
+
+func main() => int sync {
+    return takes_pure(loud)
+}
