@@ -1,9 +1,9 @@
-tip=fd950804d6 (origin/develop); machine=build host (zjwei@camel-work); load=~40 (1m) at read time; date=2026-11-28; PRELIMINARY, not final
-category,files_glob,lines,rule_count,note
-autodiff_cpp,src/stdlib/autodiff/** + transforms/jvp.cpp + transforms/split.cpp,12131,—,pullback.cpp 5435 + jvp.cpp 3468 + split.cpp 2625 dominate
-autodiff_rulesets_cml,src/stdlib/rulesets/**,4071,43 export func,43 xport func declarations across the rulesets .cml files
-onnx_export,src/stdlib/onnx/** + onnx.cml,12880,—,exporter.cpp 5738 is the largest single file in the library
-rules_rewrite,src/stdlib/rewrite/**,6399,—,module.cpp 4852
-cxx_opt_lang,src/stdlib/std/cxx/**,8304,—,generic.cpp 2140 + defunctionalize.cpp 1967
-quant,src/stdlib/**quant**,—,—,no path matched quant in this tree; recorded as — rather than 0 (nothing to measure, not measured zero)
-opt_cml,src/stdlib/std/cxx/**/*.cml,—,—,no .cml files under std/cxx in this tree; the Lang-side rewrite lives in rewrite/ (counted above)
+tip=353d36e3d1 (lane/cc-eval-prelim-2; source identical to fd950804d6 -- `git diff --name-only fd950804d6 353d36e3d1 -- src` is empty); machine=build host (zjwei@camel-work); load=~30 (1m, about 3 cores of it not Camel: qemu/sidekiq/llm_server); date=2026-11-28; PRELIMINARY, not final; lines = wc -l (physical, newline bytes), the second figure is the older Get-Content Measure-Object -Line (non-empty lines) for comparison
+category,files_glob,files,lines_wc_l,lines_measure_object_line,decl_kind,decl_count,note
+autodiff_cpp,"src/stdlib/autodiff/** + transforms/jvp.cpp + transforms/split.cpp",12,12530,12131,—,—,"requires the C++ side: module.cpp 66, operators.cpp 281, pullback.cpp 5655, jvp.cpp 3509, split.cpp 2676 (all wc -l)"
+autodiff_rulesets_cml,"src/stdlib/rulesets/{jvp,transpose,vmap}.cml",3,4329,3960,"export rule / export func","187 / 43","jvp.cml 98/14, transpose.cml 62/1, vmap.cml 27/28; the 43 export func is this category only, not the ruleset directory"
+quant_ruleset_cml,src/stdlib/rulesets/int8.cml,1,71,69,"export rule / export func","1 / 0","The glob `src/stdlib/**quant**` matched nothing because the file is named int8.cml; the earlier "—" was a wrong glob, not an absent library"
+onnx_export,"src/stdlib/onnx/** + onnx.cml",19,13585,12880,—,—,"exporter.cpp 5946 is the largest single file in the library"
+rules_rewrite,src/stdlib/rewrite/**,10,6725,6399,—,—,"module.cpp 5038"
+cxx_opt_lang,src/stdlib/std/cxx/**,27,8768,8304,—,—,"generic.cpp 2204 + defun/defunctionalize.cpp 2030; the four rewrites' surface is 5504 of these lines (see the B reading)"
+opt_cml,src/stdlib/opt.cml,1,552,484,"export rule / export func","0 / 6","The Lang-side rewrite is here, not under std/cxx: fold, cse, dce, inline as Camel functions; replaces the four rewrites in std/cxx/opt/**"
