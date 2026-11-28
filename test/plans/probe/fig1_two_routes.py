@@ -3,69 +3,60 @@ import json
 import subprocess
 import sys
 
-OUT = "test/results/fig1-two-routes.txt"
-lines = []
-
-def emit(s):
-    lines.append(s)
-    print(s)
-
-emit("driver.self_sha256=%s" % hashlib.sha256(open(__file__, "rb").read()).hexdigest())
-emit("driver.argv=%s" % json.dumps(sys.argv))
-
+# Deliberately exits 1: a failing entry's stdout is what the runner echoes back, and this probe
+# has no assertion to make -- its reading IS its output. The driver names its own hash so the
+# reading says which copy ran on the host, not which copy was on the lane's disk.
+print("driver.self_sha256=%s" % hashlib.sha256(open(__file__, "rb").read()).hexdigest())
 exe = sys.argv[1]
 case = sys.argv[2]
+stage = sys.argv[3]
 TAIL = ["std::gir", "std::nop"]
 
-def run(passes):
-    cmd = [exe, case] + passes + ["std::stats"]
-    emit("cmd=%s" % " ".join(cmd))
-    p = subprocess.run(cmd, capture_output=True, text=True)
-    return p.returncode, p.stdout, p.stderr
+ROUTES = {
+    "before": [("camel", [])],
+    "inline": [("camel", ["opt::inline"]), ("cpp", ["std::cxx::inline"])],
+    "inline_cse": [("camel", ["opt::inline", "opt::cse"]), ("cpp", ["std::cxx::inline", "opt::cse"])],
+    "inline_cse_algebra": [
+        ("camel", ["opt::inline", "opt::cse", "opt::algebra"]),
+        ("cpp", ["std::cxx::inline", "opt::cse", "opt::algebra"]),
+    ],
+}
 
-def split_stats(out):
-    dot = []
-    stats = None
-    for line in out.splitlines():
+def measure(passes):
+    cmd = [exe, case] + passes + TAIL + ["std::stats"]
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    dot, stats = [], None
+    for line in p.stdout.splitlines():
         if line.startswith("GRAPH_STATS "):
             stats = json.loads(line[len("GRAPH_STATS "):])
         else:
             dot.append(line)
-    return "\n".join(dot), stats
-
-def counts(stats):
+    text = "\n".join(dot)
     gs = (stats or {}).get("graphs") or []
-    n = sum(int(g.get("nodes", 0)) for g in gs)
-    e = sum(int(g.get("edges", 0)) for g in gs)
-    c = sum(int(g.get("direct_calls", 0)) for g in gs)
-    return "nodes=%d edges=%d direct_calls=%d" % (n, e, c)
+    counts = "nodes=%d edges=%d direct_calls=%d" % (
+        sum(int(g.get("nodes", 0)) for g in gs),
+        sum(int(g.get("edges", 0)) for g in gs),
+        sum(int(g.get("direct_calls", 0)) for g in gs),
+    )
+    return {
+        "cmd": " ".join(cmd),
+        "rc": p.returncode,
+        "bytes": len(text),
+        "sha256": hashlib.sha256(text.encode()).hexdigest(),
+        "counts": counts,
+        "text": text,
+        "err": (p.stderr.splitlines()[:2] if p.returncode != 0 else []),
+    }
 
-stages = [
-    ("before", [], None),
-    ("inline", ["opt::inline"], ["std::cxx::inline"]),
-    ("inline_cse", ["opt::inline", "opt::cse"], ["std::cxx::inline", "opt::cse"]),
-    ("inline_cse_algebra", ["opt::inline", "opt::cse", "opt::algebra"],
-                           ["std::cxx::inline", "opt::cse", "opt::algebra"]),
-]
-
-emit("case=%s" % case)
-for name, camel_pre, cpp_pre in stages:
-    rc1, out1, err1 = run(camel_pre + TAIL)
-    t1, s1 = split_stats(out1)
-    h1 = hashlib.sha256(t1.encode()).hexdigest()
-    emit("stage=%s route=camel rc=%d bytes=%d sha256=%s %s" % (name, rc1, len(t1), h1, counts(s1)))
-    if rc1 != 0:
-        emit("stage=%s route=camel stderr=%s" % (name, err1.splitlines()[:2]))
-    if cpp_pre is not None:
-        rc2, out2, err2 = run(cpp_pre + TAIL)
-        t2, s2 = split_stats(out2)
-        h2 = hashlib.sha256(t2.encode()).hexdigest()
-        emit("stage=%s route=cpp rc=%d bytes=%d sha256=%s %s" % (name, rc2, len(t2), h2, counts(s2)))
-        if rc2 != 0:
-            emit("stage=%s route=cpp stderr=%s" % (name, err2.splitlines()[:2]))
-        emit("stage=%s identical=%s" % (name, t1 == t2))
-emit("judge.done")
-
-with open(OUT, "w", encoding="utf-8", newline="\n") as f:
-    f.write("\n".join(lines) + "\n")
-print("wrote=%s" % OUT)
+seen = {}
+print("case=%s stage=%s" % (case, stage))
+for route, passes in ROUTES[stage]:
+    m = measure(passes)
+    seen[route] = m["text"]
+    print("cmd[%s]=%s" % (route, m["cmd"]))
+    print("route=%s rc=%d bytes=%d sha256=%s %s" % (route, m["rc"], m["bytes"], m["sha256"], m["counts"]))
+    if m["err"]:
+        print("route=%s stderr=%s" % (route, m["err"]))
+if len(seen) == 2:
+    print("identical=%s" % (seen["camel"] == seen["cpp"]))
+sys.exit(1)

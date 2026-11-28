@@ -3,12 +3,44 @@ order = 950
 tier = "fast"
 tags = ["probe", "fig1"]
 
+# Four entries, one per stage: each fails on purpose so the runner echoes its stdout, which is
+# the reading itself (bytes, SHA-256 per route, and the command each side ran).
 [[tests]]
-name = "probe.fig1_two_routes"
-desc = "PROBE: Figure 1's three stages, each side of the two inliners, dot bytes and SHA-256; commits its own identity so the reading names the driver that ran."
+name = "probe.fig1.before"
+desc = "PROBE: Figure 1 before either inliner -- one route, dot bytes and SHA-256."
 kind = "behavior"
 tool = "python"
 case = "fig1_two_routes.py"
-args = ["${case}", "${camel}", "test/cases/opt/cxx_isolation/paper_figure1.cml"]
-expect_stdout_contains = ["judge.done"]
-timeout_ms = 900000
+args = ["${case}", "${camel}", "test/cases/opt/cxx_isolation/paper_figure1.cml", "before"]
+expect_stdout_contains = ["route=camel rc=0"]
+timeout_ms = 300000
+
+[[tests]]
+name = "probe.fig1.inline"
+desc = "PROBE: Figure 1 after one inline -- opt::inline versus std::cxx::inline."
+kind = "behavior"
+tool = "python"
+case = "fig1_two_routes.py"
+args = ["${case}", "${camel}", "test/cases/opt/cxx_isolation/paper_figure1.cml", "inline"]
+expect_stdout_contains = ["identical=True"]
+timeout_ms = 300000
+
+[[tests]]
+name = "probe.fig1.inline_cse"
+desc = "PROBE: Figure 1 after inline and cse -- the two routes."
+kind = "behavior"
+tool = "python"
+case = "fig1_two_routes.py"
+args = ["${case}", "${camel}", "test/cases/opt/cxx_isolation/paper_figure1.cml", "inline_cse"]
+expect_stdout_contains = ["identical=True"]
+timeout_ms = 300000
+
+[[tests]]
+name = "probe.fig1.inline_cse_algebra"
+desc = "PROBE: Figure 1 after inline, cse and algebra -- the two routes."
+kind = "behavior"
+tool = "python"
+case = "fig1_two_routes.py"
+args = ["${case}", "${camel}", "test/cases/opt/cxx_isolation/paper_figure1.cml", "inline_cse_algebra"]
+expect_stdout_contains = ["identical=True"]
+timeout_ms = 300000
