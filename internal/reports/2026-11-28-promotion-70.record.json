@@ -1,0 +1,68 @@
+{
+  "kind": "promotion",
+  "promotion": 70,
+  "tip": "e6a0174e91361734fb6ed703c694628a684f2c12",
+  "measured_tip": "e6a0174e91361734fb6ed703c694628a684f2c12",
+  "pushed_develop_sha": "e6a0174e91361734fb6ed703c694628a684f2c12",
+  "landing_tip": "the record is a documentation commit and lands on whatever integration holds at push time; the batch that arrived while this layer ran is d3ca35e552, and it is not covered by this reading",
+  "note": "the layer was measured at e6a0174e91, the tip carrying lane/index-axis (a subscript axis one dimension too far is refused where the axis is read) and its generated reference page, plus the notes6 snapshot batch. A four-branch batch landed on integration while the layer ran; those commits are not covered by this reading, and the next promotion compares against this table on the newer tip rather than mixing the two",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at e6a0174e91; load 1m 40.39 at the start of the run",
+  "binary_built": "2026-11-28T09:41:00+08:00",
+  "readings": {
+    "total": 9891,
+    "pass": 9688,
+    "fail": 142,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 2,
+    "re_run": 2,
+    "re_run_passed": 0,
+    "load_before": "1m 40.39, 5m 40.58, 15m 44.03",
+    "load_warning": "[load] WARNING: 1m load 39.31 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth to sixty-ninth layers carried; a promotion does not wait on load, D-1128-36)"
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-69-reds.tsv (the sixty-ninth promotion, 143 names)",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], both sides trimmed, with the plan aliases transforms/compile.transforms and stated_extents/compile.stated_extents read as the same plan",
+    "still_red": 142,
+    "turned_green": 1,
+    "turned_green_names": [
+      "modules.tensor.subscript.slice_step_zero"
+    ],
+    "new_reds": 0,
+    "new_reds_names": [],
+    "vanished_reds": 0,
+    "arithmetic": "143 names before: 1 turned green, 0 vanished, 0 appeared, 142 remain red; 142 = this reading red case names",
+    "notes": [
+      "the one that turned green is modules.tensor.subscript slice_step_zero, and the index-axis change is what repaired it: a subscript axis one dimension too far is now refused where the axis is read",
+      "cxx_isolation.inline_closure.by_cpp did not appear at all in this reading, so the 'expected 4/26 against a baseline that read 4/25' note was not needed; the lane has since replaced that count with a byte-for-byte jgir comparison",
+      "the ast hash record was re-recorded on the merged tree by the batch that arrived during this run; this reading says nothing about that re-record",
+      "the four examples.case_study.break_rate names turned green in the sixty-ninth promotion because the main-effects batch repaired them, and none of them changed in this one",
+      "fault_deep.prl_off is absent for the fourth round running: the scheduler root-cause fix holds and no known-flaky allowance was used",
+      "the two timeouts are the two transpose_loop_escape cases; they were run alone at this tip and stayed red"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 2,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [
+      "transpose_loop_escape.second_state_of_the_same_loop.nvm",
+      "transpose_loop_escape.two_states_before_the_escape.nvm"
+    ],
+    "how": "node test/tools/run-tests.mjs test/plans/feat/compile/transforms.plan.toml --tier fast --jobs 1 --entry of each of the two, at the same tip e6a0174e91"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-70-reds.tsv",
+  "red_table_rows": 142,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-70-reds.tsv",
+  "new_red_names": [],
+  "pushed_as": "develop, fast-forwarded from 2689335c47 to e6a0174e91, the tip this layer measured",
+  "develop_before": "2689335c47edd8746d92816f4a6d32b2a5975567",
+  "develop_after": "e6a0174e91361734fb6ed703c694628a684f2c12",
+  "commits_brought_in": 25,
+  "commits_touching_src": 4
+}

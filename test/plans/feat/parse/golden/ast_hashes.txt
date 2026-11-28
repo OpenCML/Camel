@@ -435,7 +435,7 @@ d151f6c942667034 ok docs/tutorial/examples/17_rule.cml
 f023cd6395d01cd4 ok examples/hello.cml
 d7e70dcbe27f0bc5 ok examples/algorithms/binary_search.cml
 bf53486e8f4f22dc ok examples/algorithms/merge_sort.cml
-8aa5ca2f4cbd941d ok examples/case-study/edits.cml
+d3c9f72423eead46 ok examples/case-study/edits.cml
 6775db2242ff18db ok examples/case-study/train.cml
 43510c7a07eae7a6 ok examples/case-study/writings/moved.cml
 7c6c81462df96d19 ok examples/case-study/writings/renamed.cml
@@ -520,7 +520,7 @@ ff143e01e0e4dbb0 ok src/stdlib/bytes.cml
 a5076fc3f00f63eb ok src/stdlib/ckpt.cml
 091e49283aec1438 ok src/stdlib/env.cml
 0797036114bc4a4c ok src/stdlib/fs.cml
-d212a4f761e59cd2 ok src/stdlib/graph.cml
+6fc6d3a548865115 ok src/stdlib/graph.cml
 c653d7d211aed8b2 ok src/stdlib/hash.cml
 cb32c9dd5cb81d91 ok src/stdlib/io.cml
 70530f2be80f49bf ok src/stdlib/json.cml
@@ -528,7 +528,7 @@ cb32c9dd5cb81d91 ok src/stdlib/io.cml
 ff9eee9cbc6a4008 ok src/stdlib/math.cml
 4bd3189fe34a101a ok src/stdlib/nn.cml
 109cb1c3af0c4f8a ok src/stdlib/onnx.cml
-8e30555972565f0c ok src/stdlib/opt.cml
+564dc3104925f334 ok src/stdlib/opt.cml
 49015cbc4407a506 ok src/stdlib/optim.cml
 cfd1905583789732 ok src/stdlib/para.cml
 a82098797df46210 ok src/stdlib/perf.cml
@@ -3229,7 +3229,7 @@ e75f109b24c04be0 ok test/cases/modules/graph_pass/imports_unparsable.cml
 6ea03a29f9d0ec39 ok test/cases/modules/graph_pass/innerlib.cml
 f37b55c6117610df ok test/cases/modules/graph_pass/libvals.cml
 dcd35cafcfd7ff96 ok test/cases/modules/graph_pass/monomorphic.cml
-934f7612d5b56c2a ok test/cases/modules/graph_pass/neutral.cml
+ed247d5adb9b0127 ok test/cases/modules/graph_pass/neutral.cml
 8ff60be3d7e98664 ok test/cases/modules/graph_pass/neutral_identities.cml
 0ef49c75e54acddb ok test/cases/modules/graph_pass/neutral_kept.cml
 230d84379d794017 ok test/cases/modules/graph_pass/neutral_target.cml
@@ -3248,7 +3248,7 @@ e0c9341cf4dd6898 ok test/cases/modules/graph_pass/sharedvals.cml
 510291ea8993c997 ok test/cases/modules/graph_pass/typed_target.cml
 167f5101502eaaab no test/cases/modules/graph_pass/unparsable_pass.cml
 e6704f3f915eaf57 no test/cases/modules/graph_pass/unparsable_pass_lib.cml
-0d9ea4761e7eb003 ok test/cases/modules/graph_pass/unused.cml
+928e104dfdbeee31 ok test/cases/modules/graph_pass/unused.cml
 c2d2177e9dfe63bd ok test/cases/modules/graph_pass/unused_target.cml
 3f7311c80d527aab ok test/cases/modules/graph_pass/valuelib.cml
 78c57c20b14705d4 ok test/cases/modules/graph_pass/valuereader.cml
@@ -4399,9 +4399,14 @@ f25c15ccece763f9 ok test/cases/probe/editview/sec2_fold.cml
 6ac021df26b03660 ok test/cases/probe/editview/view_value.cml
 880e193a7c753d55 ok test/cases/probe/editview/view_value_is_a_plain_value.cml
 45c24411f3aa8b00 ok test/cases/probe/editview/view_value_is_not_an_int.cml
+6c1299cf82ee81d5 ok test/cases/probe/editview_b/a_pure_position_refuses_an_impure_value.cml
 c383735000dff388 ok test/cases/probe/editview_b/design_view_min.cml
+65b01d5f038c16af ok test/cases/probe/editview_b/draft_carries_no_effect_qualifier.cml
+6ebb70bbc91f9700 ok test/cases/probe/editview_b/draft_commits_as_its_own_type.cml
 ec472584d295d9b0 ok test/cases/probe/editview_b/draft_handle_leaves.cml
+0c250343126ae393 ok test/cases/probe/editview_b/draft_of_one_type_is_not_another.cml
 e8b9006a89ad0284 ok test/cases/probe/editview_b/escapes_accepted.cml
+9fcff0b61b92d5e1 ok test/cases/probe/editview_b/graph_is_not_a_draft.cml
 56a9cd3a0c456b01 ok test/cases/probe/foreach_lambda/array_filter.cml
 53e0dcf9fd3a0f8d ok test/cases/probe/foreach_lambda/array_form.cml
 5eb7d39ff618ccff ok test/cases/probe/foreach_lambda/array_map.cml

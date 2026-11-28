@@ -29,7 +29,7 @@
  */
 
 import { flatten, all, any, drop, flat_map, unique } from array
-import { Node, Graph, NodeKind, Region, RegionKind, graphs_of, graphs, nodes, inputs, with_inputs, value_users, kind, op, op_name, callee, callee_is_self, may_be_recomputed, may_fault, may_be_rearranged, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, region_kind, region_parent, permissions, tags, constant, open, replace, erase, eval, commit, abort, inline_call } from graph
+import { Node, Graph, Draft, NodeKind, Region, RegionKind, graphs_of, graphs, nodes, inputs, with_inputs, value_users, kind, op, op_name, callee, callee_is_self, may_be_recomputed, may_fault, may_be_rearranged, is_anchor, is_written_slot, is_constant, constant_bytes, type_of, type_name, region_of, region_kind, region_parent, permissions, tags, constant, open, replace, erase, eval, commit, abort, inline_call } from graph
 import { saturate as saturate_rules } from rewrite
 import { algebra as algebra_laws, distribution, simplify } from rules
 import { is_function } from types
@@ -239,7 +239,7 @@ func dead_value(n: Node) => bool {
 
 // An edit acts on the draft its node belongs to, so the hits are erased in the draft they were
 // found in, and that draft is the one committed.
-func erased::<F>(d: Graph, hits: Node[]) => F! sync {
+func erased::<F>(d: Draft<F>, hits: Node[]) => F! sync {
     hits->foreach<func (n: Node) => void {
         erase(n)
     }>
@@ -333,7 +333,7 @@ func fold_round(hits: Node[], budget: int) => bool {
 // round started from is then the answer. Each is a function of its own because an effect written
 // inside an arm of a `match` or an `if` does not run, so one branch cannot commit inline while the
 // other abandons.
-func committed::<F>(d: Graph) => F! sync {
+func committed::<F>(d: Draft<F>) => F! sync {
     return commit(d)
 }
 

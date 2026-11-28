@@ -544,3 +544,44 @@ git worktree add --detach <旧提交>
 
 **13. 任务板的例行清理：超过 230 张就清一次 `completed`。**
 决策者 2026-11-28 定（`D-1128-62`，起因是 `team_task_create` 报 `Team task limit 256 reached`，派不出新卡）：板上总数**超过 230** 就清 `completed`，**只删 `completed`，`in_progress`/`pending`/`blocked` 一张不动**；**不用先列 id 给他** —— 卡的记录在 `internal/backlog.md` 与提交里，卡只是派活的把手。清的时候按 `team_task_list({status:"completed"})` 分页取 `id + revision`，逐张 `team_task_update({action:"delete", expected_revision})`。清到 230 以下即可继续派活；不要一次清空（每次删 20–30 张，观察两轮再说）。
+
+**14. 「甲」的尺子必须是**同一份计划、同一个跑法**；68 表只是**fast 集合**的尺子。**
+`lane-ssa-residue` 在整文件跑 `test/plans/feat/modules/onnx.plan.toml` 时得到三条红（`pass_export_equals_export_model`、`ort_core_slice`、`export_loop_for`），它们在已发布的 `2026-11-28-promotion-68-reds.tsv`（147 名）里**查不到** —— 但**不是它带来的**：那张表是按 `feat/modules` 的 fast 集合登记的，整文件运行还会启动**表外**的慢层/tier 条目。正确的判法是**同一份计划的改前/改后读数对账**：`150/119/30` → `150/118/31`，三条在改前改后都在红名单里，真正新增的只有 `export_unsupported_op`（31−30=1）。⇒ 凡"整文件跑出来的红"要判甲，先取改前读数；拿 68 表查不到就说"甲"是错的。
+
+**15. 生成文件（`ast_hashes.txt`）在换底时的处理：冲突统一取一侧，重放完再一次重生成，单列一笔。**
+26 笔重放撞在 `test/plans/feat/parse/golden/ast_hashes.txt` 上 —— 它没有语义可解。定法是：冲突时对这份文件统一 `git checkout --theirs`（rebase 里 `--theirs` = 被重放的那笔），**不逐笔看内容**；全部重放走完后 `-UpdateAstHashes` 一次、**单列一笔**（"golden: the AST record regenerated after the rebase onto `<sha>`"，不 amend 进语义提交），再单跑 `feat/parse` 证明绿。
+
+**16. 别用字符串替换去改 `verify_*` 的 JS 行。**
+同一手法连坏三次（引号、反引号模板串、转义），每次都只坏"断言那一行"而读数本身是对的，浪费三轮。改法：**整块重写那个 `[[tests]]` 条目**，写完先单跑该用例再提交。
+
+**17. 台账树的本地提交：不许 `reset --hard` 去对齐尖端，用 `rebase`。**
+我把 `docs/backlog-sync` 上**未推**的台账提交（`53826b8f37`，三课）用 `git reset -q --hard origin/integration` 对齐尖端，那一笔就掉出了分支 —— 只能靠 `git reflog` 找回（`HEAD@{5}` 那条 `commit:`）再 `cherry-pick` 回来。**定法**：对齐尖端一律 `git rebase origin/integration`；真要 reset，先 `git log --oneline origin/integration..HEAD` 确认**没有**未推提交。恢复手法也记下：`git reflog` 找 `commit:` 那一行 → `git cat-file -t <sha>` 确认对象还在 → `git cherry-pick <sha>`。
+
+**18. 判晋级死活：看 `oversight_readings` 的 `panel.running`，不看 `.log` 的 mtime。**
+晋级 69 的远端 stdout 日志按块缓冲，`promo69-*.log` 曾连续 8 分钟停在 1749 行，而 `panel.running` 里一直有 `{worktree: promote, phase: plan, startedAt 08:19:01}`。我先拿日志 mtime 判"卡住"、又拿 `camel-gate-state\test-state.json` 的 mtime 判"活着"（那个文件是**令牌池**，别人跑也会更新它，**不证明这一轮在跑**）。⇒ 唯一可信的是 `panel.running` 里有没有这条 run、`phase` 是什么。日志只用来读 `[SUMMARY]`/`[PASS]` 原文。
+
+**19. `git cherry` 的普查必须在换底之外、对完整 HEAD 做；`-AstOnly` 必须逗号一次传。**
+`lane-ssa-residue` 在 rebase 进行中跑 `git cherry b250a0659b HEAD`，只数到已重放的 10 笔（`plus=10`），abort 之后才对完整 HEAD 得到 `plus=25 minus=0` —— 两个数会得出相反结论。另一条来自 `lane-enter-shape`：`-UpdateAstHashes -AstOnly 'a.cml,b.cml'` 的 `-AstOnly` 要**一次逗号传完**，重复传参会绑定失败。
+
+**21. 任务板 id 与内部卡号是两套编号，永远不要混着写。**
+`D-1128-64` ③：我在板上建了 `task-392`（删 `graph::commit_of`），而 `internal/collab/task-392-math-abs-l.md` 是另一件活（`math:abs_l`），决策者看到"task-392"立刻问"卡号别混"。板上 `task-N` 是 `team_task_create` 的顺序号，与 `internal/collab/task-N-*.md` **毫无关系**。**定法**：派工与回执里写"**板上** `task-N`"或"**内部卡** `task-N-<slug>`"，建卡时把"这是谁的哪一步"写进标题（如"这是 `task-374` 的一步"），并在接回里的第一行复述一遍。
+
+**22. "`src/**` 零改动 ⇒ 不用跑整层"不等于"不用重录 AST"。**
+`docs/notes6` 落地时合并位踩到（`seat-merge-1`，`db77af3b49`）：那枝 `src/**` 零改动，可它**改了 `test/cases/modules/rules/check_when.cml`、加了 `test/cases/modules/stdlib/abs_smallest_int.cml`** —— 两条都在 AST 记录里 ⇒ 首趟 `parse.frontend frontend.ast_record` 报甲（`recorded 04da6afb… now 4835f1d1…` / `missing … recorded -`）。按金标纪律"只读 check → `-UpdateAstHashes` → 只读 check"补 `4704 lines recorded, 2 added and 1 removed`，再 check `4704 file(s) checked, 0 stale`，单列一笔只动 `ast_hashes.txt`。
+**判据分两件事**：判**要不要跑整层**看 `src/**`；判**要不要重录 AST**看有没有动 `src/**/*.cml`、`test/cases/**`、`docs/tutorial/examples/**`（三者任一都要看；`ast_hashes.txt` 收的是 `.cml` 内容哈希，含 `src/stdlib/**`，注释也参与）。**同一族第二次踩**：`opt-inline` 改了 `src/stdlib/opt.cml` ⇒ 下一批 `frontend.ast_record` 报 `mismatch src/stdlib/opt.cml recorded 8e30555972 now f1d50ae81a`。
+
+**23. 派工里写的工作树路径不存在时，车道会落在主检出上 —— 派工前先核路径。**
+`lane-oper-shape-guard` 接 `jvp` 那条活时，我写的树是 `D:\Projects\Camel-wt\op-guard`（**不存在**）；它 `Set-Location` 报错后，后续 `git switch -c lane/jvp-through-loop origin/integration` 落进了**主检出 `D:\Projects\Camel`**（会话默认目录），主树 HEAD 就此离开负责人位置，插件当场报 `main-checkout-touched` 并列出 3555 个"改动"（其实是换枝造成的文件差异，不是脏）。车道没动代码、没提交；恢复三行：`git -C <主树> switch --detach <原游离 sha>`、`git -C <主树> branch -D <误建的枝>`、再各报一次 `status` 与 `rev-parse --abbrev-ref HEAD`。
+**教训**：① 派工里每条路径**先 `Test-Path`**，写错一个字就等于把活派进负责人的树；② 车道起手第一句应是"`cd <树>` 成功了吗"（`Set-Location` 失败**不中断** PowerShell 后续命令，所以错会静默传播）；③ 主检出那时的本地 `develop` 还比 `origin/develop` 多一笔 promotion-67 的 record 提交（`git cherry origin/integration develop` 给 `-`，内容已在 integration 里）—— 那种状态下主树不是"干净地停在 develop 上"，**先核等价、再 `reset --hard origin/develop` 对齐**，别直接快进。
+
+**20. 一行级工具错误的例外用法（铁律 18 的实操）。**
+`benchmarks/tools/grad_referee.py` 把计划给的 `--block-limit` 原样转给 camel，而 camel 只认 `--spaces block_mb=`（`src/tools/camel-cli/config.cpp:650/:823/:1239`）⇒ `unknown option`、4 条 slow 用例全红。改法唯一（目标写法由 CLI 自己规定），按铁律 18 例外我先改后报：`cmd += ["--spaces", f"block_mb={_block_limit_mb}"]`，当轮 `oversight_tell` 写明"改了哪一行、为什么只能这样改、不同意就回退"。**两笔缺一不可**：计划侧传裁判的参数名（`--block-limit`）与脚本侧传 camel 的参数名（`--spaces block_mb=`）是两个不同的接口，别把两笔当成重复。
+
+**24. 判"这条红是谁的账"先换基线跑一遍，别先怀疑合并进来的枝。**
+`cxx_isolation.inline_closure.by_cpp` 在合并位读出 `4/25`（期望 `4/26`），我第一反应是"哪条枝合进来把它带红了"。`lane-oper-shape-guard` 用同一语料（`bound_closures.cml`）在自己的两棵树上各跑一次就分开了：`lane/opt-inline @ bb25349c42`（基线 `8788cb501b`）= **26 绿**；`lane/nvm-int-compare @ 3f33b62591`（基线 `97e6bf8a47`，另含两笔与内联无关的提交）= **25**。两棵树唯一的差别是**基线** ⇒ 变化来自 `8788cb501b..97e6bf8a47` 之间的上游提交，与那两条枝都无关。
+**定法**：判红归属先做"同一个语料、两个基线各跑一次"这一步（一次语料级读数，比二分便宜得多）；确认是基线差之后，先用 `git log <old>..<new> -- <相关路径>` 看那段里有没有人**动过那条路径**（零构建），再决定是"期望该跟改 + 写原因行"还是"转给动它的那条车道"。只有 `git log` 一条都没命中时才值得 `git bisect`（那是每发一次构建）。
+另：`by_cpp` 一侧读的是 C++ 参考实现（`std::cxx::inline`），所以"枝让它红"与"改动造成"是两件事 —— 交回里要分开写。
+
+**25. `provenance` 里带 `dirty: N files` 的读数不是读数。**
+`lane-oper-shape-guard` 报"同语料两个数 26/25、怀疑内联器对执行宽度不可重入"，七跑（`-Jobs 1`×3、`8`×3、`4`×1，同一尖端）**全部 26** ⇒ 宽度无关、也不抖；翻回那次 25 的 `provenance`，写着 `dirty: 4089 files` —— 它建临时枝失败、`merge` 也失败，工作树留在半合状态，25 是**半合的树**读出来的。差一个节点就是这么来的。
+**定法**：交回里凡引读数，必须贴完整 `[provenance]` 行（`tip` + `binary built` + `tier` + `dirty`/空），**`dirty` 非 0 的读数一律打回**（它测的不是任何一个提交）；同理，"临时枝建失败/merge 失败"之后**必须先 `git status` 核空再跑**，否则后续命令全跑在原枝上、还留下半合树。附带一条：建临时枝前先 `git branch --list '<name>*'`，撞名会让 `switch -c` 整条命令失败而后续命令照样执行。
