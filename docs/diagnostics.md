@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-331 diagnostics: 309 errors, 22 warnings. 14 carry a machine-applicable edit, 317 say why they carry none.
+332 diagnostics: 310 errors, 22 warnings. 14 carry a machine-applicable edit, 318 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -285,6 +285,7 @@ prints one entry.
 | `0x0300021B` | [SemanticDiag::UnorderedOverwritingResource](#unorderedoverwritingresource) | Error | no |
 | `0x0300021C` | [SemanticDiag::ReadonlyWriteModifier](#readonlywritemodifier) | Error | no |
 | `0x0300021D` | [SemanticDiag::ObservedReadonlyResource](#observedreadonlyresource) | Error | no |
+| `0x0300021E` | [SemanticDiag::IndexAxisOutOfRange](#indexaxisoutofrange) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
 | `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn | no |
@@ -9541,6 +9542,39 @@ resource trace observed readonly
 
 func main() => int {
     println(42)
+    return 0
+}
+```
+
+### IndexAxisOutOfRange
+
+`0x0300021E` · Error · `SemanticDiag::IndexAxisOutOfRange`
+
+**Fix**
+
+None: choice: which dimension was meant is the writer's
+
+**Message**
+
+```text
+The axis {0} is out of range for a value of rank {1}.
+```
+
+**Help**
+
+```text
+A subscript writes the dimension it reads on, counted from the first dimension, and the value it reads has only the dimensions its type gives it. Write an axis the value has, or write the subscript with one dimension, which writes no axis.
+```
+
+**Example** (`test/cases/probe/index_axis/axis_one_too_far.cml`, run as `camel check test/cases/probe/index_axis/axis_one_too_far.cml`)
+
+```camel
+// The axis a subscript writes is the dimension it reads on, counted from the first dimension.
+// Here the value has one dimension and the subscript writes axis 1, which it does not have: the
+// call is refused where it is built, not when it runs.
+func main() => int sync {
+    let xs: float[3] = [1.0, 2.0, 3.0]
+    let y = xs[[1], 0]
     return 0
 }
 ```

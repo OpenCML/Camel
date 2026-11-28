@@ -1,0 +1,8 @@
+// The axis a subscript writes is the dimension it reads on, counted from the first dimension.
+// Here the value has one dimension and the subscript writes axis 1, which it does not have: the
+// call is refused where it is built, not when it runs.
+func main() => int sync {
+    let xs: float[3] = [1.0, 2.0, 3.0]
+    let y = xs[[1], 0]
+    return 0
+}

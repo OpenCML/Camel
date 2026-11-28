@@ -4412,6 +4412,8 @@ c28725399a89fa6c ok test/cases/probe/foreach_lambda/range_form.cml
 f12c65dd28d23100 ok test/cases/probe/foreach_lambda/range_map.cml
 4d7284b30814ced9 ok test/cases/probe/foreach_lambda/range_reduce.cml
 a3925f0edd3eb2ae ok test/cases/probe/foreach_lambda/range_typed.cml
+731b83959ee0edb1 ok test/cases/probe/index_axis/axis_one_too_far.cml
+29fccc209bb0d7a9 ok test/cases/probe/index_axis/legal_reads.cml
 240b8e7533bc9168 ok test/cases/probe/rule_branch/program_if_control.cml
 a930506f6a23da58 ok test/cases/probe/rule_branch/rule_if_right_side.cml
 033a2196e8695e77 ok test/cases/resources/conflict_per_resource.cml
