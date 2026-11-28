@@ -7,11 +7,12 @@ tags = ["feat", "modules", "graph"]
 
 [[tests]]
 name = "types_and_node_kind"
+desc = "The graph a function names is the graph it belongs to, read twice by two routes and compared; `nodes` answers the same node twice, and `id` gives the positions in `nodes`. The creation number is a counter -- a graph is created with the number the counter holds, and a change that builds more graphs earlier moves every number after it -- so the case reads the order of two graphs created one after the other and never a number: `creation_id` of `later` is greater than `creation_id` of `main` (agents/refactor.md: a test does not measure a count that changes for reasons unrelated to the reading). The node kind prints as its own name."
 kind = "behavior"
 case = "../../../cases/modules/graph_types.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "true\nfalse\ntrue\nfalse\n0\n1\n47\nNodeKind::Oper\n"
+expect_stdout_exact = "true\nfalse\ntrue\nfalse\n0\n1\ntrue\nNodeKind::Oper\n"
 timeout_ms = 10000
 
 [[tests]]

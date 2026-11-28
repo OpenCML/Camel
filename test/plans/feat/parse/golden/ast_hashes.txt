@@ -3042,7 +3042,7 @@ f7bc0c6372879328 ok test/cases/modules/graph_function.cml
 edac82af5852c2ac ok test/cases/modules/graph_handles_compare.cml
 228b26d9862a6cdd ok test/cases/modules/graph_kinds.cml
 05ca41658bc5b49a ok test/cases/modules/graph_read.cml
-8834137bc1ccbf58 ok test/cases/modules/graph_types.cml
+c837dac7499ecff0 ok test/cases/modules/graph_types.cml
 2ebb813bdc6d00c4 ok test/cases/modules/operator_faults.cml
 0869c6a75d9aa6e9 ok test/cases/modules/struct_predicates.cml
 2ef1fcd476951da3 ok test/cases/modules/tree_library.cml
