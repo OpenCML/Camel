@@ -1,0 +1,26 @@
+// A loop whose condition reads its own state, and whose body leaves no residual array behind: the
+// number of rounds is decided by a value only the rounds themselves produce.
+//
+// `halve(x)`: `s` halves while it is above 1.0, so at x = 16 it takes four rounds (16, 8, 4, 2, 1)
+// and answers 1.0. On paper the pullback at cotangent 16.0 is 1.0: the function is `x / 16` there,
+// so its derivative is 1/16 and 16 * 1/16 = 1. The transpose has to know how many rounds there were
+// before it can say that, and the count is not in the graph as a constant: it is whatever the
+// condition decided.
+//
+// The loop carries three states because the reverse side reads its states as the loop's own ports
+// and a loop whose port list is too short to hold one is refused before the round count is asked
+// for at all; `t` and `u` are carried unchanged so the case is about the round count and not about
+// what the rounds compute.
+import rulesets.transpose
+import { transpose } from transforms
+
+func halve(x: float) => float {
+    let (s, t, u) = loop s = x, t = 0.0, u = 0.0 while s > 1.0 do (s / 2.0, t + 1.0, u)
+    return s + t * 0.0 + u * 0.0
+}
+
+func main() sync {
+    let back = transpose(halve)
+    println(halve(16.0))
+    println(back(16.0))
+}

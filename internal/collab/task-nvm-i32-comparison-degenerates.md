@@ -44,3 +44,48 @@ println(abs(m) == abs(m)) true / true
 
 - 2026-11-28 07:3x：卡建立，派给 `lane-witness`（先证方向，再修）。
 - `lane-misc` 的 `abs(INT_MIN)` 正式用例**只断言"值"与"差为 0"**，`==` 那条在定因与修复之前不进断言。
+
+## 结案（`lane/nvm-int-compare`，`1d75f5b1ff` + `06e99d6f63`）
+
+**判词：不是"缺提升"，也不是"取错槽"，是 `==` 把整个 64 位槽字当值比。** 两侧类型都读成 `Int32`
+（gate 打印 `type0=0 type1=0`），取到的数是同一个，只是槽的上半高 32 位一个保留符号
+（`0xfffffffffffffffd`）、一个留零（`0x00000000fffffffd`）；`valuesEqualByContent` 的 `Int32`
+落到 `if (!type->isGCTraced()) return a == b;` 这条默认整字比较，于是同一批数不相等。
+
+修在比较这一层的一处：`comparePair` 对 `TypeCode::Int32` 用 `fromSlot<Int32>` 比值——i32 的值是
+类型点名的那 32 位，槽只是载体，高半不参与值；FastVM 的 `EQ` 也按 32 位读。修后 `m == m + 0`、
+`m == m + z` 在 nvm/fvm/jit 三后端全 true，`<`/`>` 全 false。
+
+同 switch 里其余"窄于槽"的类型逐个判过：`f32`/`bf16`/`f16` 本来就有显式按值比较的 case，
+`f64`/`i64` 填满槽（整字即值），`bool` 一字节且只有一种写法，语言没有 `i8`/`i16`；
+`Set<i32>`/`Map<i32,int>` 的键比较不受影响（三后端一致 `len=1`）。
+
+常设用例：`test/cases/compile/equality/i32_compares_by_number.cml`（`-3`、`INT32_MIN`、`i64`、
+显式窄化、`f32`、`bool`、`float`）＋计划 `test/plans/feat/compile/int_compare.plan.toml`（三后端）。
+
+## 定位（2026-11-28 07:4x，`lane/nvm-int-compare`，未打 gate、未改代码）
+
+按"先证方向再动手"的顺序走，卡在这一步：**执行点已收窄到两处，但还没读到"位型 + 标签"的原文**。
+
+已排除的落点（逐个 grep 过的原文）：
+
+- `src/stdlib/std/nvm/nodevm.cpp` 及 `nvm/*.cpp|*.h`：**没有 `Less`/`Eq`**（`git grep -n 'Less' -- src/stdlib/std/nvm` 零命中）⇒ 比较不在这层的手写 switch 里。
+- `src/kernel/execute/pass_spec.cpp:349` 的 `case Op::Less:`：那是 pass 规格表里的算子登记，不是求值。
+- `src/stdlib/std/builtin/executors/builtin_semantics.cpp`：整文件是**声明**（稳定键、数值语义、fault 表），`git grep -n 'i32'` 只命中文件头注释第 5 行 ⇒ **不带求值**。所以你给的"在 Less/Eq 条目打 gate"落点不成立。
+- 真正的入口在这张表：`src/stdlib/std/builtin/executors/builtin.cpp:261-266` — **`op/eq_i`（i32）与 `op/eq_l`（i64）都指到同一个 `__builtin__eq__`**，`op/lt_*`、`op/gt_*` 同形。这才是"两个不同宽度的槽进同一个比较函数"的地方。
+- `__builtin__eq__` 的定义**不在** `builtin.cpp` 里（该文件只有函数指针表与 `#include "builtin.h"`），下一手第一步：`git grep -rn '__builtin__eq__' -- src/stdlib/std/builtin | grep -v '{"op/'` 找定义，再在**定义那里**打位型 + 类型标签的 gate。
+
+判据（下一手照这个打，一次就够）：
+
+```cpp
+// 在 __builtin__eq__（以及 lt/gt 同一个实体）入口，按你要读的两侧各打一行
+CAMEL_LOG_INFO("gate: lhs bits=0x{:016x} type={} rhs bits=0x{:016x} type={}",
+               (uint64_t)fromSlot<int64_t>(lhs), (int)lhs.typeCode(),
+               (uint64_t)fromSlot<int64_t>(rhs), (int)rhs.typeCode());
+```
+
+`-1` 与 `-1 + 0` 跨两槽跑一次，看两种结论哪一种：
+1. **位型就已经错**（i32 的 `0xFFFFFFFF` 与 i64 的 `0xFFFFFFFFFFFFFFFF` 白读成同一个、或按无符号比）⇒ 修在**取槽/提升**那一层；
+2. **取对了比错**（两侧都读成 `-1`，比较仍返回 false）⇒ 修在**比较的返回路径**（落默认值），按铁律 13 查"失败时落到哪"。
+
+状态：未打 gate（本格上下文用尽），未改代码，未跑三后端；**没有断言、没有读数**，卡不为它背书。
