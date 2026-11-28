@@ -81,3 +81,44 @@ camel inspect --fact core.arrangeable <case>
 `2026-11-28` **第五项接线**（`lane/arrangeable-two-bits@85101c529b`，底 `origin/integration@97755d51e8`，两笔：`c8ae83150f` 模型格 cherry-pick + `85101c529b` 第五项）：`arrangeable.h` 五项齐全（`noAccessToWrittenResource`），`facts.cpp` 的 `terms.pure = record->pure()` **原样未动**、新增 `terms.noAccessToWrittenResource = !record->accessesWritableResource()`，`andTerms` 跟着加、`toString` 打 `reads a resource a write reaches`。`BUILD_EXIT=0`、`dirty 0`；capacity 18/18、compile 2734/2718/13、modules 2093/2057/**28**（基线 27，+1）。对 75 表 141 名：**甲 1 / 丙 40 / 乙 0 / 未跑 101**，覆盖 4845 条（`feat/compile` 114 计划 + `feat/modules` 85 计划 + `feat/mm/capacity`）。**甲那 1 条 = `resident_cpu_block`，真回归，修在消费者**（见 §2 末）。
 
 `2026-11-28` **一条通用的读数规则（`D-1128-132`，不针对某一族）**：**一张红表只是同一选法的基线**。晋级表是"全快层"那个选法（含计划自己声明的风险抽样）；**点名计划文件**会把那份计划**整份跑**（`--tier` 不参与），`-Tier all` 与 `daily-all` 那张表是整份跑的选法 ⇒ **选法不同就不能相比**。**比红之前先确认两边选法相同**：同层同目标对晋级表，点名计划文件对 `daily-all` 表或同树基线。已写进 lane skill 的读数那节。apply 到现场：`mm.gc_poison_sweep` 在晋级表里 3 条红（抽样）、整份跑 42 条（`57838d1f3c`），两个数并存不矛盾；"多出来的 35/38 条"因此不是新红。
+
+## 5. `pure()` 的读者全量清点（2026-11-28，`4d6bad8d80` 基准）
+
+宽匹配 127 处、真 `.pure()` 调用 **30 处**。按"它问的是承诺还是足迹"分四类。
+
+### 5.1 问"设备/作用域能不能跑"的那一族：7 处，**全部读承诺**（第五个读者）
+
+| 位置 | 写法 | 后果 |
+|---|---|---|
+| `tiles/src/graph_regions.cpp:332-342` | `touchesNothing(oper) = record->pure() && !record->external()` | 一族的总闸 |
+| `tiles/src/graph_regions.cpp:166` | `regionRoots` 里 `!touchesNothing` | 区域根随承诺变 |
+| `tiles/src/graph_regions.cpp:371-372` | `deviceCapable = operations().count(oper) && touchesNothing` | 设备能力随承诺变 |
+| `tiles/src/graph_regions.cpp:384` | `gpuRefusal` 里 `!touchesNothing ⇒ 忽略` | 拒绝理由随承诺变 |
+| `tiles/src/census.cpp:61` | `operatorSurface`：`!touchesNothing ⇒ gap` | **`resident_cpu_block` 印的就是这个** |
+| `tiles/src/region_outline.cpp:586` | host 边界判定 `!touchesNothing` | 段划分随承诺变 |
+| `tiles/src/region_outline.cpp:155-174` | `keepsOrder`：`nodeIsFreelyArrangeable ⇒ 丢顺序边`（经 `facts.cpp:1333` 的 `all()`，pure 项 = `facts.cpp:1032`） | 顺序边随承诺变 |
+
+病根：`facts.cpp:1032` `terms.pure = record->pure()` —— **承诺被"可摆性"直接当答案用**。
+
+⇒ 只改 `touchesNothing` 一处不够：它上面 5 个调用点，下面还有 `census.cpp:61` 与 `region_outline.cpp:586` 两个直接消费者。**"改完还有任何一处由 `record->pure()` 决定设备/域"就是堵了一个洞、开着六个。**
+
+### 5.2 混合：拿"有没有 accesses"核对"纯不纯"的 4 处（第三处出处的候选）
+
+`pure` 一旦是"不写"，**声明了读的纯算子会被判矛盾或被拒**：
+
+- `compile/src/gir/builder.cpp:1218` `pure && !uses.empty()` ⇒ `PureAndUses`
+- `compile/src/gir/builder_modules.cpp:558` `written.pure() == (declared 空)`
+- `kernel/core/operator_table.cpp:1022-1024` `traits->pure && !r.accesses.empty()` ⇒ "a pure operator touches no resource"
+- `compile/src/gir/builder_when.cpp:2291` `!resources.pure()` ⇒ 拒绝折叠
+
+### 5.3 问承诺但**决定发布**：改读足迹会变答案
+
+`builder.cpp:1222`、`builder.cpp:1415`（`pure` ⇒ 发布空签名）。
+
+### 5.4 纯承诺、改读足迹也不会变
+
+`builder_diagnostics.cpp:242/284/1075/2147`、`introspect.cpp:284`、`resource_semantics.cpp:802`、`text.cpp:104/318/321`、`graph/read.cpp:587/595`、`pass.cpp:1131`、`cml.cpp:1429/1434`、`tiles/compiler.cpp:461`。
+
+### 5.5 代码里已有的两处"不写"范本（第四条口径不该是第三套说法）
+
+`sem::covers`（`resource_semantics.cpp:614-620`）已经在做"承诺 = 不写 ⇒ 只问 source 写不写"；`runtime::Effects::pure()`（`runtime/effects.h:40`）= `!external && !writesVariables`。**共享判定函数复用这两处的形式。**
