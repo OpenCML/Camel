@@ -555,7 +555,7 @@ git worktree add --detach <旧提交>
 `lane-ssa-residue` 在整文件跑 `test/plans/feat/modules/onnx.plan.toml` 时得到三条红（`pass_export_equals_export_model`、`ort_core_slice`、`export_loop_for`），它们在已发布的 `2026-11-28-promotion-68-reds.tsv`（147 名）里**查不到** —— 但**不是它带来的**：那张表是按 `feat/modules` 的 fast 集合登记的，整文件运行还会启动**表外**的慢层/tier 条目。正确的判法是**同一份计划的改前/改后读数对账**：`150/119/30` → `150/118/31`，三条在改前改后都在红名单里，真正新增的只有 `export_unsupported_op`（31−30=1）。⇒ 凡"整文件跑出来的红"要判甲，先取改前读数；拿 68 表查不到就说"甲"是错的。
 
 **15. 生成文件（`ast_hashes.txt`）在换底时的处理：冲突统一取一侧，重放完再一次重生成，单列一笔。**
-26 笔重放撞在 `test/plans/feat/parse/golden/ast_hashes.txt` 上 —— 它没有语义可解。定法是：冲突时对这份文件统一 `git checkout --theirs`（rebase 里 `--theirs` = 被重放的那笔），**不逐笔看内容**；全部重放走完后 `-UpdateAstHashes` 一次、**单列一笔**（"golden: the AST record regenerated after the rebase onto `<sha>`"，不 amend 进语义提交），再单跑 `feat/parse` 证明绿。
+26 笔重放撞在 `test/plans/feat/parse/golden/ast_hashes.txt` 上 —— 它没有语义可解。定法是：冲突时对这份文件统一 `git checkout --theirs`（rebase 里 `--theirs` = 被重放的那笔），**不逐笔看内容**；全部重放走完后 `-UpdateAstHashes` 一次、**单列一笔**（"golden: the AST record regenerated after the rebase onto `<sha>"，不 amend 进语义提交），再单跑 `feat/parse` 证明绿。
 
 **16. 别用字符串替换去改 `verify_*` 的 JS 行。**
 同一手法连坏三次（引号、反引号模板串、转义），每次都只坏"断言那一行"而读数本身是对的，浪费三轮。改法：**整块重写那个 `[[tests]]` 条目**，写完先单跑该用例再提交。
@@ -570,7 +570,7 @@ git worktree add --detach <旧提交>
 `lane-ssa-residue` 在 rebase 进行中跑 `git cherry b250a0659b HEAD`，只数到已重放的 10 笔（`plus=10`），abort 之后才对完整 HEAD 得到 `plus=25 minus=0` —— 两个数会得出相反结论。另一条来自 `lane-enter-shape`：`-UpdateAstHashes -AstOnly 'a.cml,b.cml'` 的 `-AstOnly` 要**一次逗号传完**，重复传参会绑定失败。
 
 **21. 任务板 id 与内部卡号是两套编号，永远不要混着写。**
-`D-1128-64` ③：我在板上建了 `task-392`（删 `graph::commit_of`），而 `internal/collab/task-392-math-abs-l.md` 是另一件活（`math:abs_l`），决策者看到"task-392"立刻问"卡号别混"。板上 `task-N` 是 `team_task_create` 的顺序号，与 `internal/collab/task-N-*.md` **毫无关系**。**定法**：派工与回执里写"**板上** `task-N`"或"**内部卡** `task-N-<slug>`"，建卡时把"这是谁的哪一步"写进标题（如"这是 `task-374` 的一步"），并在接回里的第一行复述一遍。
+`D-1128-64` ③：我在板上建了 `task-392`（删 `graph::commit_of`），而 `internal/collab/task-392-math-abs-l.md` 是另一件活（`math:abs_l`），决策者看到"task-392"立刻问"卡号别混"。板上 `task-N` 是 `team_task_create` 的顺序号，与 `internal/collab/task-N-*.md` **毫无关系**。**定法**：派工与回执里写"**板上** `task-N"或"**内部卡** `task-N-<slug>"，建卡时把"这是谁的哪一步"写进标题（如"这是 `task-374` 的一步"），并在接回里的第一行复述一遍。
 
 **22. "`src/**` 零改动 ⇒ 不用跑整层"不等于"不用重录 AST"。**
 `docs/notes6` 落地时合并位踩到（`seat-merge-1`，`db77af3b49`）：那枝 `src/**` 零改动，可它**改了 `test/cases/modules/rules/check_when.cml`、加了 `test/cases/modules/stdlib/abs_smallest_int.cml`** —— 两条都在 AST 记录里 ⇒ 首趟 `parse.frontend frontend.ast_record` 报甲（`recorded 04da6afb… now 4835f1d1…` / `missing … recorded -`）。按金标纪律"只读 check → `-UpdateAstHashes` → 只读 check"补 `4704 lines recorded, 2 added and 1 removed`，再 check `4704 file(s) checked, 0 stale`，单列一笔只动 `ast_hashes.txt`。
@@ -606,3 +606,9 @@ git worktree add --detach <旧提交>
   `root` 默认是 **`process.cwd()`** ⇒ 不带 `--root` 就会写到起点树；用它们时必须带绝对 `--root`
 ```
 **限制（已报决策者）**：`spawn_teammate(name, description, prompt, context)` **没有 cwd 参数**，子代理会话继承协调者的起点目录；`subagent`/`subagent_fork` 有 `cwd` 但建出来的会话不能按 id 寻址、不能当车道。⇒ 协调者侧只能做到"第一条命令断言"，真正的结构性修复在插件侧（车道命令的 cwd 落在主检出时当场提醒或拒绝）。
+
+**27. cd 不改 [Environment]::CurrentDirectory —— .NET 写文件必须绝对路径。**
+今天三次写进主检出，第三次是我自己：脚本里写了 `cd D:\Projects\Camel-wt\coord`、`Get-Location` 也显示正确，但下一行 `[System.IO.File]::WriteAllText("internal\backlog.md", …)` **仍然写进了 `D:\Projects\Camel`**。原因只有一条：
+PowerShell 的 Set-Location 只改 `$PWD`（PowerShell 自己的位置），不改 `[Environment]::CurrentDirectory`（进程工作目录）；.NET 的 `[System.IO.File]::*` 与按相对路径解析的任何非 PowerShell 代码用的是后者，而进程工作目录是**会话起点**（协调者与车道都继承 D:\Projects\Camel）。
+更隐蔽的后果：**验证也会验证错** —— 我用 `ReadAllBytes("internal\backlog.md")` 数控制字符，读的是主检出那份（刚被我改好的），于是把"已修"当结论、把没修的那份提交了。
+**规矩**：.NET / node / python 一切写文件**只用绝对路径**（先 `$tree = "D:\Projects\Camel-wt\<名>"` 再拼完整路径）；"验证刚才写的那份"也必须用同一个绝对路径；`.NET` 写之前先 `[Environment]::CurrentDirectory = (Get-Location).Path`（第 26 条的断言里已带，别省）。
