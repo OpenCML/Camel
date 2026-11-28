@@ -376,11 +376,14 @@ name = "gc.born_old.moving_stress.prl"
 desc = "A large array filled with young strings by plain stores (random.sample, shuffle) keeps them through minor collections (moving stress, prl)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_born_old.cml"
-args = ["--gc-stress", "safepoint=1,kind=minor", "--gc", "large_threshold_kb=4,kind=generational", "${case}", "${run_prl}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc", "large_threshold_kb=4,kind=generational", "--threads", "${cores}", "${case}", "${run_prl}"]
 expect_exit = 0
 expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.jit_object_constant.poison"

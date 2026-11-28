@@ -109,7 +109,10 @@ args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=b
 name = "gc.collections_major_stable_prl"
 tier = "slow"
 desc = "Maps and sets on std::prl with the non-moving collector, stress mode major, heap verification before and after every collection."
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collections_major_young_nvm"
@@ -127,7 +130,10 @@ args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=b
 name = "gc.collections_major_young_prl"
 tier = "slow"
 desc = "Maps and sets on std::prl with the moving young-generation collector, stress mode major, heap verification before and after every collection."
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--gc", "kind=generational", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collections_both_stable_nvm"
@@ -145,7 +151,10 @@ args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=bo
 name = "gc.collections_both_stable_prl"
 tier = "slow"
 desc = "Maps and sets on std::prl with the non-moving collector, stress mode both, heap verification before and after every collection."
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collections_both_young_nvm"
@@ -163,7 +172,10 @@ args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=bo
 name = "gc.collections_both_young_prl"
 tier = "slow"
 desc = "Maps and sets on std::prl with the moving young-generation collector, stress mode both, heap verification before and after every collection."
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "kind=generational", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collection_constants_nvm"
@@ -213,7 +225,10 @@ args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=b
 name = "gc.collections_tiny_major_stable_prl"
 tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::prl with the non-moving collector, stress mode major, heap verification before and after every collection."
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collections_tiny_major_young_nvm"
@@ -231,7 +246,10 @@ args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=b
 name = "gc.collections_tiny_major_young_prl"
 tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::prl with the moving young-generation collector, stress mode major, heap verification before and after every collection."
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collections_tiny_minor_stable_nvm"
@@ -249,7 +267,10 @@ args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=b
 name = "gc.collections_tiny_minor_stable_prl"
 tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::prl with the non-moving collector, stress mode minor, heap verification before and after every collection."
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collections_tiny_minor_young_nvm"
@@ -267,7 +288,10 @@ args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=b
 name = "gc.collections_tiny_minor_young_prl"
 tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::prl with the moving young-generation collector, stress mode minor, heap verification before and after every collection."
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collections_tiny_both_stable_nvm"
@@ -285,7 +309,10 @@ args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=bo
 name = "gc.collections_tiny_both_stable_prl"
 tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::prl with the non-moving collector, stress mode both, heap verification before and after every collection."
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collections_tiny_both_young_nvm"
@@ -303,7 +330,10 @@ args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=bo
 name = "gc.collections_tiny_both_young_prl"
 tier = "slow"
 desc = "Maps and sets as trees of tiny tables on std::prl with the moving young-generation collector, stress mode both, heap verification before and after every collection."
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collection_trees_tree_major_stable_nvm"
@@ -337,13 +367,16 @@ timeout_ms = 120000
 name = "gc.collection_trees_tree_major_stable_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::prl with the non-moving collector, stress mode major, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
 # CPU 9.27 s, 9.09 s and 9.12 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 16 s. The head says what
 # std::prl gc_stress=true does here, and the tree case keeps its 120 s timeout.
 cpu_budget_ms = 16000
 timeout_ms = 120000
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collection_trees_tree_major_young_nvm"
@@ -377,13 +410,16 @@ timeout_ms = 120000
 name = "gc.collection_trees_tree_major_young_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::prl with the moving young-generation collector, stress mode major, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on", "--gc", "kind=generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on", "--gc", "kind=generational", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
 # CPU 9.22 s, 9.1 s and 9.18 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 16 s. The head says what
 # std::prl gc_stress=true does here, and the tree case keeps its 120 s timeout.
 cpu_budget_ms = 16000
 timeout_ms = 120000
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collection_trees_tree_minor_stable_nvm"
@@ -417,13 +453,16 @@ timeout_ms = 120000
 name = "gc.collection_trees_tree_minor_stable_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::prl with the non-moving collector, stress mode minor, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
 # CPU 9.32 s, 9.36 s and 9.4 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 16 s. The head says what
 # std::prl gc_stress=true does here, and the tree case keeps its 120 s timeout.
 cpu_budget_ms = 16000
 timeout_ms = 120000
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collection_trees_tree_minor_young_nvm"
@@ -457,13 +496,16 @@ timeout_ms = 120000
 name = "gc.collection_trees_tree_minor_young_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::prl with the moving young-generation collector, stress mode minor, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on", "--gc", "kind=generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on", "--gc", "kind=generational", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
 # CPU 9.35 s, 9.47 s and 9.33 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 16 s. The head says what
 # std::prl gc_stress=true does here, and the tree case keeps its 120 s timeout.
 cpu_budget_ms = 16000
 timeout_ms = 120000
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collection_trees_tree_both_stable_nvm"
@@ -497,13 +539,16 @@ timeout_ms = 120000
 name = "gc.collection_trees_tree_both_stable_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::prl with the non-moving collector, stress mode both, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
 # CPU 9.02 s, 9.09 s and 9.15 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 15 s. The head says what
 # std::prl gc_stress=true does here, and the tree case keeps its 120 s timeout.
 cpu_budget_ms = 15000
 timeout_ms = 120000
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collection_trees_tree_both_young_nvm"
@@ -537,13 +582,16 @@ timeout_ms = 120000
 name = "gc.collection_trees_tree_both_young_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::prl with the moving young-generation collector, stress mode both, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on", "--gc", "kind=generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on", "--gc", "kind=generational", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
 # CPU 9.25 s, 9.26 s and 9.28 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 16 s. The head says what
 # std::prl gc_stress=true does here, and the tree case keeps its 120 s timeout.
 cpu_budget_ms = 16000
 timeout_ms = 120000
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collection_trees_tiny_major_stable_nvm"
@@ -577,13 +625,16 @@ timeout_ms = 300000
 name = "gc.collection_trees_tiny_major_stable_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::prl with the non-moving collector, stress mode major, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
 # CPU 15.17 s, 15.49 s and 15.11 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 26 s. The head says what
 # std::prl gc_stress=true does here, and the tiny case keeps its 300 s timeout.
 cpu_budget_ms = 26000
 timeout_ms = 300000
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collection_trees_tiny_major_young_nvm"
@@ -617,13 +668,16 @@ timeout_ms = 300000
 name = "gc.collection_trees_tiny_major_young_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::prl with the moving young-generation collector, stress mode major, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=major", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
 # CPU 15.05 s, 15.18 s and 15.3 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 25 s. The head says what
 # std::prl gc_stress=true does here, and the tiny case keeps its 300 s timeout.
 cpu_budget_ms = 25000
 timeout_ms = 300000
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collection_trees_tiny_minor_stable_nvm"
@@ -657,13 +711,16 @@ timeout_ms = 300000
 name = "gc.collection_trees_tiny_minor_stable_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::prl with the non-moving collector, stress mode minor, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
 # CPU 15.33 s, 15.12 s and 15.54 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 26 s. The head says what
 # std::prl gc_stress=true does here, and the tiny case keeps its 300 s timeout.
 cpu_budget_ms = 26000
 timeout_ms = 300000
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collection_trees_tiny_minor_young_nvm"
@@ -697,13 +754,16 @@ timeout_ms = 300000
 name = "gc.collection_trees_tiny_minor_young_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::prl with the moving young-generation collector, stress mode minor, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=minor", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
 # CPU 15.3 s, 15.44 s and 15.3 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 26 s. The head says what
 # std::prl gc_stress=true does here, and the tiny case keeps its 300 s timeout.
 cpu_budget_ms = 26000
 timeout_ms = 300000
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collection_trees_tiny_both_stable_nvm"
@@ -737,13 +797,16 @@ timeout_ms = 300000
 name = "gc.collection_trees_tiny_both_stable_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::prl with the non-moving collector, stress mode both, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
 # CPU 15.06 s, 15.1 s and 15.56 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 26 s. The head says what
 # std::prl gc_stress=true does here, and the tiny case keeps its 300 s timeout.
 cpu_budget_ms = 26000
 timeout_ms = 300000
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collection_trees_tiny_both_young_nvm"
@@ -777,13 +840,16 @@ timeout_ms = 300000
 name = "gc.collection_trees_tiny_both_young_prl"
 desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::prl with the moving young-generation collector, stress mode both, heap verification before and after every collection."
 case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
-args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--coll", "validate=on,leaf=2,fanout=4", "--gc", "kind=generational", "--threads", "${cores}", "${case}", "std::gc::verify", "std::prl gc_stress=true"]
 expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
 # CPU 15.32 s, 15 s and 15.49 s in the three windows taken for this arm:
 # 1.63x the busiest, rounded up to the next 1000 ms, is 26 s. The head says what
 # std::prl gc_stress=true does here, and the tiny case keeps its 300 s timeout.
 cpu_budget_ms = 26000
 timeout_ms = 300000
+# Peak 33 threads, 32 of them the scheduler's pool, while the CPU it is charged is one core's
+# worth: it holds four cores, and `--threads ${cores}` sizes the pool to the slots it gets.
+cores = 4
 
 [[tests]]
 name = "gc.collection_constant_trees_nvm"
