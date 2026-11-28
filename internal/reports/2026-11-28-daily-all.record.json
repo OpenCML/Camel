@@ -1,0 +1,672 @@
+{
+  "kind": "daily-all",
+  "date": "2026-11-28",
+  "tip": "7c3693ff8e740576fdd587740815400ea59021f5",
+  "measured_tip": "7c3693ff8e740576fdd587740815400ea59021f5",
+  "tier": "all",
+  "scope": "test/plans (the whole plan tree): the fast layer, the slow layer and the milestone layer",
+  "jobs": 4,
+  "host": "the build host, the dedicated daily-all checkout at 7c3693ff8e74 (cloned from the host bare repo; it exists only for this reading)",
+  "binary_built": "built by this run alone: BUILD_SECONDS 30.0, and out/latest/build-info.json was stamped 7c3693ff8e (clean)",
+  "first_reading": true,
+  "readings": {
+    "total": 16218,
+    "pass": 15761,
+    "fail": 262,
+    "skip": 162,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 0,
+    "crashed": 0,
+    "re_run": 0,
+    "re_run_passed": 0,
+    "flaky": 0,
+    "by_tier": {
+      "fast": 9920,
+      "milestone": 5398,
+      "slow": 900
+    },
+    "load_before": "[load] 46.59 41.88 32.62 (1m/5m/15m) before run",
+    "load_after": "[load] 34.03 45.93 47.53 (1m/5m/15m) after run",
+    "load_warning": "[load] WARNING: 1m load 34.03 > 8 -- readings taken now are not comparable to quiet-host readings",
+    "load_note": "the run started at 1m load 46.59, not in a quiet window: the performance columns are not comparable to a quiet host. The names are comparable, and this table exists for the names."
+  },
+  "comparison": {
+    "against": "none: this is the first all-tier reading",
+    "note": "This is the first all-tier reading, so there is no previous all-tier table to compare against. The red set it publishes is the baseline the next all-tier reading compares against.",
+    "fast_segment": {
+      "compared_against": "internal/reports/2026-11-28-promotion-76-reds.tsv",
+      "fast_reds": 141,
+      "in_table": 141,
+      "out_of_table": 0,
+      "table_names_missing_from_this_reading": 0,
+      "verdict": "the fast segment is the seventy-sixth promotion table name for name: all 141 are red here and none of the table names is missing"
+    },
+    "slow_only": {
+      "note": "the reds this layer reports that the fast layer never runs, so they cannot appear in any promotion table",
+      "total": 121,
+      "by_tier": {
+        "slow": 58,
+        "milestone": 63
+      },
+      "names": [
+        {
+          "plan": "compile.diag_catalog",
+          "case": "catalog.doc_is_generated",
+          "tier": "slow"
+        },
+        {
+          "plan": "compile.diag_fixes",
+          "case": "fixes_apply",
+          "tier": "slow"
+        },
+        {
+          "plan": "opt.progen",
+          "case": "progen_check",
+          "tier": "milestone"
+        },
+        {
+          "plan": "opt.control",
+          "case": "control.pipeline_contract",
+          "tier": "slow"
+        },
+        {
+          "plan": "compile.collections",
+          "case": "collfuzz.quick",
+          "tier": "slow"
+        },
+        {
+          "plan": "opt.gate_value",
+          "case": "covered_value.graph.false",
+          "tier": "slow"
+        },
+        {
+          "plan": "opt.gate_value",
+          "case": "covered_value.graph.true",
+          "tier": "slow"
+        },
+        {
+          "plan": "trans.cpp",
+          "case": "agree_with_fvm",
+          "tier": "slow"
+        },
+        {
+          "plan": "trans.cpp",
+          "case": "every_fault_program_says_what_fvm_says",
+          "tier": "slow"
+        },
+        {
+          "plan": "opt.effects_kept",
+          "case": "pass_written.inventory.nvm",
+          "tier": "slow"
+        },
+        {
+          "plan": "trans.cml",
+          "case": "print_and_recompile",
+          "tier": "slow"
+        },
+        {
+          "plan": "trans.cml",
+          "case": "print_then_run_agrees_with_the_origin",
+          "tier": "slow"
+        },
+        {
+          "plan": "linear.var_reference",
+          "case": "var_pipelines",
+          "tier": "slow"
+        },
+        {
+          "plan": "consistency.runner",
+          "case": "runner.backend_matrix",
+          "tier": "slow"
+        },
+        {
+          "plan": "consistency.attempt",
+          "case": "attempt.not_isolated.fault_outside.nvm",
+          "tier": "slow"
+        },
+        {
+          "plan": "consistency.attempt",
+          "case": "attempt.not_isolated.fault_outside.fvm",
+          "tier": "slow"
+        },
+        {
+          "plan": "consistency.attempt",
+          "case": "attempt.not_isolated.fault_outside.jit",
+          "tier": "slow"
+        },
+        {
+          "plan": "consistency.attempt",
+          "case": "attempt.not_isolated.fault_outside.prl",
+          "tier": "slow"
+        },
+        {
+          "plan": "consistency.attempt",
+          "case": "attempt.not_isolated.fault_in_argument.nvm",
+          "tier": "slow"
+        },
+        {
+          "plan": "consistency.attempt",
+          "case": "attempt.not_isolated.fault_in_argument.fvm",
+          "tier": "slow"
+        },
+        {
+          "plan": "consistency.attempt",
+          "case": "attempt.not_isolated.fault_in_argument.jit",
+          "tier": "slow"
+        },
+        {
+          "plan": "consistency.attempt",
+          "case": "attempt.not_isolated.fault_in_argument.prl",
+          "tier": "slow"
+        },
+        {
+          "plan": "consistency.attempt",
+          "case": "attempt.bad_calls",
+          "tier": "slow"
+        },
+        {
+          "plan": "consistency.attempt",
+          "case": "attempt.bad_call.argument",
+          "tier": "slow"
+        },
+        {
+          "plan": "consistency.attempt",
+          "case": "attempt.translate.cpp",
+          "tier": "slow"
+        },
+        {
+          "plan": "consistency.attempt",
+          "case": "attempt.refuse.onnx",
+          "tier": "slow"
+        },
+        {
+          "plan": "consistency.attempt",
+          "case": "attempt.refuse.grad",
+          "tier": "slow"
+        },
+        {
+          "plan": "consistency.attempt",
+          "case": "attempt.resources.fault.nvm",
+          "tier": "slow"
+        },
+        {
+          "plan": "consistency.attempt",
+          "case": "attempt.resources.fault.fvm",
+          "tier": "slow"
+        },
+        {
+          "plan": "consistency.attempt",
+          "case": "attempt.resources.fault.jit",
+          "tier": "slow"
+        },
+        {
+          "plan": "consistency.attempt",
+          "case": "attempt.resources.fault.prl",
+          "tier": "slow"
+        },
+        {
+          "plan": "opt.inline_use",
+          "case": "inline_keeps_stdout.write.nvm",
+          "tier": "slow"
+        },
+        {
+          "plan": "opt.inline_use",
+          "case": "inline_keeps_stdout.inline.nvm",
+          "tier": "slow"
+        },
+        {
+          "plan": "opt.inline_use",
+          "case": "inline_keeps_stdout.drop.nvm",
+          "tier": "slow"
+        },
+        {
+          "plan": "opt.inline_use",
+          "case": "inline_keeps_stdout.twice_write.nvm",
+          "tier": "slow"
+        },
+        {
+          "plan": "opt.inline_use",
+          "case": "inline_keeps_stdout.twice_inline.nvm",
+          "tier": "slow"
+        },
+        {
+          "plan": "modules.checkpoints",
+          "case": "native_state_checkpoints",
+          "tier": "slow"
+        },
+        {
+          "plan": "modules.onnx",
+          "case": "resnetbn_train_step_export",
+          "tier": "slow"
+        },
+        {
+          "plan": "modules.onnx",
+          "case": "pass_export_equals_export_model",
+          "tier": "slow"
+        },
+        {
+          "plan": "modules.onnx",
+          "case": "ort_core_slice",
+          "tier": "slow"
+        },
+        {
+          "plan": "modules.onnx",
+          "case": "export_loop_for",
+          "tier": "slow"
+        },
+        {
+          "plan": "modules.onnx",
+          "case": "ort_loop_loaded_weights",
+          "tier": "slow"
+        },
+        {
+          "plan": "mm.gc_collections",
+          "case": "gc.collfuzz",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:compile.diag_json:passes_never_run_json",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:stated_extents:stated_mean_axis_answered_by_the_engine.nvm",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:transforms:transpose_loop_escape.two_states_before_the_escape.nvm",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:transforms:transpose_loop_escape.int_is_a_zero_tangent_space.nvm",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:transforms:cml_var_holding_a_lambda",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:compile.unused_values:unused_values.help_let_sync_is_not_a_program",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:consistency.attempt:attempt.not_isolated.fault_outside.nvm",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:consistency.attempt:attempt.not_isolated.fault_outside.fvm",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:consistency.attempt:attempt.not_isolated.fault_outside.jit",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:consistency.attempt:attempt.not_isolated.fault_outside.prl",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:consistency.attempt:attempt.not_isolated.fault_in_argument.nvm",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:consistency.attempt:attempt.not_isolated.fault_in_argument.fvm",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:consistency.attempt:attempt.not_isolated.fault_in_argument.jit",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:consistency.attempt:attempt.not_isolated.fault_in_argument.prl",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:consistency.attempt:attempt.bad_calls",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:consistency.attempt:attempt.bad_call.argument",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:consistency.attempt:attempt.translate.cpp",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:consistency.attempt:attempt.refuse.onnx",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:consistency.attempt:attempt.refuse.grad",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:linear.loops:loops.open_rank_round_iterate_round",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:linear.loops:loops.grad_loop_collect",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:linear.subscript:subscript.step_zero_const",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:modules.graph:node_kinds_match_the_graph",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:modules.graph:constant_folding_makes_a_value",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:modules.graph_outline:outline_delivers_a_graph_the_bytecode_vm_can_compile",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:modules.rename_identity:rename.process_graph_identity",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:modules.rules:rules.repeat_counts_rounds",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:modules.rules:rules.repeat_honours_the_budget",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:modules.rules:rules.alternate_alternates_rounds",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:modules.rules:rules.until_reads_the_predicate_before_a_round",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:modules.rules:rules.until_honours_the_budget",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:modules.tensor:op_stats.table.nvm",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:modules.tensor:op_stats.table.fvm",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:modules.tensor.bounds:slice_runtime",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:modules.tensor.dtype:npy_generic_wrapper_mismatch",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:modules.tensor.shape_inference:si_as_fails",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:modules.tensor.shape_inference:si_as_fails_fvm",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:modules.tensor.shape_inference:si_as_fails_jit",
+          "tier": "milestone"
+        },
+        {
+          "plan": "mm.gc_poison_sweep",
+          "case": "poison:modules.tensor.shape_inference:si_as_fails_prl",
+          "tier": "milestone"
+        },
+        {
+          "plan": "modules.import_audit",
+          "case": "import.audit",
+          "tier": "slow"
+        },
+        {
+          "plan": "perf.fib",
+          "case": "nvm_timeit",
+          "tier": "milestone"
+        },
+        {
+          "plan": "perf.fib",
+          "case": "inline_nvm_timeit",
+          "tier": "milestone"
+        },
+        {
+          "plan": "perf.fib",
+          "case": "fvm_timeit",
+          "tier": "milestone"
+        },
+        {
+          "plan": "perf.fib",
+          "case": "inline_fvm_timeit",
+          "tier": "milestone"
+        },
+        {
+          "plan": "perf.startup",
+          "case": "startup.cost",
+          "tier": "milestone"
+        },
+        {
+          "plan": "perf.collections_fuzz",
+          "case": "collfuzz.many_small",
+          "tier": "milestone"
+        },
+        {
+          "plan": "perf.collections_fuzz",
+          "case": "collfuzz.large",
+          "tier": "milestone"
+        },
+        {
+          "plan": "perf.collections_fuzz",
+          "case": "collfuzz.gc",
+          "tier": "milestone"
+        },
+        {
+          "plan": "perf.collections_fuzz",
+          "case": "collfuzz.gc_large",
+          "tier": "milestone"
+        },
+        {
+          "plan": "compile.unused_values",
+          "case": "unused_values.help_let_sync_is_not_a_program",
+          "tier": "slow"
+        },
+        {
+          "plan": "perf.gc",
+          "case": "gc_timeit_cycles.generational",
+          "tier": "milestone"
+        },
+        {
+          "plan": "perf.gc",
+          "case": "gc_timeit_cycles.mark_sweep",
+          "tier": "milestone"
+        },
+        {
+          "plan": "perf.gc",
+          "case": "gc_soak_long.generational",
+          "tier": "milestone"
+        },
+        {
+          "plan": "perf.gc",
+          "case": "gc_soak_long.mark_sweep",
+          "tier": "milestone"
+        },
+        {
+          "plan": "perf.gc",
+          "case": "gc_live_gb.generational",
+          "tier": "milestone"
+        },
+        {
+          "plan": "perf.gc",
+          "case": "gc_live_gb.mark_sweep",
+          "tier": "milestone"
+        },
+        {
+          "plan": "perf.step_budget",
+          "case": "step.budget",
+          "tier": "milestone"
+        },
+        {
+          "plan": "perf.step_counts",
+          "case": "step.count",
+          "tier": "slow"
+        },
+        {
+          "plan": "perf.step_counts",
+          "case": "step.elementwise",
+          "tier": "slow"
+        },
+        {
+          "plan": "perf.gc_tools",
+          "case": "gc_tools.gcbench_workloads",
+          "tier": "milestone"
+        },
+        {
+          "plan": "tools.load_class",
+          "case": "load_class.tree",
+          "tier": "slow"
+        },
+        {
+          "plan": "exemplars",
+          "case": "01_scalar_boundary",
+          "tier": "slow"
+        },
+        {
+          "plan": "perf.showcase_c2_mlp_mnist",
+          "case": "implementations",
+          "tier": "milestone"
+        },
+        {
+          "plan": "perf.showcase_c3_char_transformer",
+          "case": "probes",
+          "tier": "milestone"
+        },
+        {
+          "plan": "perf.showcase_c3_char_transformer",
+          "case": "train.stops_at_the_wall",
+          "tier": "milestone"
+        },
+        {
+          "plan": "perf.showcase_c3_char_transformer",
+          "case": "grow.probe_layer_norm_float",
+          "tier": "milestone"
+        },
+        {
+          "plan": "perf.showcase_d4_mcts",
+          "case": "small",
+          "tier": "milestone"
+        },
+        {
+          "plan": "tools.debugger",
+          "case": "debugger.dap_session",
+          "tier": "slow"
+        },
+        {
+          "plan": "tools.debugger",
+          "case": "debugger.dap_stepping",
+          "tier": "slow"
+        },
+        {
+          "plan": "tools.debugger",
+          "case": "debugger.dap_frames",
+          "tier": "slow"
+        },
+        {
+          "plan": "tools.debugger",
+          "case": "debugger.dap_protocol",
+          "tier": "slow"
+        },
+        {
+          "plan": "tools.debugger",
+          "case": "debugger.dap_fusion_group",
+          "tier": "slow"
+        },
+        {
+          "plan": "tools.member_init",
+          "case": "tools.member_init.sweep",
+          "tier": "slow"
+        },
+        {
+          "plan": "gate.plan_inventory",
+          "case": "gate.plan_inventory",
+          "tier": "slow"
+        },
+        {
+          "plan": "gate.case_ledger",
+          "case": "gate.case_ledger",
+          "tier": "slow"
+        },
+        {
+          "plan": "gate.conformance",
+          "case": "gate.conformance_matrix",
+          "tier": "slow"
+        },
+        {
+          "plan": "compile.type_identity",
+          "case": "type_identity.corpus",
+          "tier": "slow"
+        },
+        {
+          "plan": "feat.tools.exit_reporting",
+          "case": "runner.exit_reporting_names_the_signal",
+          "tier": "slow"
+        }
+      ]
+    }
+  },
+  "debug_layer_note": "6 plan(s) of the debug layer are not selected by -Tier all by design (deliberate abort; they need a Debug build and only --tier debug selects them) -- they are not missing, and the all-layer entry count does not include them; AGENTS.md, Test Execution.",
+  "red_table": "internal/reports/2026-11-28-daily-all-reds.tsv",
+  "red_table_rows": 262,
+  "red_table_plans": 74,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run summary.json plan/test pairs, the same format and ordering as the promotion red tables",
+  "checks": {
+    "check-doc-links": "exit 0",
+    "gpu-plans": "exit 0, report only"
+  },
+  "run_name": "20261128_125152_62964_8m9k",
+  "run_wall_seconds": 2676
+}
