@@ -37,13 +37,9 @@ export const TRANSLATE = new Set([
 export const ALREADY_HANDS_ON = new Set(['std::stats', 'std::rulesets', 'std::arraytype', 'std::identitytype'])
 
 export const ALIASES = {
-  'std::lnr': 'std::fvm', 'std::linear': 'std::nvm', 'std::nodevm': 'std::nvm',
-  'std::run': 'std::fvm', 'std::jit': 'std::fastvm::jit', 'std::tfg': 'std::tfdump',
-  'std::tns': 'std::topo_node_seq', 'std::bc': 'std::fastvm::bytecode',
-  'std::lbc': 'std::fastvm::linked_bytecode', 'std::asm': 'std::fastvm::jit_asm',
-  'std::bin': 'std::fastvm::jit_bin', 'std::rmir': 'std::fastvm::jit_rmir',
-  'std::mir': 'std::fastvm::jit_mir', 'std::cppmod': 'std::cpp::module_file',
-  'std::cppinspect': 'std::cpp::inspect',
+  // `std::run` runs the program, and its target is the run configuration's (`passes.run`, default
+  // `std::fvm`). Every other name is the pass's own: a listing is compared here, not renamed.
+  'std::run': 'std::fvm',
 }
 
 export const PASSY = /^(?:std|test|onnx|tiles|json|re|nn|tensor)::/

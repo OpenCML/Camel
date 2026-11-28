@@ -49,10 +49,10 @@ optimized = run("std::opt", "std::nvm")
 assert optimized.returncode == 0, optimized.stderr
 assert optimized.stdout.split() == ["1", "11", "203", "4"], optimized.stdout
 
-canonical = run("std::cxx::opt", "std::nvm")
+canonical = run("std::opt", "std::nvm")
 assert canonical.returncode == 0, canonical.stderr
 assert canonical.stdout == optimized.stdout, (
-    "the default pipeline `std::opt` and `std::cxx::opt` ran different programs: "
+    "the default pipeline `std::opt` and `std::opt` ran different programs: "
     f"{optimized.stdout!r} vs {canonical.stdout!r}"
 )
 

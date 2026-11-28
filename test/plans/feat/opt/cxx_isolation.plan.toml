@@ -516,10 +516,10 @@ for (const g of graphs) {
 
 [[tests]]
 name = "cxx_isolation.default_pipeline.by_registered_name"
-desc = "The same pipeline under the name the isolation registered, `std::cxx::opt`: the canonical document is the one the default name printed, byte for byte -- same exit, same bytes, no normalizer. The rework deleted every old sub-pass name and kept `std::opt` alone, so this is the entry that says what it kept still runs the kernel rather than merely resolving to a name."
+desc = "The same pipeline under the name the isolation registered, `std::opt`: the canonical document is the one the default name printed, byte for byte -- same exit, same bytes, no normalizer. The rework deleted every old sub-pass name and kept `std::opt` alone, so this is the entry that says what it kept still runs the kernel rather than merely resolving to a name."
 kind = "differential"
 case = "../../../cases/opt/cxx_isolation/subject.cml"
-args = ["${case}", "std::cxx::opt", "std::jgir canonical=true", "std::nop"]
+args = ["${case}", "std::opt", "std::jgir canonical=true", "std::nop"]
 expect_exit = 0
 timeout_ms = 20000
 compare_to = "cxx_isolation.default_pipeline.by_default_name"

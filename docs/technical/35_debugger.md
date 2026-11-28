@@ -503,7 +503,7 @@ are not stops.
   replacement is made by the worker (`debuggablePasses` in `tools/debugger/src/run.cpp`) and
   told to the user: the core's `started` event carries the notice, the adapter prints it in the
   debug console.
-- **`std::prl` / `std::prl`** (parallel) run as `std::fvm` as well, with a notice: several nodes
+- **`std::prl`** (parallel) run as `std::fvm` as well, with a notice: several nodes
   run at once, there is no single current node, and the scheduler has no hooks. The sequential
   order of `std::fvm` is one of the orders the parallel scheduler may choose (design principles
   3.6: no order is promised between the elements of `map` and between independent nodes), so
