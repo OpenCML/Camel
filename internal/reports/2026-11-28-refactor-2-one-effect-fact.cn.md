@@ -1,9 +1,12 @@
 # 重构 2「效应事实只有一份」第一笔：要删的清单 / 替换后的形状 / 比对语料
 
+> **状态（2026-11-28 18:1x）：本页定稿**，不含 `src/` 改动。三样交付齐（§2 删的清单、§3 替换的形状、§4 比对语料），第 1 刀的写死范围与四条判据在 §7；开工前提未满足（`lane/c4-round-source` 未进 integration，枝尖 `ae14f65247` / 改动 `63384055bc`，正在换底重做）。§8 记的是 `lane/two-bits-model` 的参考原文（该枝只作材料、已删）。
+
 - 依据：`internal/plans/2026-11-28-refactor-not-patch.cn.md`（`fsh-dev@68fcfc6a57`）第 2 件。
-- 底：`origin/integration@9e8d7303ad`（2026-11-28 17:26:16）。枝 `lane/draft-read-decl` 已 `reset --hard` 到这里，本页是该枝第一笔。
+- 底：枝 `lane/draft-read-cut` 建在 `origin/integration@4f59be8265d2b69c900ee3b6ee7189d4441f423a`（建枝时的尖端；integration 现已推进到 `c6c2afe53f`，第一刀开工前 rebase 再取一次行号）。本页首先生于 `integration@9e8d7303ad`，后随枝重挂；**`src/` 全文未动**，行号相对 integration 仍成立。
 - 行号在这一底上逐条核对过（`mayBeWritten` `operator_table.cpp:146`、`accessesWritableResource` `:1275-1290`、第五项 `facts.cpp:1332`、`Arrangeable` 的五个字段 `arrangeable.h:62/74/78` 都在同一位置）；在 `lane/arrangeable-two-bits@6b5c132e8f` 上同形。`src/` 一动就要重取。
-- 材料：`internal/collab/pure-and-footprint-two-bits.md`（一位拆两位的契约，含 `pure()` 读者全量清点）、`lane/c4-round-source@63384055bc`（自检已改成"纯 ⇒ 不许写"的那一笔）、§6 记的两笔被取代的提交（38 个查询纯度那一版，**不进合并队**，转为本件的材料）。
+- 材料：`internal/collab/pure-and-footprint-two-bits.md`（一位拆两位的契约，含 `pure()` 读者全量清点）、`lane/c4-round-source`、§6 记的两笔被取代的提交（38 个查询纯度那一版，**不进合并队**，转为本件的材料）。
+- **sha 写法（全页统一）**：写 `c4-round-source@63384055bc` 指**改动那一笔**（自检改成"纯 ⇒ 不许写"，`operator_table.cpp:1012` 的 `a pure operator writes a resource` 在它里面）；**枝尖 = `ae14f65247`**，是它的子提交，只多一页 `internal/collab/g3-block-callback-erase.zh.md`（`+36 −5`），**`src/` 零差异**。合并位按枝尖取，改动的引用一律用 `63384055bc`。
 
 ## 0 一句话
 
@@ -11,7 +14,7 @@
 
 "会漂"不是推测，本枝量到过两次：
 
-1. **第五项问的是整张算子表**：程序里一次 `set` 都没有，`state::get` 的节点仍被写成 `reads a resource a write reaches` —— 因为 `mayBeWritten`（`src/kernel/core/operator_table.cpp:146`）扫的是全部声明，而 `state:set` 一注册，`Ref` 就有写者（`/tmp/refprobe/pc_write_away.cml` 读数，见 §3.5）。
+1. **第五项问的是整张算子表**：第五项这一位（`noAccessToWrittenResource`，`facts.cpp:1332` = `!record->accessesWritableResource()`）问的是"这条读访问的资源，有没有**任何声明**写它" —— `mayBeWritten`（`src/kernel/core/operator_table.cpp:146`）扫的是全部声明，而 `state:set` 一注册，`Ref` 就有写者。所以一个**程序里一次 `set` 都没有**的 `state::get`，它的第五项**位**仍是假（`/tmp/refprobe/pc_write_away.cml`，读数与"为什么它今天分不出答案"见 §4.4：**整条 `all()` 早被第四项定死，不是第五项漏答**）。
 2. **"纯"有两份**：`ops::Record::pure()`（`src/kernel/ops/include/camel/ops/operator_record.h:487`）说"子句没声明写"，`sem::ResourceSignature::pure()`（`src/kernel/include/camel/core/resource_semantics.h:378`）说"签名上没有访问"，`OperatorTraits::pure`（`operator_table.cpp:96-115` 推、`operator_table.h:253` 存）说"效应等于 Pure" —— 三处都在回答"纯不纯"，条件不同。38 个查询那一笔就是撞在这上面：声明了 `Read` 之后，记录说 `pure`（`clause_pure: true`），显示说 `state`（`effect()` 由访问列表现推），而编译器的自检说"纯算子不许碰资源"并拒绝装载。
 
 ## 1 今天有几份答案（都在这棵树上，file:line 是底提交的）
@@ -133,14 +136,23 @@
 
 `test/plans/feat/tools/arrangeable_families.plan.toml`：在 `6b5c132e8f` 上 **7/7**（换底前是 5/7，两条红是 `facts.cpp:1483/1493` 的聚合初始化缺陷）。第五项改成"按值"之后，这 7 条必须逐名仍绿；任何一条变红都要说清是"答案变了"还是"实现变了"。
 
-### 4.4 两个新探针（**唯一被要求改变的答案**）
+### 4.4 两个新探针：**今天分不出答案，原因在第四项，不在第五项**
 
-| 探针 | 内容 | 今天 | 换完之后必须 |
+| 探针 | 内容 | 今天 | 第一批实现之后必须 |
 |---|---|---|---|
-| `/tmp/refprobe/pc_write_away.cml` | 循环里只 `state::get`，**程序里没有 `set`** | `core.arrangeable` = `reads a resource a write reaches`（**错**） | **可摆**（第五项为真） |
-| `/tmp/refprobe/pc_write_before.cml` | 同类循环，循环前有一处 `state::set` | 同上（今天两条**一样**） | **不可摆**（第五项为假） |
+| `/tmp/refprobe/pc_write_away.cml` | 循环里只 `state::get`，**程序里没有 `set`** | `core.arrangeable` = `reads a resource a write reaches`，但这是**每图一条**的聚合（见下） | **可摆**（第五项为真） |
+| `/tmp/refprobe/pc_write_before.cml` | 同类循环，循环前有一处 `state::set` | 同上：两条**分不出** | **不可摆**（第五项为假） |
 
-两个探针今天给出**相同**的事实 —— 这就是 `mayBeWritten` 是表级的证据；换完之后两者必须**分开**。这两个程序进 `test/cases/` 的那一天，就是这条的回归用例（本件不建用例，只登记）。
+**分不出的原因（`lane-editview-a` 的 A/B 读数，Lead 已核其推导）**：不是第五项被跳过，而是**第四项先定了答案**。
+
+- 算子侧：`:var/get` 的两边都是 `free=0 kept=1`，而 `camel inspect --ops` 的原文是 `":var/get","purity":"state",…,"clause_pure":true,…,"may_fault":true` ⇒ **"不能故障"先答 no，第五项没轮到**。
+- **判据今天本身不漏**：`facts.cpp:1332` 的第五项就是 `!record->accessesWritableResource()`；`operator_table.cpp:1285` 只把**读**算进来（`374c15fde7` 改的正是这一句）。
+- 真"漏掉写"在 `16:58` 之前：`operator_record.h:482` 的旧 `pure()` 问的是"有没有**一次访问**"而不是"有没有**写**"，这一笔**已被 `fc66a33e09` 修掉**。
+- **全表只有 4 个算子声明了读**（`:var/after`、`:var/get`、`:var/peek`、`:op/mem_blocks`），**四个都 `may_fault=true`** ⇒ 今天**不存在**"纯、不故障、又读某资源"的算子。
+
+**⇒ 语料的前提（必须写在前面）**：要验第五项，**先在表上造出一个"纯、不故障、且读某资源"的算子** —— 这恰好就是本件（"效应事实只有一份"）要交付的东西（§2.1/§2.2 把两份声明合一份，`pure` 与 `Read` 不再互斥）。所以这条探针**排在第 1 刀（两个 `pure()` 合一）之后**，不是之前；今天拿它当判据会得出错结论。
+
+**另一条现在就能用的观测面**：图层的 `core.arrangeable`（§4.6 那四个程序走的就是这一层）—— 它按图聚合、不因某个算子的 `may_fault` 而失去读数能力，现在就能量。**但它对这两个探针今天也给出相同的事实**（我量的原文：两个程序的 `main` 节点都是 `not pure, external effect, may fault, may not terminate, reads a resource a write reaches`），因为这条事实是**每图一条**、且 `external effect` / `may fault` 早把它定死。⇒ 图层能用来量"没有位移"（§4.6 那组），**不能**用来量"只有 `get` / 再加 `set` 的差别"；那个差别要等写集按值算出来（第 2 刀）才可测。
 
 ### 4.5 另外几条现成的读数
 
@@ -164,7 +176,7 @@
 ## 5 顺序与判据（本件落地时的自检）
 
 1. **先去 3、4 的重复**（§2.1、§2.2）：一处定义"没写"，其余读者改成调它。判据：`resources.plan.toml` 逐条仍按同一句期望；`inspect --ops` 的 `clause_pure` 与 `purity` 两列不再互相矛盾地出现在同一个算子上（38 个查询是现成的例子）。
-2. **再把第五项从"扫表"改成"按值"**（§2.3、§3.2）：判据 = §4.4 两个探针**分开**，且 §4.3 的 7 条、§4.1 的 17 个计划逐名不变。
+2. **再把第五项从"扫表"改成"按值"**（§2.3、§3.2）：判据 = §4.4 那两个探针**分开** —— 但**这一步之前必须先有"纯、不故障、且读某资源"的算子**（今天全表 4 个读资源的算子都 `may_fault=true`，第四项先定，§4.4），所以第 2 刀的判据链是：第 1 刀把两份 `pure()` 合一处 → 造出那样的算子 → 探针才分得开；同时 §4.3 的 7 条、§4.1 的 17 个计划逐名不变。
 3. **最后收各遍的判断**（§2.4）：`git grep` 清单里每一处要么收进 §3.3 的五个判定，要么写明为什么它不是同一件事（例如 `isWrittenInPlace`、`readsVariable`）。
 4. 全程：`BUILD_EXIT=0`、`dirty 0`、不 push；读数在宿主 `88zjwei` 上取，标题带 sha。
 
@@ -190,9 +202,84 @@
 
 1. **81 表逐名新增红 0**（同一选法相比，选法不同不比 —— 见 `pure-and-footprint-two-bits.md` §4 那条读数规则）。
 2. `camel inspect --ops test/cases/modules/stdlib/registry_all.cml` 的 **38 个查询的 `pure`/`read` 列与改前逐字相同**（贴 `diff` 空）。
-3. `test/plans/feat/modules/resources.plan.toml` 的 `pure_touches` 文案按 `lane/c4-round-source@63384055bc` 那句：`a pure operator writes a resource`。
+3. `test/plans/feat/modules/resources.plan.toml` 的 `pure_touches` 文案按 `lane/c4-round-source` 那句：`a pure operator writes a resource` —— **改动在 `63384055bc`**（`operator_table.cpp:1012`），**枝尖 `ae14f65247`** 只多一页 collab 文档、`src/` 零差异。
 4. `BUILD_EXIT=0`、`dirty 0`、`git diff --numstat` 贴出、不 push；读数在宿主 `88zjwei` 上取，标题带 sha。
 
-**开工前提（现在未满足，故未开工）**：`origin/integration` 尚未包含 `lane/c4-round-source@ae14f65247`（2026-11-28 17:5x 核对：`merge-base --is-ancestor ae14f65247 origin/integration` 退出码 1，只有 `lane/c4-round-source` 带着它）。落地后本枝 rebase 到新 integration 尖端，第一条按 §7 的范围动手。
+**开工前提（现在未满足，故未开工）**：`origin/integration` 尚未包含 `lane/c4-round-source` —— **枝尖 `ae14f65247`**，改动 `63384055bc`。2026-11-28 18:1x 核对：integration = `c6c2afe53f`，`merge-base --is-ancestor ae14f65247 origin/integration` 退出码 1（只有 `lane/c4-round-source` 带着它）；那条枝**正在换底重做**（合并位停手交上来的冲突：`handleAccessKey` 与 `draftKeyOf` 两半合到一处），落点已定。**换底落地并合进 integration 之后**本枝 rebase 到新尖端，第一条按本节范围动手。
 
 **同批的边界（已核，不撞）**：`lane-enter-shape` 的 `lane/jgir-accesses`（`git diff --stat origin/integration...lane/jgir-accesses`）只动 `src/stdlib/std/gir/dot/graphviz.cpp`、`src/stdlib/std/gir/json/gir.cpp`、`docs/technical/gir-interchange.md`、`docs/technical/61_capture_census.md`、`scripts/check-capture-census.mjs` 与 `test/cases/trans/*`、几个 `.jgir` 黄金 —— **没有动 `src/kernel/facts/` 的足迹接口，也没有动 `operator_record.h` / `resource_semantics.h`**。它管 jgir 那一份事实，本件管判定函数；第 2 刀（第五项按值）之前再核一次。
+
+## 8 `lane/two-bits-model` 的参考原文（该枝只作材料、不进合并；读到的抄在这里，枝已删）
+
+决策者裁定：该枝的两笔（`Record::accessesOutsideProgram()` 与 `ResourceSignature::pure()`）**正是本件要删的那两份真相之一**，所以它是材料、不是要合进来的东西。下面把它记的两处 `pure()` 与"承诺怎么拼"的原文抄下来，供第 1 刀（§7）直接用。
+
+### 8.1 今天两处 `pure()` 各在哪（本页底，`src/` 未动）
+
+| 位置 | 原文 | 它问的问题 |
+|---|---|---|
+| `src/kernel/ops/include/camel/ops/operator_record.h:487-492` | `bool pure() const { return uses.stated() && !uses.value.externalEffect && !uses.value.functionOperand && !uses.value.allocates && !declaresWrite(); }` | 子句**声明了没写**：已声明、无外部效果、无函数操作数、不分配、没有一条写访问。**读不影响它**。 |
+| `src/kernel/include/camel/core/resource_semantics.h:378-382` | `bool pure() const { return mode == Mode::Concrete && params.empty() && captures.empty() && ambient.empty() && anyOf.empty() && !allocates && !external; }` | 签名**每个部件都空**：`params`/`captures`/`ambient`/`anyOf` 全空、不分配、不外部。**只要读进签名就不纯** —— 与左边那条不是一个判据（这就是"两份真相"的现场：同一句 `pure` 的声明，一处说"没写"，一处说"没访问"）。 |
+
+### 8.2 `lane/two-bits-model` 上"承诺的四个部分"怎么拼（原文）
+
+`cffdb3de2e`（`sem: the signature's pure is the same promise as the record's, read once`）新增**一处判定的内联函数**，在 `src/kernel/include/camel/core/resource_semantics.h:427-441`：
+
+```cpp
+/// What a `pure` clause promises, in four parts, decided once: nothing is written, every access is
+/// to a resource of the program's own, nothing is allocated, and nothing outside the program is
+/// depended on. Both statements of the promise read this and only this -- the declaration's
+/// (`Record::pure`) and the signature's (`ResourceSignature::pure`) -- so a reader cannot find two
+/// answers to one question.
+inline bool
+keepsPurePromise(bool writes, bool accessesOutsideProgram, bool allocates, bool dependsOnOutside) {
+    return !writes && !accessesOutsideProgram && !allocates && !dependsOnOutside;
+}
+```
+
+两处 `pure()` 改成给它**喂四个布尔**（`cffdb3de2e:src/kernel/core/resource_semantics.cpp:606-615`、`:src/kernel/ops/include/camel/ops/operator_record.h:481-491`）：
+
+```cpp
+// 签名侧：把签名自己的部件翻成四个布尔
+bool ResourceSignature::pure() const {
+    return mode == Mode::Concrete && keepsPurePromise(
+                                         writesSomething(*this),
+                                         !ambient.empty(),
+                                         allocates.has_value(),
+                                         external && ambient.empty());
+}
+
+// 记录侧：把子句翻成四个布尔（第二格是 d892f35d72 加进来的"程序自己的"）
+bool pure() const {
+    return sem::keepsPurePromise(
+        !uses.stated() || declaresWrite(),
+        accessesOutsideProgram(),
+        uses.stated() && uses.value.allocates.has_value(),
+        uses.stated() && (uses.value.externalEffect || uses.value.functionOperand));
+}
+```
+
+`d892f35d72`（`ops: reading is not writing, but what a pure clause reads still has to be the program's own`）加的就是第二格那个部件，`Record::accessesOutsideProgram()`（该枝 `src/kernel/core/operator_table.cpp:1275-1290`）：
+
+```cpp
+bool Record::accessesOutsideProgram() const {
+    if (!uses.stated()) {
+        return false;
+    }
+    for (const camel::core::sem::ResourceAccess &access : uses.value.accesses) {
+        // Reading a file or the console is `mode Read` too, so "no write" alone would call such an
+        // operator pure. The resource has to be the program's own: one whose class is not outside,
+        // or one the declaration makes `readonly` ...
+        if (camel::core::sem::reachesOutside(access.resource.cls) && !access.modifiers.readonly) {
+            return true;
+        }
+    }
+    return false;
+}
+```
+
+### 8.3 读到之后的结论（对 §7 第 1 刀的落点）
+
+1. **`keepsPurePromise` 的四格是要的形状**：承诺 = 不写、访问都在程序内、不分配、不依赖程序外 —— 已经是**一处判定**。
+2. **但那枝仍留了两份拼装**：`ResourceSignature::pure()` 自己把 `!ambient.empty()` / `allocates.has_value()` / `external && ambient.empty()` 翻成四格，`Record::pure()` 自己把 `!uses.stated() || declaresWrite()` / `accessesOutsideProgram()` / … 翻成四格 —— 两边各拼一次。这正是决策者说的"要被删的两份真相之一"。第 1 刀要做的是：**`declaresNoWrite(...)` 只留一份拼装**，两个读者各自只交出自己那份事实（记录：子句；签名：测量出的部件），四格的拼装与判定不重复。
+3. **`accessesOutsideProgram` 不新增为记录的第二个方法**：它是同一句"读的必须是程序自己的"在记录侧的又一次拼装；若保留，只能作为 `declaresNoWrite` 的**输入之一**，不许再自成一份判定。
+4. **pre-publish 自检那一笔已被取代**：`bbed9dd32b`（`pure && (writes || allocates || externalEffect || functionOperand)` ⇒ 拒绝，用 `std::any_of` 内联问 `sem::writes`）后来由 `lane/c4-round-source` **改动 `63384055bc`**（枝尖 `ae14f65247`）改成 `sem::writesSomething(sem::signatureOf(r, 0))` + 文案 `a pure operator writes a resource`。第 1 刀以那一版为准（它是合并位那一批），`bbed9dd32b` 只作形状参考。
