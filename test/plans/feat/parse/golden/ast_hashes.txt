@@ -560,7 +560,7 @@ a2ca595975c02dee ok src/stdlib/autodiff/signatures/autodiff.cml
 6ae5ad8be3ee4eec ok src/stdlib/ckpt/signatures/ckpt.cml
 c219592077b5b712 no src/stdlib/nn/signatures/nn.cml
 b9b23c3234979dee ok src/stdlib/rulesets/int8.cml
-9f824c295c51c0d6 ok src/stdlib/rulesets/jvp.cml
+b2b11698e129aa61 ok src/stdlib/rulesets/jvp.cml
 8375a530eff268c4 ok src/stdlib/rulesets/probe_batch.cml
 7a11798394cc6e2c ok src/stdlib/rulesets/probe_missing.cml
 54be2679c5526d37 ok src/stdlib/rulesets/transpose.cml
@@ -1991,6 +1991,7 @@ ce30dc5b0fc0c929 ok test/cases/compile/transforms/jvp_a_value_is_not_a_structura
 bb72ddd886fdb122 ok test/cases/compile/transforms/jvp_call.cml
 b67b23475e86253f ok test/cases/compile/transforms/jvp_call_three_times_one_body.cml
 244c616cdae1a2cf ok test/cases/compile/transforms/jvp_effect.cml
+380b772b76bb0356 ok test/cases/compile/transforms/jvp_idx_take.cml
 30d214ac66a801e2 ok test/cases/compile/transforms/jvp_lifted.cml
 8bc0b8e7cfac78b1 ok test/cases/compile/transforms/jvp_lifts_a_call_through_a_value.cml
 cac6abaabb76f976 ok test/cases/compile/transforms/jvp_loop.cml
