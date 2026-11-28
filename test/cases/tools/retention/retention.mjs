@@ -486,7 +486,7 @@ function nameMode() {
                 SELFTEST_MARKER: MARKER,
             },
         })
-        return { status: proc.status, output: `${proc.stdout || ''}${proc.stderr || ''}`.replace(/[[0-9;]*m/g, '') }
+        return { status: proc.status, output: `${proc.stdout || ''}${proc.stderr || ''}`.replace(/[\u001b][[0-9;]*m/g, '') }
     }
 
     const given = 'host-run-20260101_000000_1_ab12'

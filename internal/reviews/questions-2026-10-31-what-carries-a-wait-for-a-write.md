@@ -146,19 +146,19 @@
 | 位置 | 判据 | 归零后恒真吗 | 守着什么 | 恒真后的后果 | 对不对 |
 |---|---|---|---|---|---|
 | src/runtime/rules.cpp#SideReader | with.empty() && ctrlInputsOf(ref).empty() && syncPredsOf(ref).empty() | **不恒真**——第三项还在 | "只吃常量、且不是某条链或某次等待的一环"才许被规则改写 | 不多命中：sync 那一半仍拦着链上的语句 | **对**。它已经是"或"形状，ctrl 那一项可直接删 |
-| src/passes/opt/defun/defunctionalize.cpp#DefunctionalizeRewritePass::apply | live(base) 且 norm/with/ctrl/order/sync 五种 user 全空 | **不恒真**——是"没有用户"的合取 | 闭包把静态函数打包后，确认没人用才删节点 | 删节点判定略早成立，但只在真没人用时 | **对**。死代码判定，少查一类用户是正解 |
+| src/passes/opt/defun/defunctionalize.cpp#DefunctionalizeRewritePass::apply | alive(base) 且 norm/with/ctrl/order/sync 五种 user 全空 | **不恒真**——是"没有用户"的合取 | 闭包把静态函数打包后，确认没人用才删节点 | 删节点判定略早成立，但只在真没人用时 | **对**。死代码判定，少查一类用户是正解 |
 
 结论：两条都**不需要**在裁决前改。真正要重新设计的仍只有 gates.cpp:19（使能条件，见 control-edge-readers.md 规矩二）。
 
 ## 附录二：std::opt::ctrl 与那 26 处用例的去向（只列，不删）
 
-**先纠一个名字**：**std::opt::ctrl 这个 pass 已经不存在了**——它改名为 std::opt::order（dges.cn.md 5.4），	est/cases/opt/pass_surface.py:30 把它列进"已退役"并断言它不在。ffects_model_edges.plan.toml 的 known_fail_note 里那句 "std::opt::ctrl preserves them on purpose" 是**旧名残留**，裁决后顺手改。
+**先纠一个名字**：**std::opt::ctrl 这个 pass 已经不存在了**——它改名为 std::opt::order（edges.cn.md 5.4），test/cases/opt/pass_surface.py:30 把它列进"已退役"并断言它不在。effects_model_edges.plan.toml 的 known_fail_note 里那句 "std::opt::ctrl preserves them on purpose" 是**旧名残留**，裁决后顺手改。
 
 所以"删除清单"的对象是 src/runtime/control.cpp 的三个辅助函数与它们的自检，不是 pass：
 
 | 对象 | 今天的用户 | ctrl 归零后 | 处置 |
 |---|---|---|---|
-| ppendControlDependency（control.cpp:90-121） | inline/engine.cpp、generic/*、
+| appendControlDependency（control.cpp:90-121） | inline/engine.cpp、generic/*、
 untime/draft_inline.cpp | 无 ctrl 可加 | **主体消失**，连同调用点 |
 | 
 educeControlDependencies（:124-156） | std::opt::order 的部分路径、generic/* | 无 ctrl 可约简 | **主体消失** |
@@ -166,8 +166,8 @@ educeControlDependencies（:124-156） | std::opt::order 的部分路径、gener
 | src/passes/test/control.cpp 11 个用例（26 处提及） | control.topology、control.test_pass_runs_when_named | 见下 | 见下 |
 
 **26 处的分类**：
-- **主体消失**（测的就是 ctrl 规则本身）——8 个用例、17 处：mandatoryDataPaths(4)、denseChain(4)、ranchBoundaries(3)、chainAndBudget(2)、conditionalDataIsNotMandatory(1)、dataBudget(1)、denseDataChain(1)、documentOrdering(1)。
-- **换写成等同步前驱的版本**——1 个用例、6 处：orwardingGateConsumers（门的绕过判据在 ② 之后要重新设计，用例跟着重写）。
+- **主体消失**（测的就是 ctrl 规则本身）——8 个用例、17 处：mandatoryDataPaths(4)、denseChain(4)、BranchBoundaries(3)、chainAndBudget(2)、conditionalDataIsNotMandatory(1)、dataBudget(1)、denseDataChain(1)、documentOrdering(1)。
+- **换写成等同步前驱的版本**——1 个用例、6 处：ForwardingGateConsumers（门的绕过判据在 ② 之后要重新设计，用例跟着重写）。
 - **一行不用改**——2 个用例、0 处：manyReaders、syncChainOrdering（已经是同步边的用例，正是新模型要的那一半）。
 
 **Plan 侧**：	est/plans/feat/opt/control.plan.toml 4 条里 control.topology 与 control.test_pass_runs_when_named 依赖这个自检；control.pipeline_contract、control.test_pass_not_in_default_pipeline 与 ctrl 无关。	est/cases/opt/control_contract.py 是 Python 侧契约用例，一并跟。

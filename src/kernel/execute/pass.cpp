@@ -95,10 +95,11 @@ void declareCoreTagReaders() {
 }
 
 /// The scheduling pass `std::run` stands for: "run this program", written by a pipeline that does
-/// not care which back end runs it. The alias table carries the default target; the run
+/// not care which back end runs it. The name is the declaration's, like every other pass name;
+/// what this file holds is the target that declaration runs the program through. The run
 /// configuration (`.opencmlrc`'s `passes.run`) may name another scheduling pass, and a front end
-/// that reads one stores it here. The alias is resolved with the other aliases, in
-/// that reads one stores it here. `runPassTarget` answers it, and it is the only value
+/// that reads one stores it here; `runPassTarget` answers it, and it is the only value the step
+/// hands the program to.
 constexpr const char *kRunPassName          = "std::run";
 constexpr const char *kRunPassDefaultTarget = "std::fvm";
 
@@ -330,10 +331,6 @@ namespace {
 /// the name is. A name the table does not know is not interned -- asking whether a name is a pass
 /// must not make it one -- so a reader that needs the operator a name stands for, and a reader that
 /// only asks whether the name is a pass at all, ask the same question here.
-///
-/// The alias table is applied by `findDescriptor`, before it comes here: an alias is a *spelling*
-/// of a pass, and the declaration is still the one the written name's own module would give, so the
-/// fallback in `findDescriptor` is what re-enters this point with the target's spelling.
 std::optional<camel::core::OperId> resolvePassOperator(const std::string &written) {
     const auto id = camel::core::OperatorTable::instance().lookup(written);
     if (!id.has_value() || *id == camel::core::kNoOper) {
@@ -397,10 +394,9 @@ std::optional<FoundPass> findDescriptor(const context_ptr_t &ctx, const std::str
             return std::nullopt;
         }
         const std::string path = module + "::" + function;
-        // The name is resolved to the operator in one place (`resolvePassOperator`), so a spelling
-        // the alias table answers and a spelling the operator table answers arrive here as the same
-        // id: the registry is asked by id, and a reader that already holds the id (a program
-        // calling the pass as a function) asks without spelling the name again.
+        // The name is resolved to the operator in one place (`resolvePassOperator`), and the
+        // registry is asked by id: a reader that already holds the id (a program calling the pass
+        // as a function) asks without spelling the name again.
         const auto operatorId = resolvePassOperator(path);
         const auto implementation =
             operatorId.has_value() ? findPassKernel(*operatorId) : std::nullopt;
@@ -2408,10 +2404,9 @@ namespace {
 ///
 /// The step is a pass like any other -- a declaration in `std.cml`, a kernel here -- and what it
 /// does is hand the program to that pass: the choice is the run's configuration, not a second
-/// table of names and not a branch in the resolution of a written name. Today the core's alias
-/// entry answers `std::run` before a pipeline reaches this kernel; the kernel is what the name
-/// resolves to once that entry goes, so a pipeline that writes `std::run` and one that writes
-/// nothing take the same step here.
+/// table of names and not a branch in the resolution of a written name. A pipeline that writes
+/// `std::run` and one that writes nothing take the same step here: the name is the declaration's,
+/// and this is the kernel the declaration names.
 ///
 /// It reads no parameters of its own: the parameters belong to the pass it hands the program to,
 /// and are read from that pass's own declaration (`constructPass` below asks them the way every
@@ -2443,7 +2438,7 @@ const camel::execute::PassKernel
 
 /// `std::run` runs the program, so the pass it names has to be a scheduling pass. The value is
 /// the run configuration's (`passes.run`), not the pipeline's, so a wrong one is refused before
-/// anything runs and the diagnostic names the setting: the alias is spelled in the pipeline, and
+/// anything runs and the diagnostic names the setting: the name is spelled in the pipeline, and
 /// the setting is what has to be changed. The check runs where every other pass name is checked
 /// (`requireKnownPasses`), on the lists a run is about to execute.
 void requireRunPassTarget(const context_ptr_t &ctx) {
@@ -2645,8 +2640,9 @@ tagsNeverReadWarnings(const std::vector<std::string> &passes, const context_ptr_
     // use. A run whose pipeline never looks a pass up would otherwise find no core reader at
     // all.
     ensureCoreTagReaders();
-    // The names in the pipeline, as written and as they resolve (an alias strips to the pass's
-    // own name): a tag's `read_by` may name either.
+    // The names in the pipeline, as written: a tag's `read_by` may name one of them. A name
+    // resolves to itself, so the spelling and its resolution are the same string, and both lists
+    // the check reads are filled with it.
     std::vector<std::string> inPipeline;
     inPipeline.reserve(passes.size() * 2);
     for (const auto &spec : passes) {
