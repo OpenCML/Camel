@@ -558,5 +558,6 @@ declared `float` of the function around it.
   The declared `float` of the function is only checked, with a located diagnostic when the
   value the body hands on does not fit.
 The generator's reference evaluator types the arm `int` (reading B's value), and the program runs
-again: seed 16 is back in `CHECK_EXCLUDED = {}`.
+again: seed 16 is in the batch, as every seed of `generate.VERSION` 9 is -- a red cell is a reading
+here, and there is no exemption mechanism.
 
