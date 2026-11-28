@@ -4293,7 +4293,13 @@ Value Evaluator::applyOper(
         // carrying a sequence (SequenceInsert / SequenceAt) or a growing tensor (Concat). This is
         // work that is not written yet, not work ONNX cannot do: "No lowering at opset N" would
         // send the reader after a lowering that cannot exist.
-        if (uri == ":struct/append_arr" || uri == ":struct/append_arr_owned") {
+        // The append is recognised by the id the table gives it, as the in-place one is
+        // (`appendInPlaceOper`): a URI is text, and the question "which operator is this" is one
+        // the table answers, so two spellings of one operator cannot answer it two ways.
+        const std::optional<camel::core::OperId> append =
+            camel::core::OperatorTable::instance().lookup(uri);
+        if (append.has_value() &&
+            (*append == camel::core::oper::Append || *append == camel::core::oper::AppendOwned)) {
             unsupported(
                 act,
                 "this exporter does not yet lower a collecting loop's reverse into ONNX "
