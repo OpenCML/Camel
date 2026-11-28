@@ -201,6 +201,22 @@ compare_to = "camel_passes.fold.by_cpp"
 compare_fields = ["exit_code", "stdout_normalized"]
 
 [[tests]]
+name = "camel_passes.fold.by_cpp_jgir"
+desc = "The reference as one document: `std::cxx::fold`, then `std::jgir canonical=true`, prints the graph the C++ pass leaves and nothing else, so the whole document is what the pair below is compared against."
+kind = "behavior"
+case = "../../../cases/opt/camel_passes/fold_subject.cml"
+args = ["${case}", "std::cxx::fold", "std::jgir canonical=true", "std::nop"]
+
+[[tests]]
+name = "camel_passes.fold.by_camel_jgir"
+desc = "The two folds as the same document: `opt::fold` prints the graph it commits, and the comparison is the whole `std::jgir` text -- the graph's flags included -- so a commit path that settles gates without recording it cannot pass here."
+kind = "differential"
+case = "../../../cases/opt/camel_passes/fold_subject.cml"
+args = ["${case}", "opt::fold", "std::jgir canonical=true", "std::nop"]
+compare_to = "camel_passes.fold.by_cpp_jgir"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
 name = "camel_passes.fold.is_a_fixpoint"
 desc = "opt::fold run on its own output gives the same graph: `chain` needs two rounds, so a version that folded one round and stopped is refused here."
 kind = "differential"
@@ -257,6 +273,22 @@ kind = "differential"
 case = "../../../cases/opt/camel_passes/fold_fault.cml"
 args = ["${case}", "opt::fold", "std::jgir", "std::nop"]
 compare_to = "camel_passes.fold_fault.by_cpp"
+compare_fields = ["exit_code", "stdout_normalized", "stderr_normalized"]
+
+[[tests]]
+name = "camel_passes.fold_fault.by_cpp_jgir"
+desc = "The reference as one document: `std::cxx::fold` on the corpus that can only fault, printed through `std::jgir canonical=true`; the exit and the diagnostic are what the pair below compares."
+kind = "behavior"
+case = "../../../cases/opt/camel_passes/fold_fault.cml"
+args = ["${case}", "std::cxx::fold", "std::jgir canonical=true", "std::nop"]
+
+[[tests]]
+name = "camel_passes.fold_fault.by_camel_jgir"
+desc = "The two folds end the same way: neither leaves a graph, so this pair compares the exit code and the diagnostic text rather than a document."
+kind = "differential"
+case = "../../../cases/opt/camel_passes/fold_fault.cml"
+args = ["${case}", "opt::fold", "std::jgir canonical=true", "std::nop"]
+compare_to = "camel_passes.fold_fault.by_cpp_jgir"
 compare_fields = ["exit_code", "stdout_normalized", "stderr_normalized"]
 
 [[tests]]
@@ -331,6 +363,22 @@ kind = "differential"
 case = "../../../cases/opt/camel_passes/cse_after_inline.cml"
 args = ["${case}", "std::cxx::inline", "opt::cse", "std::stats", "std::nop"]
 compare_to = "camel_passes.cse.after_inline.by_cpp"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "camel_passes.cse.after_inline.by_cpp_jgir"
+desc = "The reference as one document: `std::cxx::inline` then `std::cxx::cse`, printed through `std::jgir canonical=true`."
+kind = "behavior"
+case = "../../../cases/opt/camel_passes/cse_after_inline.cml"
+args = ["${case}", "std::cxx::inline", "std::cxx::cse", "std::jgir canonical=true", "std::nop"]
+
+[[tests]]
+name = "camel_passes.cse.after_inline.by_camel_jgir"
+desc = "opt::cse as the same document: the node count the text pair counts is one reading, this is the whole graph -- flags included -- so the two commit paths are held to the same output."
+kind = "differential"
+case = "../../../cases/opt/camel_passes/cse_after_inline.cml"
+args = ["${case}", "std::cxx::inline", "opt::cse", "std::jgir canonical=true", "std::nop"]
+compare_to = "camel_passes.cse.after_inline.by_cpp_jgir"
 compare_fields = ["exit_code", "stdout_normalized"]
 
 [[tests]]
