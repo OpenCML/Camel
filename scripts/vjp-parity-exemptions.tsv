@@ -135,13 +135,7 @@ one_hot	engine-autodiff	its input is a label: locally constant, the rows do not 
 # they were recording a file no line of the comparison opened.
 
 
-# `pow` left this block when the library gained a name for `tensor:pow`: `rulesets/transpose.cml`
-# files `#pow_tensor_t` under `pow@2`, and the key now sits in the reverse-only column instead of
-# this file. Its signature is computed (`TensorOrScalar`, rendered from
-# `lib/tensor/signatures/tensor.cml`), and that family stays in C++ until type functions take it
-# over -- which is why no Camel declaration states it, and why the row used to record a name no rule
-# could write. The engine's `setVjp` row is unchanged, the forward half has no `jvp_*` yet, and the
-# day it gains one the key is answered by both tables.
+pow	lane-rulesets	`tensor:pow`'s only spelling is `tensor`'s exported `pow`, and both rulesets bind the bare name `pow` to **`math`'s** scalar kernel (`import { ..., pow, ... } from math`), which is the operator whose key is `pow_d`; the array form has no declaration in the tensor module's CML, so no rule can name it. The spelling a program writes, `^`, answers both halves since 2026-11-25 (`rulesets/jvp.cml#jvp_pow`, `rulesets/transpose.cml#pow_t`), so no reading in the tree is refused for want of this key
 slice_sub	lane-rulesets	no `jvp_slice_sub`: the library's forward half stops a program before the reverse is asked
 idx_take	lane-rulesets	the subscript read's forward law is `jvp_idx_arr` for the two-word form; the slab form has no `jvp_*`
 
