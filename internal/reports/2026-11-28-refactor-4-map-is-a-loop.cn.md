@@ -85,3 +85,18 @@
 
 - 枝：`lane/fvm-element-frame`，停在 `d1418ea52f`，本页是它上面唯一一笔（文档），`dirty 0`，不 push。
 - 帧复用（`task-448` 方向）不继续做；它的读数在本页第 0 节，作为本件第一笔的材料。
+## 5 借自被取代补丁枝的两条读数（④ 要覆盖的证据）
+
+**（a）元素路径今天是一次一次的原生入口，不是循环。** 被取代的 `lane/fvm-element-call-count`（`task-428`，`f70f269cc8`，7+/1-）唯一一笔是把 `callElement` 里的 `invokeCallOrJit` 补上一次 `noteIndirectCall(site.runtimeGraph)`。它记的是一条证据而不是解：元素路径（`fastvm.cpp:497` `callElement`，`:500` 的 `invokeCallOrJit`）每元素都是一次入口，而 `CALL` 字节码那条路才计数（`gotovm.cpp:553`；JIT 侧的同一处是 `fastvm.cpp:1200`）。元素路径原来不计数 ⇒ tier policy 永远看到默认 0，**阈值再低也跨不过一个不动的数**，kernel 在 `std::jit` 下整轮保持解释。④ 要覆盖的正是这一点：今天两个后端在同一个 `map` 形状上是"每元素一次入口"的两套路径，而不是同一段循环。
+
+**（b）源级路线量过了，关掉：`map` 不能在 `.cml` 里改写成收集循环。** 把 `map` 写成 Camel 收集循环的三种形状，`std::fvm`、同一构建：
+
+| 形状 | 30k | 60k | 120k |
+|---|---|---|---|
+| `loop out = [] as int[] for x in xs do out->append<x>` | 4667 ms | 20297 ms | 79196 ms |
+| `var out`，循环体 `{ out = out->append<x>; acc + 1 }` | — | — | 83278 ms |
+| `loop out = [], n = 0 ... do (out->append<x>, n + 1)` | — | — | 95952 ms |
+
+30k→60k 4.3×、60k→120k 3.9×：**二次**。12M 元素上第一条 >600 s（同形状的内建 `map` 是 ~7 s）。原因是 `append` 是 `#op(':struct/append_arr')`（`prelude.cml:1318`，表达式位置每轮造一个新数组），而 `builder_control.cpp:4657` 的收集槽要求：空数组初值、该状态的下一值本身就是 `append` 算子、`append` 的唯一普通输入是循环体的那个端口、端口只有这一个用处、且循环体不直接返回状态值（`:4661`、`:4712-4718`）。源级能写出的形状都不满足它。
+
+⇒ 第一刀因此落在 **GIR 的循环构造处**（`builder_control.cpp:3942-3956` 的 `addRegionLoopNode` + `attachLoopParts`，收集槽由 `collectLoopAppends` 在同一处命中），不是改 `prelude.cml`。第二刀（核内联）之外，这是唯一还缺的东西。
