@@ -32,5 +32,5 @@ func main() sync {
     let fwd = split(lifted)
     let (y, lin) = fwd(2.0)
     println('g y=', y)
-    println('g d=', lin(0, 1.0))
+    println('g d=', lin(1.0))
 }
