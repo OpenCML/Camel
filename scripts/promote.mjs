@@ -440,10 +440,6 @@ function previousPromotion(repo, ref, reports) {
     return { n, names, table: table.base, tip, cases }
 }
 
-// A case that is not one of these is red: a failure, a timeout that survived its re-run, a crash,
-// and any status the runner may add later.
-const NOT_RED = new Set(['pass', 'skip', 'xfail'])
-
 function readSummary(file) {
     let doc
     try {
@@ -588,12 +584,12 @@ async function runWorker(flags) {
         // The runner has already re-run every case that timed out (once, alone, at twice its
         // limit) and its row carries the final verdict; a case that timed out twice is a fail row.
                 const red = new Set()
-        for (const row of rows) if (!NOT_RED.has(row.status)) red.add(KEY(row.plan, row.test))
+        for (const row of rows) if (row.red !== false) red.add(KEY(row.plan, row.test))
         const green = []
         const stillRed = []
         for (const row of rows.filter((one) => one.rerun)) {
             const name = `${row.plan}/${row.test}`
-            if (NOT_RED.has(row.status)) green.push(name)
+            if (row.red === false) green.push(name)
             else {
                 stillRed.push({
                     case: name,

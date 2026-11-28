@@ -276,7 +276,7 @@ export const RULES = [
             if (/^(lane|seat|trial|b|meta)\//.test(c.head)) {
                 return {
                     key: `branch:${c.head}`,
-                    text: `主检出 D:\\Projects\\Camel 被切到了工作分支 ${c.head}：是哪条车道（看主检出的 reflog），让它切回 develop、实验一律放进自己的工作树。主检出是负责人的，只在干净地停在 develop 上时被快进。`,
+                    text: `主检出 ${c.path} 被切到了工作分支 ${c.head}：是哪条车道（看主检出的 reflog），让它切回 develop、实验一律放进自己的工作树。主检出是负责人的，只在干净地停在 develop 上时被快进。`,
                 }
             }
             if (c.head === 'develop' && c.dirty > 0) {
@@ -287,7 +287,7 @@ export const RULES = [
                     : ''
                 return {
                     key: `dirty:${paths}`,
-                    text: `主检出 D:\\Projects\\Camel 在 develop 上有 ${c.dirty} 处未提交改动${paths ? `（${paths}）` : ''}：${named}按路径找到写进来的车道复原（git -C <绝对路径> checkout -- <路径>），写文件一律用绝对路径。若是负责人自己的改动，不动。`,
+                    text: `主检出 ${c.path} 在 develop 上有 ${c.dirty} 处未提交改动${paths ? `（${paths}）` : ''}：${named}按路径找到写进来的车道复原（git -C <绝对路径> checkout -- <路径>），写文件一律用绝对路径。若是负责人自己的改动，不动。`,
                 }
             }
             return null

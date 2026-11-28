@@ -90,9 +90,6 @@ const DEFAULT_BUILD =
 const DEFAULT_READ =
     'pwsh -NoProfile -File "{seat}/internal/tools/camel-remote.ps1" -Path "{seat}" -Plan "{plans}" -Tier fast -Jobs 8 -TokenClass funnel -NoGpuWatch -FetchFile summary.json -FromThisRun'
 
-// A case with one of these verdicts is not red; the promotion reads the same three.
-const NOT_RED = new Set(['pass', 'skip', 'xfail'])
-
 // The tier the promotion's red table is measured on; the reading compares only that tier's cases.
 const BASELINE_TIER = 'fast'
 
@@ -462,7 +459,7 @@ function readTip(args, baseSha, tip) {
     // A plan file named as a target runs every case in it, whatever the tier asked for, while the
     // table is measured on one tier. Only the cases of that tier are compared; a row that says
     // nothing about its tier is compared, because a red that cannot be placed must not be dropped.
-    const reds = rows.filter((row) => !NOT_RED.has(row.status) && (row.tier === undefined || row.tier === BASELINE_TIER))
+    const reds = rows.filter((row) => row.red !== false && (row.tier === undefined || row.tier === BASELINE_TIER))
     const outside = reds.filter((row) => !known.has(`${row.plan}\t${row.test}`) && !known.has(`${row.test}\t${toSlashes(String(row.plan_path ?? ''))}`))
     // A case whose plan declares it `flaky` names the defect that makes it fail on its own, and the
     // runner has already given it its second attempt. Its red is printed and recorded and does not
