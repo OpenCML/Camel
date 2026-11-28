@@ -427,55 +427,23 @@ namespace cxx {
 // spellings need to *be* passes; the kernel side is the next step, and until it lands a pipeline
 // resolves each name exactly as it did before -- these lines change no reading.
 
-/// The default pipeline's name, `std::opt` (`std::cxx::opt` implements it).
-export func opt::<F>(f: F) => F! when is_function::<F>()
 
 /// `std::jit`: the fast VM's JIT backend (`std::fastvm::jit` implements it); the parameters are
-/// the target's, read from its own declaration.
-export func jit::<F>(f: F) => F! when is_function::<F>()
-
-/// `std::linear`: run on the node VM, linearly (`std::nvm` implements it).
-export func linear::<F>(f: F) => F! when is_function::<F>()
-
-/// `std::lnr`: the fast VM, the linear spelling (`std::fvm` implements it).
-export func lnr::<F>(f: F) => F! when is_function::<F>()
 
 
-/// `std::nodevm`: the node VM written by its old spelling (`std::nvm` implements it).
-export func nodevm::<F>(f: F) => F! when is_function::<F>()
 
-/// `std::cppmod`: the C++ exporter that writes a module file (`std::cpp::module_file`).
-export func cppmod::<F>(f: F) => F! when is_function::<F>()
 
-/// `std::cppinspect`: the C++ exporter that prints what it reads (`std::cpp::inspect`).
-export func cppinspect::<F>(f: F) => F! when is_function::<F>()
 
-/// `std::tns`: the topological node sequence (`std::topo_node_seq` implements it).
-export func tns::<F>(f: F) => F! when is_function::<F>()
 
-/// `std::bc`: the fast VM's bytecode dump (`std::fastvm::bytecode` implements it).
-export func bc::<F>(f: F) => F! when is_function::<F>()
 
-/// `std::lbc`: the fast VM's linked bytecode dump (`std::fastvm::linked_bytecode`).
-export func lbc::<F>(f: F) => F! when is_function::<F>()
 
-/// `std::bin`: the JIT's binary dump, short spelling (`std::fastvm::jit_bin` implements it).
-export func bin::<F>(f: F) => F! when is_function::<F>()
 
-/// `std::asm`: the JIT's machine-code dump (`std::fastvm::jit_asm` implements it).
-export func asm::<F>(f: F) => F! when is_function::<F>()
 
-/// `std::rmir`: the JIT's register-machine IR dump (`std::fastvm::jit_rmir` implements it).
-export func rmir::<F>(f: F) => F! when is_function::<F>()
 
-/// `std::mir`: the JIT's machine IR dump (`std::fastvm::jit_mir` implements it).
-export func mir::<F>(f: F) => F! when is_function::<F>()
 
-/// `std::tfg`: the task-flow dump (`std::tfdump` implements it).
-export func tfg::<F>(f: F) => F! when is_function::<F>()
 
-/// `std::prof`: the profiler (`std::profile` implements it); the parameters are the target's.
-export func prof::<F>(f: F) => F! when is_function::<F>()
+
+
 
 /// The step that runs the program, `std::run`: the pass the run's configuration names
 /// (`passes.run`), and `std::fvm` when it names none. Its kernel is registered by the core
@@ -485,16 +453,3 @@ export func run::<F>(f: F) => F! when is_function::<F>()
 
 /// The garbage collector, written by its old spellings: one entry each for the snapshot, the
 /// verifier, the minor and major collections and the readings/dumps beside them. The functions are
-/// the `std::gc` module's (`std::gc::snapshot` and so on).
-export func gcsnap::<F>(f: F) => F! when is_function::<F>()
-export func gcverify::<F>(f: F) => F! when is_function::<F>()
-export func gcminor::<F>(f: F) => F! when is_function::<F>()
-export func gcmajor::<F>(f: F) => F! when is_function::<F>()
-export func gcconfig::<F>(f: F) => F! when is_function::<F>()
-export func gcsummary::<F>(f: F) => F! when is_function::<F>()
-export func gcblocks::<F>(f: F) => F! when is_function::<F>()
-export func gcviews::<F>(f: F) => F! when is_function::<F>()
-export func gcviews_escape::<F>(f: F) => F! when is_function::<F>()
-export func gcremembered::<F>(f: F) => F! when is_function::<F>()
-export func gcforeign::<F>(f: F) => F! when is_function::<F>()
-export func gcpoison::<F>(f: F) => F! when is_function::<F>()

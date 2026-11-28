@@ -19,6 +19,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/observer.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/definitions.h"
 #include "camel/runtime/effect_liveness.h"
@@ -2537,14 +2538,15 @@ std::unique_ptr<GraphIRPass> makeRunPass(const context_ptr_t &ctx, const PassArg
     return pass;
 }
 
-/// One kernel, registered where the operator is: the name is `std::run`, and the registry resolves
-/// it to that operator the way it does for every other pass.
-const bool runPassKernelRegistered = []() {
-    PassDescriptor descriptor;
-    descriptor.make = makeRunPass;
-    registerModulePass(kRunPassName, std::move(descriptor));
-    return true;
-}();
+/// One kernel, written where the pass is: a `PassKernel` names `std::run` and builds the step, the
+/// same shape every other pass's kernel has, so the declaration and the kernel are one pair the
+/// declaration check reads (`test/tools/check-pass-declarations.mjs`) rather than a registry entry
+/// beside it. The name is the literal the declaration writes; `kRunPassName` is the same string and
+/// names the setting's subject in diagnostics.
+const camel::execute::PassKernel
+    runPassKernel("std::run", [](const context_ptr_t &ctx, const PassArgs &args) {
+        return makeRunPass(ctx, args);
+    });
 
 /// `std::run` runs the program, so the pass it names has to be a scheduling pass. The value is
 /// the run configuration's (`passes.run`), not the pipeline's, so a wrong one is refused before
