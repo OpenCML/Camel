@@ -30,7 +30,7 @@ func tangent_pair::<P, Q>(p: P, q: Q) => bool {
 }
 
 func tangent_signature::<P, Q>(p: P, q: Q) => Tangent<Pair<P, typeof (q)>> {
-    return { first: (), second: q }
+    return { first: 0, second: q }
 }
 
 func main() sync {
