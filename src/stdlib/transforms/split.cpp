@@ -4,6 +4,7 @@
 #include "node_operator.h"
 #include "refusal_readings.h"
 #include "split_internal.h"
+#include "transpose/signature.h"
 
 #include "camel/core/derivative.h"
 
@@ -2630,22 +2631,30 @@ SplitGraph buildSplitGraph(
                 isValuePort[i] = 1;
             }
         }
+        // Which parameters take a port is **read, not decided here**: `portParametersOf`
+        // (`transpose/signature.h`) is the one place that rule is written, and the half's own type
+        // is the list it is asked about (`tangentParams`, one entry per parameter, `()` for a place
+        // the half answers rather than takes).
+        const std::vector<size_t> backwardPorts = portParametersOf(halves.backward);
+        const size_t half                       = sourcePorts.size() / 2;
+        std::vector<char> takesBackwardPort(halves.backward->normTypesCount(), 0);
+        for (size_t parameter : backwardPorts) {
+            if (parameter < takesBackwardPort.size()) {
+                takesBackwardPort[parameter] = 1;
+            }
+        }
         for (size_t i = 0; i < sourcePorts.size(); ++i) {
             if (isValuePort[i] != 0) {
                 continue;
             }
-            Type *type = function->funcType()->normTypeAt(i);
-            // The same question as the branch half above: the port list follows the **user's**
-            // tangent of the parameter (`gradientTypeOf`, principle 9.9), not the machinery's
-            // space of the lifted slot. `string` and a function still answer `()` and still get no
-            // port.
-            Type *const userTangent     = camel::core::gradientTypeOf(const_cast<Type *>(type));
-            const auto *const userTuple = tt::as_ptr<TupleType>(userTangent);
-            const bool typedSlot        = type != nullptr && userTangent != nullptr &&
-                                          !(userTuple != nullptr && userTuple->size() == 0);
-            if (!typedSlot) {
+            // The lifted index `i` counts from the middle of the lifted port table; the rule itself
+            // is `portParametersOf`, and `i - half` only names the parameter it is asking about.
+            // The lifted table states a value slot and a tangent slot per parameter, so
+            // `i in [half, 2*half)` and the parameter index is always in range.
+            if (i < half || takesBackwardPort[i - half] == 0) {
                 continue;
             }
+            Type *type               = function->funcType()->normTypeAt(i);
             const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
             draft.appendNormPort(port);
             backward.portOf[i] = port;
