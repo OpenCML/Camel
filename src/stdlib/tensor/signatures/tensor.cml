@@ -58,7 +58,7 @@ export func where(cond: bool[...], lhs: float[...] | number, rhs: float[...] | n
 /// |x| per element: the sign cleared.
 /// @pure
 /// @example abs([-1.5, 2.0] as float[])    // [1.5, 2.0]
-export func abs(t: float[...]) => float[...]
+export func abs::<T>(t: T[...]) => T[...] when is_numeric::<T>()
 
 /// e^x per element, within 2 ulp, subnormal results included.
 /// @pure
@@ -94,7 +94,7 @@ export func tanh(t: float[...]) => float[...]
 /// maximum(x, +0) per element: NaN gives the canonical NaN, and -0 gives +0.
 /// @pure
 /// @example relu([-1.0, 2.0] as float[])    // [0.0, 2.0]
-export func relu(t: float[...]) => float[...]
+export func relu::<T>(t: T[...]) => T[...] when is_numeric::<T>()
 
 /// The Gaussian error linear unit per element, computed as its normative definition in Camel.
 /// @pure

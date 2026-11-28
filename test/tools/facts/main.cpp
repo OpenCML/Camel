@@ -139,15 +139,27 @@ class ThreeNodeView final : public g::GraphView {
     }
 };
 
-/// The one graph the check has: an object whose address is the identity a fact is anchored on.
+/// The check's graph: the owner's two answers a store keys and versions a fact by -- an identity
+/// that every version of one graph shares, and the revision of its content. The address is
+/// neither: a check that made the address the identity would be checking the defect the store's
+/// re-key removed.
 class CheckGraph final : public g::Graph {
   public:
-    explicit CheckGraph(const g::GraphView &view) : view_(view) {}
+    explicit CheckGraph(const g::GraphView &view, std::uint64_t identity = 1)
+        : view_(view), identity_(identity) {}
     const g::GraphView &view() const override { return view_; }
+    std::uint64_t identity() const { return identity_; }
 
   private:
     const g::GraphView &view_;
+    std::uint64_t identity_;
 };
+
+/// The identity of the graphs the check makes: the one question `GraphAccess::identity` answers.
+std::uint64_t identityOf(const g::Graph &graph) {
+    const auto *check = dynamic_cast<const CheckGraph *>(&graph);
+    return check == nullptr ? std::uint64_t{0} : check->identity();
+}
 
 /// The version of each graph's content, as the owner of the graph would report it.
 std::unordered_map<const g::Graph *, std::uint64_t> versions;
@@ -344,8 +356,9 @@ int runSelfCheck() {
     ThreeNodeView view;
     CheckGraph graph(view);
     const facts::GraphAccess access{
-        .view    = [](const g::Graph &each) { return &each.view(); },
-        .version = [](const g::Graph &each) {
+        .view     = [](const g::Graph &each) { return &each.view(); },
+        .identity = [](const g::Graph &each) { return identityOf(each); },
+        .version  = [](const g::Graph &each) {
             const auto it = versions.find(&each);
             return it == versions.end() ? std::uint64_t{0} : it->second;
         },
@@ -564,6 +577,76 @@ int runSelfCheck() {
     store.invalidate(nodeTag, asSpan(node2));
     check(store.size() > 0, "dropping one fact leaves the others");
 
+    // ---- A fact outlives the version of the graph it was read from ---------------------------
+    // The owner answers one identity for both versions: the graph was re-encoded around a node
+    // nobody touched, and the version the fact was read from ends. The fact is about the graph, so
+    // it moves to the version that is still there -- and is revalidated against it, because what it
+    // reported reading did not change (architecture, core abstractions 1).
+    //
+    // Two versions that are both alive are *not* one graph: a value transaction hands out a copy
+    // while the original keeps running (design principles 9.1), so an entry is only found again by
+    // the object it was re-anchored on, never by the identity alone.
+    const facts::KindId reportedKind = facts::registerKind<std::uint32_t>(facts::Kind<std::uint32_t>{
+        .key        = "check.reported",
+        .owner      = "check",
+        .scope      = facts::Scope::Node,
+        .dependence = facts::Dependence::Reported,
+        .compute =
+            [](std::span<const facts::Anchor> anchors, const facts::GraphAccess &, facts::ReadLog &log) {
+                log.node(anchors[0].node);
+                return std::optional<std::uint32_t>(anchors[0].node + 100);
+            },
+        .print = [](std::uint32_t value) { return std::to_string(value); },
+    });
+    ThreeNodeView firstView;
+    ThreeNodeView laterView;
+    CheckGraph    firstVersion(firstView, /*identity=*/1);
+    CheckGraph    laterVersion(laterView, /*identity=*/1);
+    bumpVersion(laterVersion);
+    // The owner versions nodes too, and this node's version did not move: that is the number the
+    // reported rule is checked against once the graph's revision has.
+    facts::GraphAccess versionedAccess = access;
+    versionedAccess.nodeVersion        = [](const g::Graph &, facts::NodeId) {
+        return std::uint64_t{7};
+    };
+    facts::Store versionedStore(versionedAccess);
+    facts::holdGraph(versionedStore, firstVersion, 1);
+    facts::holdGraph(versionedStore, laterVersion, 1);
+    const facts::Anchor takenAt{&firstVersion, 1};
+    check(
+        versionedStore.obtain<std::uint32_t>(reportedKind, takenAt) != nullptr,
+        "a reported-read fact is computed and kept on the version it was read from");
+    const facts::Anchor askedAt{&laterVersion, 1};
+    check(
+        versionedStore.probe(reportedKind, asSpan(askedAt)) == facts::Status::Absent,
+        "two live versions of one graph are not one graph: the fact of one is not the other's");
+    facts::forgetGraph(&firstVersion, 1);
+    check(
+        versionedStore.probe(reportedKind, asSpan(askedAt)) == facts::Status::Revalidated,
+        "the fact of a version that ended is revalidated against the version that is still there");
+
+    // ---- A fact lives until the whole version line is unreachable -----------------------------
+    // Both ends in one place, because a store that clears on the first version to end and a store
+    // that never clears fail the two checks below in opposite directions: a fact is about the
+    // graph, so one version ending must not take it, and a slot left behind by the last version
+    // would name a fact nobody owns (camel/runtime/fact_slots.h).
+    ThreeNodeView lineOneView;
+    ThreeNodeView lineTwoView;
+    CheckGraph    lineOne(lineOneView, /*identity=*/2);
+    CheckGraph    lineTwo(lineTwoView, /*identity=*/2);
+    facts::Store  lineage(versionedAccess);
+    facts::holdGraph(lineage, lineOne, 2);
+    facts::holdGraph(lineage, lineTwo, 2);
+    lineage.put<std::uint32_t>(reportedKind, facts::Anchor{&lineOne, 0}, std::uint32_t{5});
+    facts::forgetGraph(&lineOne, 2);
+    check(
+        lineage.size() == 1 &&
+            lineage.probe(reportedKind, asSpan(facts::Anchor{&lineTwo, 0})) == facts::Status::Valid,
+        "a fact survives one version of its graph ending, while another version of the line is alive");
+    facts::forgetGraph(&lineTwo, 2);
+    check(
+        lineage.size() == 0,
+        "a fact is cleared when the last version of its line ends, and not before");
     if (failures == 0) {
         std::cout << "facts self-check: passed\n";
         return 0;

@@ -591,6 +591,58 @@ check(
     `${casesOnly.stdout ?? ''}${casesOnly.stderr ?? ''}${fs.existsSync(selectLog) ? fs.readFileSync(selectLog, 'utf8') : ''}`,
 );
 
+// Stacked batches: batch N is built and read but not pushed; batch N+1 is built and read on N's tip
+// and pushes only once integration contains it. The build stub records the build as camel-remote
+// does, so both pushes go through the repository's own pre-push hook.
+const builtStub = path.join(readRoot, 'stub-built.mjs');
+fs.writeFileSync(
+    builtStub,
+    `import { execFileSync } from 'node:child_process';\nimport fs from 'node:fs';\nimport path from 'node:path';\n` +
+        `const here = (...a) => execFileSync('git', a, { encoding: 'utf8' }).trim();\n` +
+        `const common = path.resolve(here('rev-parse', '--git-common-dir'));\n` +
+        `fs.mkdirSync(path.join(common, 'camel-built'), { recursive: true });\n` +
+        `fs.writeFileSync(path.join(common, 'camel-built', here('rev-parse', 'HEAD')), 'BUILD_EXIT=0\\n');\n`,
+);
+const runStack = (lane, extra) => {
+    fs.writeFileSync(scenario, JSON.stringify([row('plan_a', 'known_red', 'fail')]));
+    const result = spawnSync(
+        process.execPath,
+        [
+            tool, '--seat', readSeat, '--lane', `${lane}=adds a unit; plan smoke green`,
+            '--build', `node "${builtStub}"`,
+            '--read', `node "${readStub}" "{seat}" {plans}`,
+            '--base', 'origin/integration', ...extra,
+        ],
+        { encoding: 'utf8', timeout: 120000 },
+    );
+    const out = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+    const line = out.split('\n').find((one) => one.startsWith('MERGE_BATCH_RESULT '));
+    return { status: result.status ?? -1, out, result: line ? JSON.parse(line.slice('MERGE_BATCH_RESULT '.length)) : null };
+};
+laneFrom('lane/stack-first', 'src/stack_first.cpp', 'int stack_first() { return 1; }\n');
+const stackFirst = runStack('lane/stack-first', []);
+const firstTip = stackFirst.result && stackFirst.result.tip;
+laneFrom('lane/stack-second', 'src/stack_second.cpp', 'int stack_second() { return 2; }\n');
+const beforeStack = remoteTip();
+const notYet = runStack('lane/stack-second', ['--stack-on', firstTip || 'missing', '--push', '--stack-wait', '2', '--stack-poll', '1']);
+check(
+    'a stacked batch whose base has not landed waits, then pushes nothing and exits 6',
+    stackFirst.status === 0 && Boolean(firstTip) && notYet.status === 6 && remoteTip() === beforeStack &&
+        notYet.out.includes('did not reach integration within 2 s'),
+    `${stackFirst.out}${notYet.out}`,
+);
+const firstLanded = spawnSync('git', ['-C', readSeat, 'push', 'origin', `${firstTip}:refs/heads/integration`], { encoding: 'utf8' });
+const stacked = runStack('lane/stack-second', ['--stack-on', firstTip || 'missing', '--push', '--stack-wait', '30', '--stack-poll', '1']);
+const stackedTip = remoteTip();
+check(
+    'once the batch under it is on integration, the stacked batch pushes on top of it through the hook',
+    firstLanded.status === 0 && stacked.status === 0 && /pushed\s+yes/.test(stacked.out) &&
+        git(readRemote, ['rev-parse', `${stackedTip}^1`]) === firstTip &&
+        git(readRemote, ['cat-file', '-e', `${stackedTip}:src/stack_second.cpp`]) === '' &&
+        stacked.result && stacked.result.stackedOn === firstTip,
+    `${firstLanded.stdout ?? ''}${firstLanded.stderr ?? ''}${stacked.out}`,
+);
+
 fs.rmSync(readRoot, { recursive: true, force: true });
 
 if (!process.env.KEEP_TMP) fs.rmSync(root, { recursive: true, force: true });
