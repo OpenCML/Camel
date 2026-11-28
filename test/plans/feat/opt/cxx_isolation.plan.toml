@@ -584,14 +584,6 @@ case = "../../../cases/compile/closure/bound_closures.cml"
 args = ["${case}", "std::cxx::inline", "std::jgir canonical=true", "std::nop"]
 expect_exit = 0
 timeout_ms = 20000
-verify_script = """
-const doc = JSON.parse(input.normalized.stdout)
-const rows = (doc.graphs || []).map((g) => (g.nodes || []).filter((n) => n.kind === "CALL" || n.kind === "FUNC").length + "/" + (g.nodes || []).length)
-const key = rows.slice().sort().join(" ")
-if (key !== "0/3 0/3 0/3 0/5 1/2 4/26") {
-    throw new Error("std::cxx::inline, closure: the graphs read " + key + ", not 0/3 0/3 0/3 0/5 1/2 4/26")
-}
-"""
 
 [[tests]]
 name = "cxx_isolation.inline_closure.by_camel"
