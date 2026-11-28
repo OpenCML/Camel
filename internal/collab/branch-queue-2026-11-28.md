@@ -55,3 +55,27 @@
 | ⑨ | `lane/pass-decl-3` | **`c457eec80e`** | 纯删 `test/plans/probe/t323_passes.plan.toml`（debug-only 遍 + 这条线没有 Debug 二进制）；`t323_behavior` 7/7 |
 
 **晋级**：69 于 08:18:59 起跑，尖端 `2689335c47ed`（分母 = 68 表 147 行），约 08:40 出数。
+## 09:10 重算：未合 16 条（对 `origin/integration = 027d024787`，逐条 `rev-list --count` 得来，不是抄的）
+
+| 枝 | ahead | behind | 最后提交（时刻 + 标题前 40 字） | 谁在做 | 去向 |
+|---|---|---|---|---|---|
+| `lane/onnx-run` | 26 | 11 | 09:04 collab: the map of the twenty-six reds this lane still owns | `lane-ssa-residue` | **冻结＝迁移轨**；26 条地图在 `task-342-onnx-migration-map.md`；迁移不通之前不进队列 |
+| `lane/opt-inline` | 23 | 49 | 07:29 collab: the nvm i32 card is taken from integration too | `lane-oper-shape-guard` | **撤回车道**（`opt.cml` 的 AST 甲 + `inline_closure` 25 甲）；验收三项做中，含 `jgir canonical=true` 逐字节比 |
+| `lane/editview-commit` | 18 | 60 | 08:43 docs: the generated stdlib reference follows the new commit signatures | `lane-editview-a` | **队列第 ①**，甲 0、17 笔；合并信息写三笔（类型同一性 / 删 `getenv` 调试打印 / 生成物） |
+| `lane/task-229` | 16 | 17 | 08:35 collab: residual_mlp's judgement, the three readings behind it | `lane-arrangeable` | **队列第 ③**；`capacity×2`/`harness×5` soap 已有，"load-sensitive, not 甲" 保留 |
+| `lane/commit-of` | 15 | 17 | 08:35 collab: the lane's final base and what was re-measured on it | 无人 | **冻结**：`commit::<F>(d: Draft<F>)` 只有在 `editview-commit` 落进 integration 后才成立 ⇒ 落库后由原车道重做那两行 |
+| `lane/pass-decl-3` | 15 | 33 | 08:15 probe t323: the pass-by-pass probe is gone | 无人 | **队列第 ④**（纯删 `test/plans/probe/t323_passes.plan.toml`，`t323_behavior` 7/7） |
+| `lane/arg-parse-uaf-w` | 9 | 0 | 08:36 transforms: a discrete result's cotangent is the zero of its own type | `cap-probe` | 求导律；**树从 `kinds-oper` 换到 `pools-red`**（`kinds-oper` 归 `lane/with-const`） |
+| `lane/blocks-scope` | 9 | 33 | 02:50 records: the rows this lane moved, written one file at a time | `lane-parked-rebase` | 已收口，等名额或合并位吞（parse 131/130/1） |
+| `lane/nvm-int-compare` | 7 | 39 | 08:33 benchmarks: the referee hands camel the spelling camel accepts | `lane-block-hash` | **暂停**：合并位上 `int_compare` 多打一行 `"0"`，归属待两步单合探针（疑 `index-axis`） |
+| `lane/loop-tape-values` | 5 | 149 | 08:34 onnx tests: the carried-array refusal's column follows the call | `lane-block-hash` | 冻结（`task-383` 第二步，等 `D-1128-52` 那格解开） |
+| `lane/floatgate-state` | 4 | 11 | 08:50 collab: same region, empty answer -- the loop state cotangent stops inside the sweep | `lane-backend-speed` | **纯文档**，可随时进队列（`task-394` 收口读数） |
+| `lane/onnx-g2` | 4 | 36 | 02:55 onnx refusals: four entries measured a call the inliner no longer leaves | `lane-parked-rebase` | 已收口；等名额 |
+| `lane/c4-round-source` | 1 | 11 | 08:47 A card for the third source of a reverse loop's round count | `lane-editview-a` | `task-396` 做中（先补缺的用例，再落 `Source::Replayed`） |
+| `lane/conditional-samples` | 1 | 39 | 07:13 rewrite: give every scalar parameter its sample in the rule check | `cap-probe` 名下、已合内容重复 | **不要再合**（`20673f1e1e` 与 `0cc6ab9fa4` 内容相同，已随批落地）⇒ 判删候选 |
+| `lane/std-run` | 1 | 18 | 03:22 kernel: the fallback backend's target changes from std::nvm to std::fvm | `lane-stdlib-reds` | 换底后再进队列 |
+| `lane/index-axis` | 1 | 17 | 02:52 compile: a subscript axis one dimension too far is refused | 无人 | **暂停**：与 `nvm-int-compare` 同一条"多打一行 `0"` 待归属；归属确定后才进队列 |
+
+**这批的合并顺序（1 号位）**：`docs/notes6 @ 3fc4a30c09`（`plan_fields` 的账）→ `lane/editview-commit @ 0b46776399` → `docs.ai_reference.current` 的重生成（`index-axis` 动了 `docs/diagnostics.md`，单列一笔）→ 队列第 ③④ 视名额。
+**撤下过的**：`seat/opt-inline-net`（撤，`opt-inline` 回车道）；`nvm-int-compare`/`index-axis`（暂停，等那行 `"0"` 的归属）。
+**规矩第 4 条的更正**：`lane/arg-parse-uaf-w` 原先记在 `kinds-oper` 树，那棵树 08:5x 已被 `lane/with-const` 检出（`lane-kinds-oper` 在用）⇒ `cap-probe` 的未提交文件已备份并挪到 `pools-red`（`lane/jvp-loop` 那棵），`kinds-oper` 还空。**一棵树同时只归一条车道**这条照旧，附带一条：换枝/换树前先 `git branch --list` 与 `git worktree list` 各读一次。
