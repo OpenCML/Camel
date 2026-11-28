@@ -1,0 +1,43 @@
+# 正文句子清单：可进正文的 / 必须撤回或重测的（task-435 后续）
+
+**只列句子与出处，不改正文。** 每条一句，出处写 `路径:行号`（行号指该页当前内容里的那一行）。
+"无出处"= 我在仓库里按列出的搜法找不到任何页承载它。
+
+本清单依据两轮读数：评测 B 于 `beae6726f90c2cb6ef702974d956abb748dc1ded`（2026-11-28 16:10:22），
+Figure 1 于 `d0539fba99433c6a9208584e854665ade60fba14`（16:14:05）。
+
+---
+
+## A. 可进正文（有页、有读数、与新尖端一致）
+
+| # | 句子 | 出处 |
+|---|---|---|
+| A1 | 评测 B 的比较是仓库自己的配对条目：19 条 `compare_to` 加两条 `same_text`，共 21 对。 | `internal/reports/2026-11-28-paper-readings-tip/readings-at-integration.md:16`、`:24` |
+| A2 | 这 21 对在 tip `beae6726f9` 上全部相同（三条计划 `27/27`、`49/49`、`6/6`，`RUN_EXIT=0`）。 | 同上 `:18`–`:24`；[`run` 读数见该页 §1 表] |
+| A3 | 比较字段的构成是 1 条三项、18 条两项，不是全部三项。 | 同上 `:26`–`:29` |
+| A4 | 三条计划的比较**不是**在 `std::jgir canonical=true` 下做的，也没有一对按三字段比。 | 同上 `:31`–`:33` |
+| A5 | Figure 1 的三步两条入口给出同一张图：体积 7431 / 6463 / 4627，两侧逐项相同。 | 同上 `:41`–`:47` |
+| A6 | 同一读数下 nodes 28/24/18、edges 26/22/14、opers 12/10/6、`direct_calls` 0、`indirect_calls` 1（三对各两侧相同）。 | 同上 `:41`–`:47`；新增量的性质见 `:48`–`:50` |
+| A7 | 内联这一步确实动了图：起点 19 节点、2 个直接调用，内联后 28 节点、0 个直接调用。 | 旧页 `internal/reports/2026-11-28-c4-and-figure1/figure1-two-inliners.md:55`–`:56`（起点读数在新尖端未重取，但三对 `direct_calls=0` 与 nodes 28 同值可交叉印证，见 A6） |
+| A8 | 两侧体积相同 ⇒ 两个内联入口在同一下游上产出等价图。 | `readings-at-integration.md:47` |
+
+**用 A5 时的一处限制**：7431/6463/4627 是"dot 文本去掉 `GRAPH_STATS` 行后按 `\n` 连接的长度"，
+不是整段 stdout 的字节数 —— 取法在该页 §2 末（`readings-at-integration.md:57`–`:59`）。若正文用别的量法，数字要重算。
+
+## B. 必须撤回或重测（无出处 / 已被新读数取代）
+
+| # | 句子 | 状态与理由 |
+|---|---|---|
+| B1 | "6/6 对图相同、四对两侧都不内联、两对两侧各展开一个普通调用（nodes +9 / edges +10 / operators +6）" | **无出处**。搜法：`git grep -l "7067" -- internal docs test`→6 文件，唯一 figure 页是 3 对（`figure1-two-inliners.md:46`–`:51`，用 `direct_calls`、无 `operators`）；`git grep -l "nodes +9"` / `"edges +10"` / `"operators +6"`→**零命中**；`test/cases/opt/cxx_isolation/` 只有 `paper_figure1.cml` 一份，无六份成对 case。⇒ 撤回，或提供六份 case 名 + `operators` 定义后重测。 |
+| B2 | "三张图的体积是 7067 / 6155 / 4431" | **已被取代**。那是 tip `b25dcda7a2b3` 的渲染（旧页 `figure1-two-inliners.md:47`–`:51`）；新尖端同图同 nodes/edges，文本更长 ⇒ **7431 / 6463 / 4627**（`readings-at-integration.md:43`–`:47`）。 |
+| B3 | "起点 4976 → 内联 7067" 里的 **7067** | **必须重测**（`figure1-two-inliners.md:55`–`:56`、`:65` 的 `bytes=4976`/`bytes_camel=7067`）。同因（渲染），起点 4976 未在本轮重取；若正文要"起点→内联"的对比，两个数都要在新尖端重量。 |
+| B4 | "比较字段是 `[exit_code, stdout_normalized, stderr_normalized]` 且输出是 canonical jgir" | **无出处（仪器描述错）**：19 条里只有 1 条三项，其余 18 条两项，且没有一对在 `jgir canonical` 下比（`readings-at-integration.md:26`–`:33`）。改为 A1/A3/A4。 |
+| B5 | 以"新旧混排"形式出现的 `opers 12/10/6`（如写成"operators 从旧值变到 12/10/6"） | **不成立**：这两个量旧页根本没有，是本轮**首次取到**（`readings-at-integration.md:48`–`:50`）。只能写"本测量的 operators 为 12/10/6"，不能写成增量。 |
+
+---
+
+## C. 处置
+
+- A1–A8 可以照抄，但涉及数字的（A5、A6）请连取法一起带走。
+- B1 归决策者（重测或撤回）；B2–B4、B5 是**已可判的**：按新读数改，或按"无出处"删。
+- 本清单**不改正文**，也不含任何未在页里出现过的读数。
