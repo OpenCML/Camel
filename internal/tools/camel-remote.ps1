@@ -1140,6 +1140,34 @@ if (-not (Test-Path (Join-Path $Path 'package.json'))) {
     exit 2
 }
 $name = Split-Path -Leaf $Path
+# A `-FetchFile` that names a file inside a run directory is asking for a reading, and a cancelled run
+# has none: its result directory carries the marker the cancel wrote (who cancelled, when, which run),
+# and reading the file anyway would turn "this run was stopped" into a reading that looks finished.
+# The question is asked before the run starts, because the answer does not depend on the run.
+function Get-CamelCancelMarker([string]$RelDir) {
+    $hostDir = '$HOME/camel-work/{0}/{1}' -f $name, $RelDir
+    # Double quotes, not single: the path carries a literal `$HOME` for the host to expand, and single
+    # quotes would turn it into a directory name that does not exist -- the marker would read as absent
+    # and a cancelled run would be fetched as if it had finished.
+    $cmd = 'cat "' + $hostDir + '/CANCELLED" 2>/dev/null'
+    return ((& $sshExe -o ConnectTimeout=20 $sshHost $cmd) 2>&1 | Out-String).Trim()
+}
+function Write-CamelCancelled([string]$Marker) {
+    Write-Host '[camel-remote] this run was cancelled: it is not a reading'
+    foreach ($one in ($Marker -split "`r?`n")) {
+        if ($one -ne '') { Write-Host ("[camel-remote]   " + $one) }
+    }
+}
+
+# The fetch the caller asked for: `test/results/log/<run>/...` names a reading of that run.
+$fetchRelNormalized = ($FetchFile -replace '\\', '/')
+if ($fetchRelNormalized -match '^test/results/log/([^/]+)/') {
+    $cancelMarker = Get-CamelCancelMarker ('test/results/log/{0}' -f $Matches[1])
+    if ($cancelMarker -ne '') {
+        Write-CamelCancelled $cancelMarker
+        exit 2
+    }
+}
 $branch = (git -C $Path rev-parse --abbrev-ref HEAD).Trim()
 # A detached HEAD is a real position to measure from, and the place it matters is the merge: the
 # merge is made in a throwaway checkout of the commit it lands on, and no branch may be created
@@ -4330,6 +4358,26 @@ if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
 # tool's code for "nothing was fetched" applies unless the plan already failed on its own.
 if ($fetchRefused -and $FetchFile -ne '' -and $code -eq 0) { $code = 2 }
 
+# A run that was cancelled is not a reading, and the marker the cancel wrote says why, when, and
+# which run -- the three things a person needs to decide whether to run it again. So the fetch side
+# reads that marker before it reads any file: a summary that was cut short would otherwise come back
+# looking exactly like one that finished, which is the one mistake a fetch must not make. The marker
+# travels back verbatim rather than being parsed into fields, so what a caller reads is what the
+# cancel wrote.
+function Get-CamelCancelMarker([string]$RelDir) {
+    $hostDir = '$HOME/camel-work/{0}/{1}' -f $name, $RelDir
+    # Double quotes, not single: the path carries a literal `$HOME` for the host to expand, and single
+    # quotes would turn it into a directory name that does not exist -- the marker would read as absent
+    # and a cancelled run would be fetched as if it had finished.
+    $cmd = 'cat "' + $hostDir + '/CANCELLED" 2>/dev/null'
+    return ((& $sshExe -o ConnectTimeout=20 $sshHost $cmd) 2>&1 | Out-String).Trim()
+}
+function Write-CamelCancelled([string]$Marker) {
+    Write-Host '[camel-remote] this run was cancelled: it is not a reading'
+    foreach ($one in ($Marker -split "`r?`n")) {
+        if ($one -ne '') { Write-Host ("[camel-remote]   " + $one) }
+    }
+}
 # The file `-FetchFile <suffix> -FromThisRun` asked for: this invocation's own run's copy of it,
 # brought back by two small commands after the plan. The run is named by this tool (`$runName`,
 # handed to the plan step's runner as CAMEL_TEST_RUN_NAME), so the directory read is exactly the one this run
@@ -4346,7 +4394,13 @@ if ($FromThisRun -and $FetchFile -ne '') {
     } catch {
         $runPath = ''
     }
-    if ($runPath -eq '' -or $runPath -notlike '/*') {
+    # A cancelled run has a directory and no reading: the marker is checked first, so the answer is
+    # "this run was cancelled" rather than "that file is not there".
+    $cancelMarker = if ($runPath -ne '' -and $runPath -like '/*') { Get-CamelCancelMarker ('test/results/log/{0}' -f $runName) } else { '' }
+    if ($cancelMarker -ne '') {
+        Write-CamelCancelled $cancelMarker
+        $code = 2
+    } elseif ($runPath -eq '' -or $runPath -notlike '/*') {
         Write-Host "[camel-remote] -FetchFile -FromThisRun: the host has no run directory $runName under camel-work/$name/test/results/log; nothing was fetched"
         $code = 2
     } else {
@@ -4800,6 +4854,25 @@ if ($FromThisRun -and $FetchFile -ne '') {
         $codeWhy = if ($code -eq 4 -and $run.state -eq 'noslot') { if ($run.noslotWaitedFor -eq 'checkout') { 'checkout held by another run; ' } else { 'no host token; ' } } else { '' }
         Write-Host ("[camel-remote] {0} exit {1} ({2}{3}; total {4} s)" -f `
             $name, $code, $codeWhy, $phases, [math]::Round($sw.Elapsed.TotalSeconds))
+    }
+    # `exit 4` is a message a program reads, not lines a person scrolls back through: the merge seat
+    # runs this tool and its exit code is what decides its next step, so the facts a caller needs to
+    # act -- which run holds the checkout, and how to end it -- are left in the seat as a file.
+    if ($code -eq 4 -and $null -ne $run -and -not [string]::IsNullOrWhiteSpace([string]$run.lockHolder)) {
+        try {
+            $heldDir = Join-Path $Path ("test/results/log/{0}" -f $run.runId)
+            if (-not (Test-Path -LiteralPath $heldDir)) { New-Item -ItemType Directory -Path $heldDir -Force | Out-Null }
+            $heldLines = @(
+                ("checkout: {0}" -f $name),
+                ("holder: {0}" -f $run.lockHolder),
+                ("processes on the lock: {0}" -f $run.lockHolders),
+                ("to end it: internal/tools/camel-remote.ps1 -Cancel -CancelCheckout '{0}'" -f $name)
+            )
+            [System.IO.File]::WriteAllText((Join-Path $heldDir 'HELD'), (($heldLines -join "`n") + "`n"),
+                (New-Object System.Text.UTF8Encoding($false)))
+        } catch {
+            Write-Host ("[camel-remote] could not leave the held record in the seat: {0}" -f $_)
+        }
     }
     exit $code
 } finally {

@@ -225,6 +225,39 @@ function mergeOne(lane, laneSha, intoName) {
 
 let buildTimeout = 5400
 
+/**
+ * The holder record camel-remote leaves in the seat when it exits 4 (`test/results/log/<run>/HELD`):
+ * the merge seat's exit 4 is the one message a program reads, and the checkout's holder -- its host,
+ * pid, start time and run id, and the command that ends it -- has to be in that message rather than
+ * left for a person to find in the stream. The newest record wins; a run that left none is said to
+ * have left none, which is not the same as "nothing held it".
+ */
+function newestHeldRecord() {
+    const root = path.join(seat, 'test', 'results', 'log')
+    let entries = []
+    try {
+        entries = fs.readdirSync(root, { withFileTypes: true })
+    } catch {
+        return null
+    }
+    let newest = null
+    for (const entry of entries) {
+        if (!entry.isDirectory()) continue
+        const file = path.join(root, entry.name, 'HELD')
+        try {
+            const stat = fs.statSync(file)
+            if (newest === null || stat.mtimeMs > newest.mtimeMs) newest = { file, mtimeMs: stat.mtimeMs }
+        } catch {
+            // no HELD in this run: a normal end
+        }
+    }
+    try {
+        return newest ? fs.readFileSync(newest.file, 'utf8').trim() : null
+    } catch {
+        return null
+    }
+}
+
 function runBuild(command, label) {
     const started = Date.now()
     process.stdout.write(`merge-batch: build (${label}) ...\n`)
@@ -235,6 +268,18 @@ function runBuild(command, label) {
             ? `merge-batch: build (${label}) ran past its limit of ${buildTimeout} s and was ended with its process tree\n`
             : `merge-batch: build (${label}) exit ${run.code} in ${seconds.toFixed(1)} s\n`,
     )
+    // Exit 4 is this tool's own answer too, and it is read by a program rather than a person: the
+    // holder record the run left in the seat goes into the message, so "the seat is held" always
+    // arrives with the facts that end it.
+    if (run.code === 4) {
+        const held = newestHeldRecord()
+        process.stdout.write("merge-batch: the seat's checkout was held by another run\n")
+        if (held) {
+            for (const line of held.split(/\r?\n/)) if (line.trim()) process.stdout.write(`  ${line}\n`)
+        } else {
+            process.stdout.write('  (the run left no HELD record under test/results/log; read the lines above)\n')
+        }
+    }
     return { code: run.code ?? -1, seconds, timedOut: run.timedOut }
 }
 
