@@ -81,7 +81,7 @@ func one_node(found: Node[]) => Node? {
 func erased::<F>(p: F, hits: Node[]) => F! sync {
     let t = open(p)
     hits->foreach<func (n: Node) => void {
-        erase(t, n)
+        erase(n)
     }>
     return commit(t)
 }
@@ -89,7 +89,7 @@ func erased::<F>(p: F, hits: Node[]) => F! sync {
 // Puts `new` in the place of `old` and commits.
 func swapped::<F>(p: F, old: Node, new: Node) => F! sync {
     let t = open(p)
-    replace(t, old, new)
+    replace(old, new)
     return commit(t)
 }
 

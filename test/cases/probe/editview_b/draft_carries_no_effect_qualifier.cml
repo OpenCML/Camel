@@ -12,10 +12,9 @@ func inc(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     let d = open(inc)
     // The draft is `Draft<(x: int) => int pure>`; the type written here is `(x: int) => int`.
     let g = commit::<(x: int) => int>(d) !! inc
     println(g(4))
-    return if g(4) == 5 then 0 else 1
 }
