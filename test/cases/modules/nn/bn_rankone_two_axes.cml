@@ -1,0 +1,17 @@
+/**
+ * A `[2]` parameter on a `[2, 2, 2]` value: the length fits axes 1 and 2, the statistics differ
+ * between them, and the shape check cannot say which axis the parameter names. The refusal is
+ * `ambiguousRankOneAxes`' (`kernels/shape_rules.h`), and the sentence lists both axes -- that
+ * list is what makes the ambiguity visible instead of answering with axis 1 alone -- and says a
+ * rank-1 parameter that fits more than one axis is refused.
+ */
+import { batch_norm } from nn
+import { ones, zeros, sum } from tensor
+
+func main() sync {
+    let x = ones::<f32>([2, 2, 2])
+    let p = ones::<f32>([2])
+    let z = zeros::<f32>([2])
+    let y = batch_norm(x, z, p, p, p, 0.0)
+    'bn_rankone_two_axes sum={}'->format<float(sum(y))>->println
+}
