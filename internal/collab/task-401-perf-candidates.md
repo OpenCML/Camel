@@ -112,3 +112,53 @@ fvm/compile.cpp:84-123
 `unordered_map<OperId, OpCode>` 的哈希查找。所以 A-3 按原写法（"换成枚举下标、去掉字符串"）**是空改动**，
 真正剩下的候选是 A-4 的形状：**按 `OperId` 直接下标的数组**（由同一张表在初始化时填，不新造第二份真相）。
 这一条要先确认 `OperId` 的取值范围与稀疏度，再决定用数组还是分段表；**未量、未改**。
+## 六、A-4 只读探测的结论：**不值得**（未改代码）
+
+### ① `OperId` 是什么、最大值从哪来
+```
+src/kernel/include/camel/core/oper_id.h:15        using OperId = uint32_t;
+src/kernel/core/operator_table.cpp:117-135        OperId OperatorTable::internLocked(std::string_view uri) {
+                                                     … const OperId id = entries_.append(...); …
+                                                  }
+⇒ OperId 是**按 intern 顺序 append 出来的密集序号**，最大值 = 该时刻已 intern 的**互异算子 URI 总数**，
+   不是 40（40 是 `:op/*` 里被字节码内联的那一批）。序号在 `entries_` 里连续，但"内联的那 40 个"
+   在序号空间里的分布取决于模块注册顺序，`.cml` 标准库进来之后表会长到远超 40。
+src/kernel/core/operator_table.cpp:90             `internLocked(kWellKnownOperatorUris[known])`
+⇒ `:op/*` 属**早期 well-known** 一批（该文件里引号字面量 57 处），所以这 40 个 id 大概率落在低位一小段。
+```
+### ② 稀疏度：`max_id / count` **无法静态给出精确值**，但可给界
+```
+· count = 40（内联算子数，`fvm/compile.cpp:85-113` 逐条可数：add/sub/mul/div/mod 4 类 ×4 型 + 6 个比较 × 4 型）
+· max_id = 已 intern 的互异算子总数：`entries_` 是 append-only（`operator_table.cpp:132`），
+  含全部 well-known + 所有被载入模块注册的算子 + stdlib 导入的算子
+⇒ 稀疏度 = max_id / 40。**不做运行时探测就说不准具体倍数**；但从"well-known 57 条 + 各模块注册"这个结构看，
+  它**很可能 ≥ 8×**（即 max_id ≥ 320）。按你给的判据：> ~8× ⇒ **扁平数组不可行、要分段表**。
+· 精确值要么在窗口里用一次 `camel --log-level trace` 之类读，要么另开一次带探针的构建 —— 两者都超出"只读"。
+```
+### ③ 数组（若做）只能由同一张表填
+```
+· 唯一合法来源：`supportedInlineOperators` 建好之后，用它的键值对填数组（`for (auto &[id, code] : map) arr[id] = code;`），
+  **不许**另写一份 `id -> OpCode` 的清单（那就是第二真相；40 条 URI 已经是唯一记录）。
+```
+### ④ 结论：**不值得**
+```
+· 收益发生在**编译期**，规模是"每个节点一次哈希查找"（`compile.cpp` 的 `supportedInlineOperators.find(id)`），
+  一次 `unordered_map<uint32_t,...>` 查找 ~10–20 ns；一张 1000 节点的图 ⇒ 约 10–20 µs，
+  相对一次 fvm 编译（ms 级）与 `perf` 的 cpu 预算（`9.00 s` 那一档）不足 1%；
+· 而"证明收益"必须先过窗口（cpu 秒），产物一致只能证"没改坏"；
+· 稀疏度很可能 ≥8× ⇒ 扁平数组方案本身可能不成立，得分段表 ⇒ 引入第二处索引结构，风险上升。
+⇒ **A-4 判"不值得"，不再做；`instruction_counts`/`step_counts` 也不为它跑**（编译期收益不进这两把尺子）。
+```
+
+## 七、当前状态：无可用 A 级动作，进等窗口
+
+| 点 | 级 | 状态 |
+|---|---|---|
+| A-1 表复制 | **B** | 挂起（`exec_plan.h` 契约 + 收益上限两条读数，见 §五） |
+| A-2 四处按需 vector | A | **只能 cpu 秒证明**，未取基线 ⇒ 等窗口 |
+| A-3 字符串表 | — | **作废**（前提不成立，见 §五） |
+| A-4 枚举下标数组 | A | **不值得**（见 §六） |
+| B-1 拓扑/pass 顺序 | B | 不动 |
+
+等窗口条件：`origin/integration` 的 70 那批落定 **且** 宿主 `[load] 1m < 8`。
+到窗口时按序：A-2 改前/改后 cpu 秒（各 3 次中位）→ A-1（若 B 批了）→ A-4 不测。
