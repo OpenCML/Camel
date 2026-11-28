@@ -11,7 +11,7 @@ func tangent_of::<T>(x: T) => Tangent<T> {
 }
 
 func main() sync {
-    let v: (float, ()) = (1.0, ())
+    let v: (float, int) = (1.0, 0)
     println(v as Tangent<(float, int)>)
     println(tangent_of::<(float, float)>((2.0, 3.0)))
     println((4.0, 5.0) as (float, float))

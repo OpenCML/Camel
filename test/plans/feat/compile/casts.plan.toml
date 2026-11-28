@@ -187,7 +187,7 @@ kind = "behavior"
 case = "../../../cases/compile/casts/cast_target_type_expression.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
-expect_stdout_exact = "(1.0, ())\n(2.0, 3.0)\n(4.0, 5.0)\n"
+expect_stdout_exact = "(1.0, 0)\n(2.0, 3.0)\n(4.0, 5.0)\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
