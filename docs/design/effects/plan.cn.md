@@ -57,7 +57,7 @@
 | 可能故障不强制声明；没声明按可能故障 | **已实现** | `effects.cpp` 的 `mayFault` 保守合并；`kernel/include/camel/runtime/effects.h` | 无专门用例（随 `EffectSummary`） |
 | 无序资源 `resource net unordered`：其上的效应不保持书写顺序；要顺序就写 `sync` 块或用句柄 | **缺**。`ResourceSpec` 没有无序标志，语言层没有这个词 | parser；`resource_semantics.h#ResourceSpec` | 无 |
 | 句柄类型：`#resource` 类型，每个值一个独立资源；签名写 `uses 形参名`；同一句柄按书写顺序，不同句柄互不约束；调用处推出是哪个值 | **缺**。没有 `#resource` 标签（`tags.cpp` 的标准标签表里没有它），函数类型没有资源，`ResourceClass::Foreign` 只是"模块包的对象" | `tags.cpp#declareStandardTags` 是标准标签的写法；`struct.h#StructDecl` 是名词性类型的落点 | `tags.plan` 的 `independent.*` 是"声明→图属性"的现成范式；句柄无用例 |
-| 并发不需要 `async`/`await`；独立计算与不同资源可同时进行；运行时在一个效应等待时执行其他就绪节点 | **部分**。`std::prl` 就是 `std::prl`，任务图只由 norm/with/ctrl 边决定；不在同一条链上的两个节点可以并发。`wait` 旧写法仍在 | `kernel/execute/pass.cpp#std::prl`；`src/passes/sched/taskflow/` | `para` 各计划；没有"两个句柄并发"的用例 |
+| 并发不需要 `async`/`await`；独立计算与不同资源可同时进行；运行时在一个效应等待时执行其他就绪节点 | **部分**。`std::prl` 就是 `std::prl`，任务图只由 norm/with/ctrl 边决定；不在同一条链上的两个节点可以并发。`wait` 旧写法仍在 | `stdlib/std/prl/taskflow.cpp#std::prl`；`src/passes/sched/taskflow/` | `para` 各计划；没有"两个句柄并发"的用例 |
 | 取消只对 `cancellable` 资源/算子 | **缺** | — | — |
 
 ### 1.2 一个便宜处：类型声明已经是名词性的
@@ -245,7 +245,7 @@ export type Stream<T> = {
 - `sync` 块：语句串成一条控制链，块的值经 `GATE` 交出去；纯计算也在链上。
 - `sync` 之外：读排在最后写者之后（`orderAfterLastWriter`，`builder_expr.cpp#orderAfterLastWriter`）；写只在自己被 `wait` 时排在之前使用者之后（`builder_expr.cpp#orderAfterLastWriter`）；环境资源与外部效应之间没有边，不同变量的效应之间也没有保证。
 - `core.effects` 与 `core.resources` 是按需计算的**事实**（`core_facts.cpp#registerCoreKinds`、`core_facts.cpp#core_facts`），不是存的边或属性；`std::agir` 把非纯 OPER 标成 `role=effect`（`node_roles.cpp#node_roles`）。
-- `std::prl` 的任务图只由 norm/with/ctrl 边生成（`kernel/execute/pass.cpp#std::prl` 起；`src/passes/sched/taskflow/`）。**没有 ctrl 路径的两个节点就是可并发的任务。**
+- `std::prl` 的任务图只由 norm/with/ctrl 边生成（`stdlib/std/prl/taskflow.cpp#std::prl` 起；`src/passes/sched/taskflow/`）。**没有 ctrl 路径的两个节点就是可并发的任务。**
 
 所以"3.3 的执行顺序是图的属性"这句话今天只对 `sync` 成立；本计划要让它对**每个资源**成立。
 
