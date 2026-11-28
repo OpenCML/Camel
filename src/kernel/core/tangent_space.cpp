@@ -105,9 +105,10 @@ TangentSpaceAnswer answerOf(const Type *primal) {
         return {TangentSpaceKind::Self, const_cast<Type *>(primal)};
     }
     if (DerivativeRegistry::instance().isDiscrete(primal)) {
-        // An integer or a boolean: the derivative is zero by definition and there is nothing to
-        // carry, so the value has no tangent space at all (design principles 9.9).
-        return {};
+        // An integer or a boolean is its own tangent space (design principles 9.9): the derivative
+        // is zero by definition, and the gradient of such a value is the zero of its own shape and
+        // element type -- so a tangent of an `int` is an `int`, not a value with no data.
+        return {TangentSpaceKind::Self, const_cast<Type *>(primal)};
     }
     if (const TangentSpace *registered = DerivativeRegistry::instance().findTangentSpace(primal)) {
         // A module owns the type and says what its tangent is: the same type (`tangentType` null,
