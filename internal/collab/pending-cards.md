@@ -1,6 +1,8 @@
 
 ## 待建卡（任务板满 256，腾出槽位即建）
 
+**基线现状（引用本页任何判据前先读这三句）**：**72 已放行**（`develop` 已快进到 `0967afd6159a`，`promotion-72.record.json` 的 `pushed_develop_sha` 非空）；**基线 = 72 表 141 名**（`internal/reports/2026-11-28-promotion-72-reds.tsv`，逐名比按 `plan_id` + 用例名，详见 `baseline-73.md`）；**72 里唯一那条"乙"（`modules.onnx.export_loop_carried_array_field`）按过渡重钉读**（`ba4d1ec233` 只把 `expect_diagnostic_column` 从 81 改钉到 9，它断言的前提已被 `D-1128-39` 撤回），**不许写成"修复"**。
+
 ### A. `liftedLoopBodyResult` 读源图的错 + 多态体成套三处口径统一（源自 `task-344` 收敛失败，cap-probe 交回 2026-11-28）
 - 读图错：`liftedLoopBodyResult` 里 `nodeOf(function, exitCopy)` 用**源图**查**本 draft** 的节点号；改成 `draft.header(exitCopy)->dataType` 只把断点移动，不解决问题
 - 不成套的三处口径：`liftedLoopValueType`（节点类型）/ Fill 格的成员抬法 / `liftedLoopBodyResult`（体结果拼法）
@@ -130,3 +132,10 @@ branch = lane/pass-as-value-crash   HEAD = 031196ca1e
 ```
 
 Last write 00:54:11; no write for 2h11m at the time of the reading. Git does not record who writes a file and the worktree carries no owner mark, so the session is not identifiable from the tree. Do not tidy this tree by asking around or by touching it: the rebase of that lane was done on a carrier branch (`wip/pass-as-value-crash @ c2e67fa0db`) precisely so that neither the original branch nor this tree was disturbed. Close `rule-branch` (detach, delete `lane/pass-as-value-crash`, collect or drop the t353 probes) only after its author hands back.
+
+### R. `resolveGroupedCall` 的候选集 —— `task-379` 剩下的那一处（"没收敛"的那半）→ **卡面在 `task-resolve-grouped-call.md`**
+
+`task-379` 把"一次调用只有一个候选集"做到了**签名层**（`callCandidateSignatures` 把 group 规则与内建 `graphs`/`templates` 合成一张表，`selectOverloadFor` 0 处、`writtenParameterTakes` 6→0），但它交回时留下的"另一处"就是**答案层**：`Builder::resolveGroupedCall` 仍只遍历 `ops->resolvers()`，内建声明一条不进 —— 症结是**回答的类型不同**（group 规则 → `oper_idx_ptr_t`，内建声明 → `compile_graph_ptr_t`，`operatorValueGraphOf` 造不出"调用一条声明"），牵 **4 个落点**。
+
+- **卡面（候选集 / 返回类型 / 4 个落点 / 五条判据 / 三条边界 / 顺序规则）全部在同目录 `task-resolve-grouped-call.md`**；本页不再复述，免得两处各改一半。
+- 状态：**板上待建**（`team_task_create` 回 `Team task limit 256 reached`），腾出槽位即建；建卡时把卡面链接写进卡，并把卡面的处数按当时尖端重核。

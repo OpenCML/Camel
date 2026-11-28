@@ -555,7 +555,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         // is taken.
         requireNestedCallRoom(currFrame);
         Frame *funcFrame = framePool_.acquire(runtimeTarget->frameLayout());
-        populateIndirectCallFrame(currFrame, funcFrame, function, nargs, wargs);
+        populateIndirectCallFrame(currFrame, funcFrame, function, nargs, wargs, bc->result);
 
         _timer.pause();
         ++nestedCalls_;

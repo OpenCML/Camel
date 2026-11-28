@@ -254,7 +254,7 @@
 - **响应**：`{ "graphs": [ { "index": 0, "pass": null, "consumed": false }, { "index": 1, "pass": "std::cxx::inline", "consumed": false }, ... ] }`。
   - `index` 为快照序号：`0` 是 pass 管线执行前的入口图（`pass` 为 `null`）；`index >= 1` 按执行顺序对应各 pass 的输出图（`pass` 为请求管线中的 pass 名，如 `"std::cxx::inline"`）。
   - `consumed` 为 `true` 表示该快照的图被下一个 pass 消费（即管线在该 pass 终止，其后无更多快照）。消费图的 pass 本身不再有快照条目。
-  - 消费型 pass（如 `std::nodevm`/`std::default`）执行后不产生快照条目；`std::default` fallback 管线产生非空输出的 pass 也会按序编号（编号跨主/fallback 管线单调递增，不重置）。
+  - 消费型 pass（如 `std::nodevm`/`std::run`）执行后不产生快照条目；`std::run` fallback 管线产生非空输出的 pass 也会按序编号（编号跨主/fallback 管线单调递增，不重置）。
   - 该任务尚未 run 过（或入口图无物化节点）时返回 `{ "graphs": [] }`。
 - **错误**：400（多任务且未指定 target）。
 

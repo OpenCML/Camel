@@ -34,6 +34,8 @@ struct RcPassesConfig {
     std::vector<std::string> prefix;
     std::vector<std::string> suffix;
     std::vector<std::string> fallback;
+    /// The scheduling pass `std::run` stands for; empty when the rc does not name one.
+    std::string run;
 };
 
 bool isPathAcceptable(const fs::path &p) {
@@ -157,6 +159,11 @@ RcPassesConfig loadOneRc(const fs::path &path) {
     p = passes.find("fallback");
     if (p != passes.end())
         cfg.fallback = parsePassList(*p);
+    // `passes.run` is one pass specification -- the scheduling pass `std::run` stands for -- not a
+    // list: it is read as the string it is, and an empty one leaves the default (`std::fastvm`).
+    p = passes.find("run");
+    if (p != passes.end() && p->is_string())
+        cfg.run = p->get<std::string>();
     return cfg;
 }
 
@@ -167,6 +174,8 @@ void mergeRcConfig(RcPassesConfig &base, const RcPassesConfig &over) {
         base.suffix = over.suffix;
     if (!over.fallback.empty())
         base.fallback = over.fallback;
+    if (!over.run.empty())
+        base.run = over.run;
 }
 
 RcPassesConfig loadOpenCmlRc(const std::string &cwd, const std::string &scriptDir) {
@@ -181,6 +190,7 @@ RcPassesConfig loadOpenCmlRc(const std::string &cwd, const std::string &scriptDi
             merged.prefix          = std::move(fromCwd.prefix);
             merged.suffix          = std::move(fromCwd.suffix);
             merged.fallback        = std::move(fromCwd.fallback);
+            merged.run             = std::move(fromCwd.run);
         }
     }
     if (!scriptDir.empty() && scriptDir != cwd && scriptDir.size() <= MAX_PATH_LENGTH) {
@@ -197,16 +207,21 @@ RcPassesConfig loadOpenCmlRc(const std::string &cwd, const std::string &scriptDi
 
 } // namespace
 
-constexpr const char *DEFAULT_FALLBACK_PASS = "std::default";
+constexpr const char *DEFAULT_FALLBACK_PASS = "std::run";
 
 std::vector<std::string> resolvePassListWithRc(
     const std::string &cwd, const std::string &scriptDir,
-    const std::vector<std::string> &cliPassList, std::vector<std::string> *outFallbackPasses) {
+    const std::vector<std::string> &cliPassList, std::vector<std::string> *outFallbackPasses,
+    std::string *outRunTarget) {
 
     RcPassesConfig rc = loadOpenCmlRc(cwd, scriptDir);
     if (outFallbackPasses)
         *outFallbackPasses =
             rc.fallback.empty() ? std::vector<std::string>{DEFAULT_FALLBACK_PASS} : rc.fallback;
+    // The pass `std::run` stands for: `passes.run` when the rc names one, empty otherwise (the
+    // kernel's default, `std::fastvm`, then applies). It is not part of any list.
+    if (outRunTarget)
+        *outRunTarget = rc.run;
 
     // Pass list is always prefix + cliPassList + suffix. The command line is kept as written (a
     // pass may run twice, e.g. `std::stats` before and after a rewrite); an rc prefix or suffix

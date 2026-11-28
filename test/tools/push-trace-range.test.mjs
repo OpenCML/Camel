@@ -60,6 +60,19 @@ function git(dir, ...args) {
     }).trim()
 }
 
+/**
+ * A short prefix of `sha`, grown until it holds a letter. The checker reads a token as a hash only
+ * when it holds one -- a plain number is not a hash, which keeps a comment's numbers out of its hits
+ * -- and the first nine digits of a commit are all digits about once in 264 (`scripts/
+ * check-process-traces.mjs`, the comment above `hashToken`). A prefix stays a prefix: the checker
+ * resolves it against the commits of the fixture repository.
+ */
+function hashPrefix(sha) {
+    let n = 9
+    while (n < sha.length && !/[a-f]/.test(sha.slice(0, n))) n += 1
+    return sha.slice(0, n)
+}
+
 /** A repository holding the real hook files and one commit; returns the directory and that commit. */
 function fixture(baseSource) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'push-trace-range-'))
@@ -129,7 +142,7 @@ try {
     run(
         'a bare hash of a commit in a comment is a trace',
         cleanBase,
-        (fx) => `${cleanBase}${note(`Written after ${fx.base.slice(0, 9)} went in.`)}`,
+        (fx) => `${cleanBase}${note(`Written after ${hashPrefix(fx.base)} went in.`)}`,
         'gh',
         project,
         1,

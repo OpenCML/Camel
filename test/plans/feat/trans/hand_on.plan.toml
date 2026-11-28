@@ -7,7 +7,7 @@ desc = "A translating pass prints or exports and hands the graph on; `std::nop` 
 # Design principles 9.1 (docs/design-principles.cn.md:636): a translation pass prints or exports and
 # hands the original graph down, so it can be written anywhere in the pipeline; the pipeline has one
 # rule -- the passes written run in order, and when the graph is still there at the end it goes to
-# `std::default` (9.2, line 646). To look without running, write `std::nop` at the end: it is the
+# `std::run` (9.2, line 646). To look without running, write `std::nop` at the end: it is the
 # scheduling pass that answers with an empty graph and produces no effect.
 #
 # The four cases are the four answers that rule allows:

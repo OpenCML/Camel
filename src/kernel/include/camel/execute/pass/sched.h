@@ -50,7 +50,7 @@ class NopPass : public GraphSchedulePass {
     /// writing, and nothing has to be extracted on the way. Declaring it is what makes the recipe
     /// design principles 9.1 gives for looking at a graph without running it legal on such a
     /// program -- `camel f.cml std::cxx::saturate std::gir std::nop` prints the classes and stops,
-    /// where without it the pipeline would fall through to `std::default` and be refused with
+    /// where without it the pipeline would fall through to `std::run` and be refused with
     /// `PassNeedsExtraction`. Every pass that reads the program keeps answering as it did: this
     /// declaration is about the one pass that discards it.
     bool acceptsWritings() const override { return true; }
