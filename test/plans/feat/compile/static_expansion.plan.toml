@@ -1302,7 +1302,7 @@ kind = "behavior"
 case = "../../../cases/compile/static_expansion/typeof_derived_type.cml"
 args = ["${case}", "std::fvm"]
 expect_exit = 0
-expect_stdout_exact = "3\n4\n6\ntrue\ntrue\n12.0\n"
+expect_stdout_exact = "3\n4\n6\ntrue\ntrue\nfalse\n12.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
