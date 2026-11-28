@@ -343,7 +343,7 @@ bool Record::accessesOutsideProgram() const {
 
 > "我上一条说'换一个 `Program` 就看丢没改的图上的事实'是错的：`Stamp` 按闭包里每张图的 `(id, revision)` 算，提交又保 id 与 revision，所以看不丢；**`Program` 进键只是设计上多余**。"
 
-⇒ 页里与所有后续报告**不再写"会看丢事实"**；这一项的性质是**设计上多余的一份身份**，是**清理**。
+⇒ 页里与所有后续报告**不再写"会看丢事实"**。但**"进键只是设计上多余"这句要按读数改准**（见 §13，2026-11-28 实测）：`Program` **从来不在键里**（`FactStore::KeyHash` 只哈希 `kind`/`graph`/`node`，`src/kernel/runtime/facts.cpp:322-325`），**它在 stamp 里**——`stampNow` 每次 `put`（`:342`）与每一次查找（`:381-382`）都拿 `*anchor.program` 去算**闭包修订**（`closureRevisionOf` → `closureRevision(*anchor.program, graph)`，`:87-91`），`checkAnchors` 还把 `program == nullptr` 当拒绝条件（`:103`）。⇒ 这一项**不是"删掉一份多余身份"的清理**：**删字段 = 改 stamp 语义**。上面那句引文照原样保留（那是当时的原话），更正写在 §13。
 
 **改前现场（探针读数，`origin/integration@0fb33bc32f`，插桩跑完已复原、临时枝已删）**：
 
@@ -428,3 +428,49 @@ numstat：9  1 test/cases/modules/graph_types.cml
   "1 added and 1 removed" 就是**同一行值变了**（旧值算 removed、新值算 added），行数仍 4734 —— 这是"只动一行"的第二步旁证。
 - **"编号变大仍绿"的读数**：集成尖与本枝底跑出的名字**都是 `__g_64__…`**，自然漂移这次没出现，所以把同一段 `renumber` 拿到**本机 `node`** 上跑三串输入（老钉 `51` 系、今日 `64` 系、**人为 +100 的 `164` 系**）：三串归一后**同一串**、长度都是 **707** ⇒ 归一不随计数走。**这条是本机跑同一段实现，不是宿主读数**（页里保留这个标注）。
 - 两条 `rev-parse` 相等（`HEAD` = `lane/graph-kinds-renumber` = `26e255b94333d664ce41a83c52f840c48992b412`）；**未 push**。
+## 13 `Anchor` 的 `program`：不在键里，在 stamp 里 —— 这条**不是清理**（做之前先判了"能不能只删"）
+
+开工令之前的只读判定（`origin/integration@24f5563f1e`，未动一行代码）。判的是：7 处构造点上的 `program` 是"身份/键的一部分"还是"读图时用来 resolve 的"。
+
+### 13.1 读数：它是 stamp 的输入
+
+```
+src/kernel/runtime/facts.cpp:87  /// The closure revision of `graph`, read in the program of the first anchor on it.
+src/kernel/runtime/facts.cpp:91          return closureRevision(*anchor.program, const_cast<GCGraph *>(graph));
+
+src/kernel/runtime/facts.cpp:342     stamp.graphs.emplace_back(graph->id(), closureRevisionOf(anchors, graph));   // 每次 put
+src/kernel/runtime/facts.cpp:381-382 it->stamp.graphs[i] == std::pair<GraphId, uint64_t>(graphs[i]->id(), closureRevisionOf(anchors, graphs[i]));  // 每次查找
+
+src/kernel/runtime/facts.cpp:103     if (anchor.graph == nullptr || anchor.program == nullptr) {
+src/kernel/runtime/facts.cpp:104         reject(kind.key, "an anchor without a graph");
+
+src/kernel/runtime/facts.cpp:322-325 size_t FactStore::KeyHash::operator()(const Key &key) const {
+                                       size_t seed = std::hash<GraphId>{}(key.graph);
+                                       seed ^= std::hash<uint32_t>{}(key.kind) + …;
+                                       seed ^= std::hash<uint32_t>{}(key.node) + …
+```
+⇒ **键里没有 `program`**（`KeyHash` 只哈希 `kind`/`graph`/`node`）；**`program` 在 stamp 里**：`stampNow` 每次 `put`、`find` 每次查找都拿 `*anchor.program` 算**闭包修订**；`checkAnchors` 还把 `program == nullptr` 当拒绝条件。另外 `src/kernel/runtime/facts.cpp:541` 自己写着 "a graph does not know its program" ⇒ 删掉字段，**这两处就没有闭包来源**。
+
+**因此：删字段 = 改 stamp 语义（design 10.3 / 4.4）= 设计改动，不是清理。**停止硬删，报负责人；负责人采 **(b) 只改文字、代码一行不动**。
+
+### 13.2 改前把 7 处原文贴过，并且 7 处不是全集
+
+`git grep 'Anchor{.*program()'` 只命中 2 处（`graph/facts.cpp:65`、`tiles/src/compiled_scope.cpp:37`）；**按类型数**（构造 `camel::runtime::fact::Anchor`）实测 **63 行构造点**：
+- `src/kernel/**` **15 行**：`runtime/facts.cpp` 3（`:155`/`:158`/`:632`）、`runtime/core_facts.cpp` 8（`:361`/`:362`/`:473`/`:533`/`:545`/`:555`/`:562`/`:572`）、`runtime/fact_persist.cpp` 4（`:327`/`:344`/`:347`/`:416`）
+- `src/stdlib/**` **48 行**：`graph/facts.cpp:65`、`rewrite/fact.cpp:909`、`tiles/src/compiled_scope.cpp:37/:47/:76`、`tiles/src/compiler.cpp:466/:467`、`transforms/transpose_operator.cpp:490`、**`test/facts.cpp` 39 行**、`test/facts_compare.cpp:667`
+- 消费点 **2 处**（`facts.cpp:342`、`:381-382`）+ 拒绝 **1 处**（`:103`）
+
+> 口头估的"≈55 处、32 处在 `src/kernel/**`"**不准**：实测 **63 行构造点，只有 15 行在 `src/kernel/**`**，48 行在 `src/stdlib/**`。**这条数字就是"为什么不做"的根据，不是待办**：它说明"删一个有冗余嫌疑的字段"实际要碰 63 行、跨出原定两处很远，而收益只是把一份**在 stamp 里被真用着**的输入挪个位置 —— 删了还得给闭包另找一个来源。所以 `D-1128-217` 结案：**代码一行不动**。
+
+### 13.3 (b) 做了什么（只文字）
+
+- `src/kernel/include/camel/runtime/facts.h:103-105` 的注释改准（`lane/anchor-program-note@d171072f35`，`numstat` 5/2，代码零行变动）：
+  旧 "`program` is the program the graph is read in: the graphs it refers to are the ones that program holds."
+  新 "`program` is the program this fact is read in, and it is what the stamp's closure revision is computed from (`closureRevisionOf` …). So it is an input of the reading, not a part of the key: the key is the kind, the graph and the node alone (`FactStore::KeyHash`) …"
+- 页 §11 那句"`Program` 进键只是设计上多余"按读数改准（引文照原样保留，更正指向本节）。
+- 判据也跟着换掉：**不用** `grep 'Anchor{' -- src | wc -l`（= 66，混了 `camel::facts::Anchor` 与 `runtime::fact::Anchor` 两种类型，且 3 处不含字面 `Anchor{`）；**改用**"改完后任何构造点都不给 runtime 锚传 `program`（编译器会直接拒 3 元初始化）+ 点名 `runtime::fact::Anchor` 的 7 处逐处对上 + `grep 'Anchor' | grep program` 只剩 `anchorsIn(const Program &, const GCGraph &)` 这类**签名**"。
+- `D-1128-198` / `D-1128-205` 的前提（"把 `Program` 从锚的身份里删掉是清理"）**不成立，撤回**；`Anchor` 这一项**结案**，不再列为清理。
+
+### 13.4 这一步的分量（负责人点的）：**先判"能不能只删"，再报**
+
+这条判词本来已经被接受（"删一份多余的身份，是清理"），是开工前那次只读判定把它翻过来的：先问"这 63 行里的 `program` 是身份还是读时 resolve"，读到 `facts.cpp:91` 那行 `closureRevision(*anchor.program, …)` 才确定它**在 stamp 里被真用着**。⇒ **判据写错时，越早停越省钱**：真正花掉的是十分钟只读判定，省掉的是改 63 行 + 改 stamp 语义 + 决策者再撤一次判词。页里记下来，供后面同类"身份冗余"的判断照着做：**先看类型在键里怎么哈希、再看它在 stamp 里怎么被消费，两边都读过再谈删。**
