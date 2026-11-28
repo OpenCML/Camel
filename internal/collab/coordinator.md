@@ -591,3 +591,18 @@ git worktree add --detach <旧提交>
 **25. `provenance` 里带 `dirty: N files` 的读数不是读数。**
 `lane-oper-shape-guard` 报"同语料两个数 26/25、怀疑内联器对执行宽度不可重入"，七跑（`-Jobs 1`×3、`8`×3、`4`×1，同一尖端）**全部 26** ⇒ 宽度无关、也不抖；翻回那次 25 的 `provenance`，写着 `dirty: 4089 files` —— 它建临时枝失败、`merge` 也失败，工作树留在半合状态，25 是**半合的树**读出来的。差一个节点就是这么来的。
 **定法**：交回里凡引读数，必须贴完整 `[provenance]` 行（`tip` + `binary built` + `tier` + `dirty`/空），**`dirty` 非 0 的读数一律打回**（它测的不是任何一个提交）；同理，"临时枝建失败/merge 失败"之后**必须先 `git status` 核空再跑**，否则后续命令全跑在原枝上、还留下半合树。附带一条：建临时枝前先 `git branch --list '<name>*'`，撞名会让 `switch -c` 整条命令失败而后续命令照样执行。
+
+**26. 车道会话的起点目录 = 它自己的工作树（`D-1128-89` 定的，从起点断掉"写进主检出"）。**
+`D-1128-78`（`lane-oper-shape-guard` 写 `base.h`）与 `D-1128-86`（`lane-stdlib-reds` 写 `fusion_group_profile.py` + golden）是**两条不同车道撞上同一个起点问题**：会话默认目录继承协调者的 `D:\Projects\Camel`，任何相对路径（`.NET File`、`Set-Content`、`git checkout --`、编辑工具）都按**进程 cwd** 落到负责人的树里。纪律管不住下一条车道，所以从起点固定：
+```
+· 派卡/唤起子代理的**第一条命令**必须是目录断言，原文照抄（树存在的才派）：
+    Set-Location D:\Projects\Camel-wt\<名>; [Environment]::CurrentDirectory = (Get-Location).Path
+    Get-Location; [Environment]::CurrentDirectory; git rev-parse --abbrev-ref HEAD
+  **三条读数不对就不开工**（`Set-Location` 失败不中断后续命令 —— 误派进主检出的那次就是这么静默传播的）
+· 卡模板固定这一段（`camel-lane` skill 里也有同一句）：**工作树 + 目录断言 + 泄漏检测**
+· 每写完一批：`git -C D:\Projects\Camel status --porcelain` **必须为空**；非空 = 有车道的写进了主检出，
+  与本树 `status` 对照，内容对得上才 `git -C D:\Projects\Camel checkout -- <绝对路径>` 复原，对不上**不动、报协调者**
+· 改写计划/用例的**脚本**一律显式给根：`scripts/camel-pass-nop-patch.mjs`、`camel-pass-scan.mjs` 的
+  `root` 默认是 **`process.cwd()`** ⇒ 不带 `--root` 就会写到起点树；用它们时必须带绝对 `--root`
+```
+**限制（已报决策者）**：`spawn_teammate(name, description, prompt, context)` **没有 cwd 参数**，子代理会话继承协调者的起点目录；`subagent`/`subagent_fork` 有 `cwd` 但建出来的会话不能按 id 寻址、不能当车道。⇒ 协调者侧只能做到"第一条命令断言"，真正的结构性修复在插件侧（车道命令的 cwd 落在主检出时当场提醒或拒绝）。
