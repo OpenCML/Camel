@@ -7,7 +7,7 @@
 // nodes in, so renaming a value or swapping two independent declarations would silently change which
 // node a rewrite edits.
 import { flatten } from array
-import { Graph, Node, erase, graphs, graphs_of, is_constant, nodes, op, op_name, replace, type_name, type_of } from graph
+import { Draft, Graph, Node, abort, commit, erase, graphs, graphs_of, is_constant, nodes, op, op_name, open, replace, type_name, type_of } from graph
 import { is_function } from types
 
 // What a node runs and what type it carries, or `-` where it has none. `op(n)` is the module's own
@@ -48,6 +48,13 @@ func all_nodes::<F>(p: F) => Node[] when is_function::<F>() {
     return flatten(graphs_of(p)->map<nodes>)
 }
 
+// Every node of every graph the draft reaches. The draft is the function plus every graph it can
+// reach, and what a handle read from it names is a node an edit changes, so the rewrite picks its
+// nodes from here rather than from the published program.
+func draft_nodes(d: Graph) => Node[] {
+    return flatten(graphs(d)->map<nodes>)
+}
+
 // The `float` constants of one graph.
 func floats_in(g: Graph) => Node[] {
     return nodes(g)->filter<func (n: Node) => bool {
@@ -67,6 +74,37 @@ func holds_the_pair(g: Graph) => bool {
     return len(floats_in(g)) == 1 && len(models_in(g)) == 1
 }
 
+// The one graph of the list, or nothing when the count is not one.
+func one_graph(found: Graph[]) => Graph? {
+    return if len(found) == 1 then found[0] else null
+}
+
+// The one node of the list, or nothing when the count is not one.
+func one_node(found: Node[]) => Node? {
+    return if len(found) == 1 then found[0] else null
+}
+
+// Erases the nodes given in the draft and commits: the changed function is the answer.
+func erased::<F>(d: Draft<F>, hits: Node[]) => F! sync {
+    hits->foreach<func (n: Node) => void {
+        erase(n)
+    }>
+    return commit(d)
+}
+
+// Gives back the function the draft was opened on and commits nothing: a rewrite that finds nothing
+// to do leaves the program as it was.
+func declined::<F>(d: Draft<F>, p: F) => F! sync {
+    abort(d)
+    return p
+}
+
+// Puts `new` in the place of `old` in the draft and commits.
+func swapped::<F>(d: Draft<F>, old: Node, new: Node) => F! sync {
+    replace(old, new)
+    return commit(d)
+}
+
 /// Lists every node the program is made of: the operator each one runs, and the type it carries.
 export func list::<F>(p: F) => F! sync {
     all_nodes(p)->foreach<func (n: Node) {
@@ -76,21 +114,10 @@ export func list::<F>(p: F) => F! sync {
 }
 
 /// Drops every printing call of the program: a rewrite that loses an effect.
-///
-/// The edit block's draft is the function plus every graph the function can reach, so the printing
-/// calls are chosen across the whole program, not in one graph of it, and the block's commit makes
-/// the changed function.
 export func drop_print::<F>(p: F) => F! sync {
-    return edit d = p {
-        // The calls are read out of the draft before any of them is erased, and the count is taken
-        // first, so the reading happens while the draft is still open.
-        let prints = flatten(graphs(d)->map<nodes>)->filter<is_print>
-        if len(prints) > 0 then {
-            prints->foreach<func (n: Node) => void {
-                erase(n)
-            }>
-        }
-    }
+    let d = open(p)
+    let prints = draft_nodes(d)->filter<is_print>
+    return if len(prints) == 0 then declined(d, p) else erased::<F>(d, prints)
 }
 
 /// Passes the starting model where the learning rate goes: a rewrite that breaks a type.
@@ -107,13 +134,16 @@ export func drop_print::<F>(p: F) => F! sync {
 /// existed to make is simply gone. Silence costs more than a refusal -- a refusal names the type and
 /// the place, and a rewrite that quietly declines to pick names nothing at all.
 export func break_rate::<F>(p: F) => F! sync {
-    return edit d = p {
-        let where = graphs(d)->filter<holds_the_pair>
-        if len(where) == 1 then {
-            let g = where[0]
-            // `holds_the_pair` says this graph holds each of the two constants exactly once, so the
-            // two nodes are the rate and the model, and no other graph is asked.
-            replace(floats_in(g)[0], models_in(g)[0])
+    let d = open(p)
+    let where = graphs(d)->filter<holds_the_pair>
+    return match one_graph(where) {
+        case null => declined(d, p)
+        case g => match one_node(floats_in(g)) {
+            case null => declined(d, p)
+            case r => match one_node(models_in(g)) {
+                case null => declined(d, p)
+                case w => swapped(d, r, w)
+            }
         }
     }
 }
