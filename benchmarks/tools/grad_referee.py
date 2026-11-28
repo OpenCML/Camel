@@ -229,7 +229,7 @@ def camel_run(model: str, artifacts: Optional[Path], model_file: Optional[Path],
         env["CAMEL_BENCH_WEIGHTS"], env["CAMEL_BENCH_INPUT"] = str(artifacts / "weights"), str(artifacts / "input.npy")
     cmd = [str(camel_binary())]
     if _block_limit_mb is not None:
-        cmd += ["--block-limit", str(_block_limit_mb)]
+        cmd += ["--spaces", f"block_mb={_block_limit_mb}"]
     cmd += [str(file), *passes]
     proc = subprocess.run(cmd, cwd=camel_model(model).parent, env=env, capture_output=True, text=True, timeout=1800)
     if proc.returncode != 0:
