@@ -123,9 +123,7 @@ debuggablePasses(const std::vector<std::string> &passes, std::string &notice) {
         std::string reason;
         if (pass == "std::jit" || pass == "std::fastvm::jit") {
             reason = "compiled code cannot be stopped";
-        } else if (
-            pass == "std::tf" || pass == "std::prl" || pass == "std::parallel" ||
-            pass == "std::taskflow") {
+        } else if (pass == "std::prl") {
             // DESIGN-QUESTION(parallel-debugging)
             reason = "the parallel scheduler runs several nodes at once, so there is no single "
                      "current node; the order of evaluation under the debugger is the "

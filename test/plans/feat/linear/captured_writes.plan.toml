@@ -54,10 +54,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.tf"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::tf."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::prl."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
-args = ["${case}", "std::tf"]
+args = ["${case}", "std::prl"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -166,10 +166,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.macro_tf"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::macro std::tf."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::macro std::prl."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
-args = ["${case}", "std::macro", "std::tf"]
+args = ["${case}", "std::macro", "std::prl"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -246,10 +246,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.simplify_tf"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::opt std::tf."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::opt std::prl."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
-args = ["${case}", "std::opt", "std::tf"]
+args = ["${case}", "std::opt", "std::prl"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -378,10 +378,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_direct_user.tf"
-desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::tf."
+desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::prl."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_direct_user.cml"
-args = ["${case}", "std::tf"]
+args = ["${case}", "std::prl"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -490,10 +490,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_direct_user.macro_tf"
-desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::macro std::tf."
+desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::macro std::prl."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_direct_user.cml"
-args = ["${case}", "std::macro", "std::tf"]
+args = ["${case}", "std::macro", "std::prl"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -570,10 +570,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_direct_user.simplify_tf"
-desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::opt std::tf."
+desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::opt std::prl."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_direct_user.cml"
-args = ["${case}", "std::opt", "std::tf"]
+args = ["${case}", "std::opt", "std::prl"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -705,10 +705,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_value.tf"
-desc = "The value a call hands on when it writes captured variables: the tuple of its return value and the new version of each variable it wrote, in capture order; a void writer's value is that one version; a call writing nothing is unchanged; an unused return value has no access node. Pipeline: std::tf."
+desc = "The value a call hands on when it writes captured variables: the tuple of its return value and the new version of each variable it wrote, in capture order; a void writer's value is that one version; a call writing nothing is unchanged; an unused return value has no access node. Pipeline: std::prl."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_value.cml"
-args = ["${case}", "std::tf"]
+args = ["${case}", "std::prl"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -893,10 +893,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "lambda_capture_write.tf"
-desc = "A lambda bound to a name in the same function has a body the call site can see: `f()` is a write of the `Ref` `c` the lambda captured as a handle, its `sync` body runs with the call, and the read written after it prints 1. Pipeline: std::tf."
+desc = "A lambda bound to a name in the same function has a body the call site can see: `f()` is a write of the `Ref` `c` the lambda captured as a handle, its `sync` body runs with the call, and the read written after it prints 1. Pipeline: std::prl."
 kind = "behavior"
 case = "../../../cases/linear/byref/lambda_capture_write.cml"
-args = ["${case}", "std::tf"]
+args = ["${case}", "std::prl"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

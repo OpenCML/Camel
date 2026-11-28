@@ -38,8 +38,7 @@ export const ALREADY_HANDS_ON = new Set(['std::stats', 'std::rulesets', 'std::ar
 
 export const ALIASES = {
   'std::lnr': 'std::fvm', 'std::linear': 'std::nvm', 'std::nodevm': 'std::nvm',
-  'std::run': 'std::fvm', 'std::jit': 'std::fastvm::jit', 'std::tf': 'std::taskflow',
-  'std::prl': 'std::taskflow', 'std::parallel': 'std::taskflow', 'std::tfg': 'std::tfdump',
+  'std::run': 'std::fvm', 'std::jit': 'std::fastvm::jit', 'std::tfg': 'std::tfdump',
   'std::tns': 'std::topo_node_seq', 'std::bc': 'std::fastvm::bytecode',
   'std::lbc': 'std::fastvm::linked_bytecode', 'std::asm': 'std::fastvm::jit_asm',
   'std::bin': 'std::fastvm::jit_bin', 'std::rmir': 'std::fastvm::jit_rmir',

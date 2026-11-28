@@ -293,7 +293,7 @@ with <
     /// refusals once they repeat -- the path a wait that does not announce itself still takes.
     blocking_leaves: bool = true
 >
-export func taskflow::<F>(f: F) => F! when is_function::<F>()
+export func prl::<F>(f: F) => F! when is_function::<F>()
 
 // -----------------------------------------------------------------------------
 // The optimizing rewrite pipeline, implemented in C++
@@ -416,7 +416,7 @@ namespace cxx {
 // The spellings a pipeline has always written
 //
 // A pass is named by its declaration, and the pipeline is written with names a reader learned
-// from older documents: `std::prl` for `std::taskflow`, `std::lnr` for `std::fvm`, `std::bc` for
+// from older documents: `std::lnr` for `std::fvm`, `std::bc` for
 // `std::fastvm::bytecode`, and so on. Each of them is a pass a pipeline may write, so each gets a
 // declaration of the pass shape here -- the name is a pass because it is declared as one, not
 // because a table beside the declarations says what it means.
@@ -437,17 +437,9 @@ export func jit::<F>(f: F) => F! when is_function::<F>()
 /// `std::linear`: run on the node VM, linearly (`std::nvm` implements it).
 export func linear::<F>(f: F) => F! when is_function::<F>()
 
-/// `std::parallel`: run on the task-flow scheduler (`std::taskflow` implements it).
-export func parallel::<F>(f: F) => F! when is_function::<F>()
-
-/// `std::tf`: `std::taskflow`, the short spelling.
-export func tf::<F>(f: F) => F! when is_function::<F>()
-
 /// `std::lnr`: the fast VM, the linear spelling (`std::fvm` implements it).
 export func lnr::<F>(f: F) => F! when is_function::<F>()
 
-/// `std::prl`: the task-flow scheduler written by its old spelling (`std::taskflow` implements it).
-export func prl::<F>(f: F) => F! when is_function::<F>()
 
 /// `std::nodevm`: the node VM written by its old spelling (`std::nvm` implements it).
 export func nodevm::<F>(f: F) => F! when is_function::<F>()

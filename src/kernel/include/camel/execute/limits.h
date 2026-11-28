@@ -57,7 +57,7 @@ inline constexpr const char *kMaxMacroRoundsOption = "--max-macro-rounds";
 
 /// The largest value either limit accepts. The interpreters nest on the native stack (NodeVM
 /// for every call, FastVM for calls through function values and higher-order operators, the
-/// macro evaluator and std::tf for every call), so a count alone cannot promise that the stack
+/// macro evaluator and std::prl for every call), so a count alone cannot promise that the stack
 /// holds. Where the bounds of the native stack can be read (kNativeStackGuard), every nested
 /// call also checks the stack, and running out of it is the same diagnostic as reaching the
 /// count; the count may then be large. Elsewhere the count is all there is, and it cannot be

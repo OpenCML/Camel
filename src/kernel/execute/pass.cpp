@@ -132,12 +132,9 @@ const std::map<std::string, std::string> passAliases = {
     // (`requireKnownPasses` asks `requireRunPassTarget`).
     {kRunPassName, kRunPassDefaultTarget},
     {"std::linear", "std::nvm"},
-    {"std::parallel", "std::taskflow"},
-    {"std::tf", "std::taskflow"},
 
     // Common VM aliases
     {"std::lnr", "std::fvm"},
-    {"std::prl", "std::taskflow"},
     {"std::jit", "std::fastvm::jit"},
     {"std::nodevm", "std::nvm"},
     // Common translation and dump aliases
@@ -2573,7 +2570,7 @@ void requireRunPassTarget(const context_ptr_t &ctx) {
                 kRunPassName,
                 std::format(
                     "`passes.run` names '{}', which is not a scheduling pass; `{}` runs the "
-                    "program, so it must name one (std::fvm, std::nvm, std::jit, std::taskflow)",
+                    "program, so it must name one (std::fvm, std::nvm, std::jit, std::prl)",
                     target,
                     kRunPassName));
     }

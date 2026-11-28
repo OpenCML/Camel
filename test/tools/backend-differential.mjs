@@ -30,7 +30,7 @@
  *     (`skip_unless`), names a `benchmark`, or carries `--timeit`: its command line is not "this
  *     program on this back end". This also rules out a program whose standard output is a clock
  *     rather than a value, which cannot agree with itself and would be misread as a disagreement;
- *   - a block whose last scheduling pass is neither side (`std::jit`, `std::prl`, `std::tf`) or is a
+ *   - a block whose last scheduling pass is neither side (`std::jit`, `std::prl`) or is a
  *     rewriting pass -- the run then falls through to `std::run`, which is a third program this
  *     tool does not measure; a scheduling pass that carries `with` parameters, because a parameter
  *     is not necessarily one both sides accept, so the two halves would no longer be one program;

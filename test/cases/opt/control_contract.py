@@ -45,7 +45,7 @@ raw = export(chain)
 assert all(not redundant(g) for g in raw["graphs"]), "compiler left a redundant control edge"
 assert any(n["kind"] == "GATE" for g in raw["graphs"] for n in g["nodes"])
 for pipeline in ([], ["std::cxx::inline"], ["std::opt"], ["std::cxx::order"]):
-    for backend in ("std::nvm", "std::fvm", "std::jit", "std::tf", "std::prl"):
+    for backend in ("std::nvm", "std::fvm", "std::jit", "std::prl", "std::prl"):
         assert run(chain, *pipeline, backend).split() == ["1", "2"]
 
 sample = CASES / "opt/inline/consecutive_sync_calls.cml"
@@ -64,7 +64,7 @@ for old, new in zip(before["graphs"], after["graphs"]):
     boundaries = {n["id"] for n in old["nodes"] if n["kind"] in ("BRCH", "JOIN")}
     boundary_edges = lambda g: [e for e in g["edges"] if e["source"] in boundaries or e["target"] in boundaries]
     assert boundary_edges(old) == boundary_edges(new), "branch boundary edges changed"
-for backend in ("std::nvm", "std::fvm", "std::jit", "std::tf", "std::prl"):
+for backend in ("std::nvm", "std::fvm", "std::jit", "std::prl", "std::prl"):
     assert run(branch, "std::cxx::inline", "std::cxx::order", backend).strip() == ""
 
 with tempfile.TemporaryDirectory() as folder:

@@ -107,7 +107,7 @@ def parse_config(spec: str) -> List[Config]:
     assert match is not None
     passes_part, threads_part = match.group(1), match.group(2) or ""
     passes = passes_part.split("+")
-    parallel = any(p in ("std::prl", "std::tf", "std::taskflow") for p in passes)
+    parallel = any(p in ("std::prl", "std::prl", "std::prl") for p in passes)
     if not threads_part:
         return [Config(passes_part, passes, None, parallel)]
     return [

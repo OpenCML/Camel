@@ -43,7 +43,7 @@ camel --version | camel --help
 | `-P`, `--profile`、`--profile-mode` | 删 | 已有 `std::profile` 遍 |
 | `--timeit <pass>/<N>` | 子命令 `camel bench <文件> <遍> --runs N` | 测量是另一种用法，不是一次运行的选项；也不再借用诊断格式选项 |
 | `--dump-after-each-pass <dir>`、`--time-phases[=file]` | 保留（长名） | 观察整条流水线，属于宿主一侧的驱动程序 |
-| 调度遍的长短两套名字（如 `std::nvm` 与旧的长拼写） | 每个只留一个名字（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`、`std::tf`） | 一个遍一个名字；`std::run` 是"运行这个程序"那一步的名字，它指向的调度遍由 `passes.run` 决定（默认 `std::fvm`），设计原则 9.2 与文档因此一致 |
+| 调度遍的长短两套名字（如 `std::nvm` 与旧的长拼写） | 每个只留一个名字（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`） | 一个遍一个名字；`std::run` 是"运行这个程序"那一步的名字，它指向的调度遍由 `passes.run` 决定（默认 `std::fvm`），设计原则 9.2 与文档因此一致 |
 
 ### 进程级设置
 

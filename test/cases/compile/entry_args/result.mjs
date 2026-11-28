@@ -43,7 +43,7 @@ const check = (ok, pass, fail) => {
     failed ||= !ok
 }
 
-for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
+for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::prl']) {
     const out = path.join(tmp, `tuple-${(pass || 'default').replace(/:/g, '_')}`)
     const args = [
         path.join(HERE, 'struct_param.cml'),

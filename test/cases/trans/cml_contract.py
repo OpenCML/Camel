@@ -81,7 +81,7 @@ CORPUS = [
 # runs on by default; a case whose graph is about a statement running at all (`arm_write.cml`: the
 # value an arm hands on is what keeps its write alive) runs on all four, because a back end that
 # read the value without the wait would drop the write.
-BACKENDS = ("std::nvm", "std::fvm", "std::fastvm::jit", "std::taskflow")
+BACKENDS = ("std::nvm", "std::fvm", "std::fastvm::jit", "std::prl")
 FOUR_BACKENDS = {"arm_write"}
 # The printer's temporaries, and a parameter name it has to invent.
 GENERATED = re.compile(r"^(cml|p|w)\d+$")

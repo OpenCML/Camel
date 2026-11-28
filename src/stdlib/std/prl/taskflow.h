@@ -285,7 +285,7 @@ class TaskflowGcRegion {
 
 class TaskflowBytecodeHandoff;
 
-/// Settings of a run of std::taskflow, the parameters of the pass (`std::tf linear=true`).
+/// Settings of a run of std::prl, the parameters of the pass (`std::prl linear=true`).
 struct TaskflowOptions {
     /// Evaluate every graph node by node, with no graph-level task. For comparison and diagnosis.
     bool linear = false;
