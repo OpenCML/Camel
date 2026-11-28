@@ -401,14 +401,7 @@ bool Builder::readCalleeSignature(
             operand = norm[at];
         }
         if (use.cls == sem::ResourceClass::Handle) {
-            // A handle access names a value, not a parameter of this body (design effects plan
-            // 3.2): its key is read before the port test below, because a handle this body made
-            // itself is no port of the caller and still has to meet the other operations on the
-            // one box it names.
-            std::string key;
-            walk.valueKeys.push_back(
-                handleKeyOf(walk, graph, transaction, operand, key) ? std::move(key)
-                                                                    : std::string());
+            handleAccessKey(walk, graph, transaction, operand);
         }
         if (walk.captured.contains(operand)) {
             if (!placeCapturedUse(walk, graph, transaction, operand, use.mode)) {
@@ -628,6 +621,20 @@ std::optional<sem::ResultAlias> Builder::resultAliasOf(
     return std::nullopt;
 }
 
+void Builder::handleAccessKey(
+    BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
+    draft_node_ref_t value) const {
+    // A handle access names a value, not a parameter of this body (design effects plan 3.2): the
+    // key is the container that value belongs to, read off it (handleKeyOf), and it is read before
+    // any port test, because a handle this body made itself is no port of the caller and still has
+    // to meet the other operations on the one box it names. A value the walk cannot pin to one
+    // handle pushes an empty key, which the record reads as reaching any resource of its class
+    // (design principles 3.3) rather than as reaching nothing.
+    std::string key;
+    walk.valueKeys.push_back(
+        handleKeyOf(walk, graph, transaction, value, key) ? std::move(key) : std::string());
+}
+
 bool Builder::handleKeyOf(
     BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
     draft_node_ref_t value, std::string &key) const {
@@ -791,11 +798,7 @@ bool Builder::reachOfOper(
             return false;
         }
         if (access.resource.cls == sem::ResourceClass::Handle) {
-            // The same reading as in readCalleeSignature, for an operator's own declaration.
-            std::string key;
-            walk.valueKeys.push_back(
-                handleKeyOf(walk, graph, transaction, inputs[at], key) ? std::move(key)
-                                                                       : std::string());
+            handleAccessKey(walk, graph, transaction, inputs[at]);
         }
         if (walk.captured.contains(inputs[at])) {
             if (!placeCapturedUse(walk, graph, transaction, inputs[at], access.mode)) {
