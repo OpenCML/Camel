@@ -162,3 +162,21 @@ src/kernel/core/operator_table.cpp:90             `internLocked(kWellKnownOperat
 
 等窗口条件：`origin/integration` 的 70 那批落定 **且** 宿主 `[load] 1m < 8`。
 到窗口时按序：A-2 改前/改后 cpu 秒（各 3 次中位）→ A-1（若 B 批了）→ A-4 不测。
+## 八、A-2 实测收窄：清单说"四处"，能省的只有两处（2026-11-28，改完代码后回填）
+
+改完 `nodevm.cpp` 再逐处读，四处里有**两处的前提不成立**：
+
+```
+:374  std::vector<std::pair<gc_node_ref_t, gc_node_ref_t>> enclosingArms;
+:381  std::vector<gc_node_ref_t> groupDeferred;
+  两者都是"默认构造 + 需要时 push_back"：**默认构造的 vector 不分配**，不用就一个字节也不给；
+  而且它们本来就在 `loop_start` 之外、一次运行只构造一次 ⇒ **没有"每处一次分配"可省**。保持原样。
+:476  std::vector<gc_node_ref_t> groupMembers;      ← 在节点循环内，每个"组尾"节点每轮一次
+:704  std::vector<slot_t> withValues;               ← 每次"带写入的调用"一次（还带 reserve）
+  这两处才是真按需分配；改为函数作用域的两只缓冲（`groupMembersOf`/`withValuesOf`），
+  用前 `clear()`，容量跨轮/跨调用复用 ⇒ 分配只在第一次需要更大容量时发生。
+```
+
+结论：**A-2 = 两处**（`:476`、`:704`），不是四处；另两处记"前提不成立"。
+语义面不改：两处都在填充前 clear，且都不跨节点存活。
+计时口径：交错 A/B（改后/改前交替各三次、每次记 `[load]`），**两侧 load 差 ≤ 2 才下结论**，否则写"未测出差异"。
