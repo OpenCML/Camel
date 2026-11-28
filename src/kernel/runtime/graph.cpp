@@ -3805,14 +3805,38 @@ const GraphDraft *draftGraphOf(const camel::graph::Graph &graph) {
 
 bool graphIsDraft(const camel::graph::Graph &graph) { return draftGraphOf(graph) != nullptr; }
 
-uint64_t graphContentVersion(const camel::graph::Graph &graph) {
-    // A draft's revision is the number its own readers take for the version of its references
-    // (`GraphDraft::revision`), so a fact stamped with it goes stale exactly when an edit makes
-    // what it read change -- no more often and no less. A frozen graph has no such number because
-    // its content cannot change: `~GCGraph` is the only thing that ends it, and the store drops
-    // what was anchored on it there (`forgetGraph`).
-    const GraphDraft *draft = draftGraphOf(graph);
-    return draft == nullptr ? 0 : draft->revision();
+GraphId graphIdentity(const camel::graph::Graph &graph) {
+    // The two representations answer the same question, each from its own member: a graph's id is
+    // the same across every version of it, which is what a fact is keyed on.
+    if (const GCGraph *frozen = frozenGraphOf(graph)) {
+        return frozen->id();
+    }
+    if (const GraphDraft *draft = draftGraphOf(graph)) {
+        return draft->id();
+    }
+    return kInvalidGraphId;
+}
+
+uint64_t graphRevision(const camel::graph::Graph &graph) {
+    // The number the graph's own readers take for a version of its references: a fact stamped with
+    // it goes stale exactly when an edit or a commit makes what it read change -- no more often and
+    // no less. A graph the runtime does not hold has no revision to give.
+    if (const GCGraph *frozen = frozenGraphOf(graph)) {
+        return frozen->revision();
+    }
+    if (const GraphDraft *draft = draftGraphOf(graph)) {
+        return draft->revision();
+    }
+    return 0;
+}
+
+uint64_t graphNodeVersion(const camel::graph::Graph &graph, gc_node_ref_t node) {
+    // Only a frozen graph versions its nodes: a draft's revision stands for everything an edit may
+    // have changed, and a draft's fact sets no node marks at all (facts.cpp, `GraphAccess`).
+    if (const GCGraph *frozen = frozenGraphOf(graph)) {
+        return frozen->nodeContentHash(node);
+    }
+    return 0;
 }
 
 void setFactSlotOf(
@@ -3839,7 +3863,7 @@ GCGraph::~GCGraph() {
     // there, and the store that was told about this one must not answer about it afterwards
     // (camel/facts/facts.h). This is also what clears the slots first, while the values they name
     // are still the store's: a slot that outlived its fact would be a dangling read (fact_slots.h).
-    camel::facts::forgetGraph(this);
+    camel::facts::forgetGraph(this, toValue(id()));
     // The view is the graph's own (`view()`, camel/graph/graph.h): it holds a reference to this
     // graph, so it goes before the graph does. `GraphView` is complete in this file
     // (graph/gc_graph_view.h), which is why the deleting is here rather than in the header.
