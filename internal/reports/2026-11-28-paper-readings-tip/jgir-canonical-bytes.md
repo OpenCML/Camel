@@ -3,7 +3,7 @@
 - **measured_tip**：源码树 = `d0539fba99433c6a9208584e854665ade60fba14`（本轮读数树 `D:\Temp\camel-readings-435`
   的 HEAD 是 `4e7d29c495d4…`，其相对源码基只多 7 笔 `internal/reports` 提交，`git diff --name-only d0539fba99 HEAD -- src test` 为空），
   **取的时刻 2026-11-28 16:20:46**；探针两次 run 的 `[provenance]` 二进制 `built 2026-11-28T16:22:07` / `16:22:54`。
-- **做到了**：19 对（38 条 run）都跑出输出，按下表给出**逐对的长度与是否相同**。
+- **做到了**：19 对（38 条 run）都跑出输出，按下表给出**逐对的长度与是否相同**（定稿表见"逐对清单"）。
 - **没做到**：**`②` 的"字节偏移 + 两侧各 120 字节原文"没有拿到，`③` 的 `diff.txt` 与 `sha256` 存档也没有**。
   原因（工具限制，不是没试）：`std::jgir canonical=true` 的整份输出约 4–18 KB，我让它经 `verify_script` 的**错误消息**
   回传（唯一能让失败条目的产物穿过 run log 的通道），而 runner 把该消息**截断在约 2 KB**（原文可见
@@ -19,35 +19,11 @@
 它们**各自都是某条 `compare_to` 的一端**，把它们再算成两对会把同一批 run 数两遍。
 ⇒ 本页分母 **19 对 / 38 条 run**；若按"21"计，多出的 2 对没有独立的 run。（分母错了结论就没意义，所以先摆出来。）
 
-## 逐对一行
+## 逐对一行（见下文"逐对清单"，那张表才是定稿）
 
-`len` 为两侧整份输出的字节数（按 `TextEncoder` 的 UTF-8 字节）；`同` 判据 = 长度相同 **且** 32 位滚动哈希相同
-（见下一条限制）。
-
-| # | 名字（base ← other） | 同 | len 两侧 |
-|---|---|---|---|
-| 00 | `cxx_isolation.algebra_single_x.by_cpp` ← `.by_camel` | 是 | 3757 / 3757 |
-| 01 | `cxx_isolation.algebra_two_writes.by_cpp` ← `.by_camel` | 是 | 4370 / 4370 |
-| 02 | `cxx_isolation.algebra_bound.by_cpp` ← `.by_camel` | 是 | 8063 / 8063 |
-| 03 | `cxx_isolation.algebra_display.by_cpp` ← `.by_camel` | 是 | 3757 / 3757 |
-| 04 | `cxx_isolation.default_pipeline.by_default_name` ← `.by_registered_name` | 是 | 14645 / 14645 |
-| 05 | `cxx_isolation.inline_figure1.by_cpp` ← `.by_camel` | 是 | 11168 / 11168 |
-| 06 | `cxx_isolation.inline_closure.by_cpp` ← `.by_camel` | 是 | 17872 / 17872 |
-| 07 | `cxx_isolation.inline_budget_zero.by_cpp` ← `.by_camel` | 是 | 6770 / 6770 |
-| 08 | `cxx_isolation.inline_recursion.by_cpp` ← `.by_camel` | 是 | 8695 / 8695 |
-| 09 | `cxx_isolation.inline_closure_corpus.by_cpp` ← `.by_camel` | 是 | 5751 / 5751 |
-| 10 | `cxx_isolation.paper_figure1.by_cpp` ← `.by_camel` | 是 | 9873 / 9873 |
-| 11 | `camel_passes.cse.by_camel` ← `.is_a_fixpoint` | 是 | 12605 / 12605 |
-| 12 | `camel_passes.dce.by_camel` ← `.is_a_fixpoint` | 是 | 7421 / 7421 |
-| 13 | `camel_passes.fold.by_cpp` ← `.same_text` | **否** | 11535 / 11535 |
-| 14 | `camel_passes.fold.by_camel` ← `.is_a_fixpoint` | 是 | 11535 / 11535 |
-| 15 | `camel_passes.fold_fault.by_cpp` ← `.same_text` | 是 | 3683 / 3683 |
-| 16 | `camel_passes.fold_fault.without_the_pass` ← `.same_run` | **两侧都无输出** | 0 / 0 |
-| 17 | `camel_passes.cse.after_inline.by_cpp` ← `.by_camel` | **否** | 8250 / 8250 |
-| 18 | `figure1_pipeline.algebra.by_cpp_inline` ← `.by_camel_inline` | 是 | 6568 / 6568 |
-
-⇒ **相同 17 / 19**（按长度 + 哈希）；**不同 2 对**：第 13、17 对。第 16 对两侧都是 0 字节（该对的两条条目本来就不打印），
-按判据算"相同"，但它**不是**"逐字节相同的两份图"，正文若引用须注明。
+第一版这张表把每一对压成"同 / 否"两档，`16` 记成"两侧都无输出"、`17` 记成"否"，然后得出 `17/19`。
+那是**没有分清"比的是一张图还是一段程序输出"**得出的数，已被下面的**逐对清单**取代：
+真正的读数是 **N = 19 = 16 + 1 + 2**（16 对图整份相同、1 对图只差记账位、2 对根本不产图）。
 
 ## 那两对不同在哪里 —— 只能给到这一步
 
@@ -107,17 +83,43 @@ L259: compare_to = "camel_passes.fold_fault.by_cpp"
 `fold_fault.by_cpp`），也就是它们各自**已经是一对的一端**。把"19 条 `compare_to` + 2 条 `same_text`"相加，
 等于把这两条 run 再数一遍 ⇒ **对数是 19**，不是 21。
 
-## 四类分开（本轮；13、17 的偏移由 Lead 用 host 直连 CLI 取到，见下节）
+## 逐对清单（每对一行；总数从这张表数出来）
 
-| 类 | 对数 | 成员 |
-|---|---|---|
-| 图相同（长度 + 哈希级） | **17** | 00–12、14、15、18 |
-| **图相同、只差一个记账位（`flags` 0 vs 2）** | **2** | 13 `fold.by_cpp` ← `.same_text`；17 `cse.after_inline.by_cpp` ← `.by_camel` |
-| 图不同（结构/渲染差异） | **0** | —— 本轮没有这一类 |
-| 不产出图（两侧 0 字节，单列） | **1** | 16 `fold_fault.without_the_pass` ← `fold_fault.same_run` |
+本清单的 `比的是什么` 一列**照计划原文的 `args` 判**：末段带 `std::gir`/`std::jgir` 的比**图**（dot/jgir 文本）；
+只带 `std::stats` 的比**计数行**；带 `std::nvm` 一族的是**跑程序的 stdout/退出码**。
+`判定` 一列只有三种：`整份相同` / `只差记账位` / `不产出图`。
 
-⇒ **分母写法**：排除 16 后是 **17 / 18 整份相同**，另 **2 对除一个记账位外整份相同**；把 16 算进来并标"两侧无图"则是 **17 / 19**。
-本页主张前者（**17/18 + 2 差记账位**），并把 16 单列为"不产出图"。
+| # | 计划：用例名 | 比的是什么 | 判定 | 依据（字节数 / 偏移 / sha 前缀） |
+|---|---|---|---|---|
+| 0 | `cxx_isolation`：`algebra_single_x.by_cpp` ← `algebra_single_x.by_camel` | 图（`std::gir` 文本） | **整份相同** | 3757/3757 字节，两侧同长同哈希 |
+| 1 | `cxx_isolation`：`algebra_two_writes.by_cpp` ← `algebra_two_writes.by_camel` | 图（`std::gir` 文本） | **整份相同** | 4370/4370 字节，两侧同长同哈希 |
+| 2 | `cxx_isolation`：`algebra_bound.by_cpp` ← `algebra_bound.by_camel` | 图（`std::gir` 文本） | **整份相同** | 8063/8063 字节，两侧同长同哈希 |
+| 3 | `cxx_isolation`：`algebra_display.by_cpp` ← `algebra_display.by_camel` | 图（`std::gir` 文本） | **整份相同** | 3757/3757 字节，两侧同长同哈希 |
+| 4 | `cxx_isolation`：`default_pipeline.by_default_name` ← `default_pipeline.by_registered_name` | 图（`std::gir` 文本） | **整份相同** | 14645/14645 字节，两侧同长同哈希 |
+| 5 | `cxx_isolation`：`inline_figure1.by_cpp` ← `inline_figure1.by_camel` | 图（`std::gir` 文本） | **整份相同** | 11168/11168 字节，两侧同长同哈希 |
+| 6 | `cxx_isolation`：`inline_closure.by_cpp` ← `inline_closure.by_camel` | 图（`std::gir` 文本） | **整份相同** | 17872/17872 字节，两侧同长同哈希 |
+| 7 | `cxx_isolation`：`inline_budget_zero.by_cpp` ← `inline_budget_zero.by_camel` | 图（`std::gir` 文本） | **整份相同** | 6770/6770 字节，两侧同长同哈希 |
+| 8 | `cxx_isolation`：`inline_recursion.by_cpp` ← `inline_recursion.by_camel` | 图（`std::gir` 文本） | **整份相同** | 8695/8695 字节，两侧同长同哈希 |
+| 9 | `cxx_isolation`：`inline_closure_corpus.by_cpp` ← `inline_closure_corpus.by_camel` | 图（`std::gir` 文本） | **整份相同** | 5751/5751 字节，两侧同长同哈希 |
+| 10 | `cxx_isolation`：`paper_figure1.by_cpp` ← `paper_figure1.by_camel` | 图（`std::gir` 文本） | **整份相同** | 9873/9873 字节，两侧同长同哈希 |
+| 11 | `camel_passes`：`cse.by_camel` ← `cse.is_a_fixpoint` | 图（`std::gir` 文本） | **整份相同** | 12605/12605 字节，两侧同长同哈希 |
+| 12 | `camel_passes`：`dce.by_camel` ← `dce.is_a_fixpoint` | 图（`std::gir` 文本） | **整份相同** | 7421/7421 字节，两侧同长同哈希 |
+| 13 | `camel_passes`：`fold.by_cpp` ← `fold.same_text` | 图（`std::gir` 文本） | **只差记账位** | 11535/11535 字节，offset 15639，sha 4cc0ebb7c2a7 / ff84e9cdc468 |
+| 14 | `camel_passes`：`fold.by_camel` ← `fold.is_a_fixpoint` | 图（`std::gir` 文本） | **整份相同** | 11535/11535 字节，两侧同长同哈希 |
+| 15 | `camel_passes`：`fold_fault.by_cpp` ← `fold_fault.same_text` | 图（`std::gir` 文本） | **整份相同** | 3683/3683 字节，两侧同长同哈希 |
+| 16 | `camel_passes`：`fold_fault.without_the_pass` ← `fold_fault.same_run` | 程序输出（跑程序的 stdout/退出码，`compare_fields=[exit_code, stdout_normalized]`） | **不产出图** | 两侧各 0 字节（都退出 1、stdout 空）；**它比的不是图**，不进"产出同一张图"的分母 |
+| 17 | `camel_passes`：`cse.after_inline.by_cpp` ← `cse.after_inline.by_camel` | 程序输出（`std::stats` 的计数行） | **不产出图** | 计划里两侧只印计数行；本页另外把两侧都加了 `std::jgir canonical=true` 量了一次：**8250/8250 字节，offset 4192，sha a360c3664029 / e8d3f32e4161**（差在同一个 `flags` 记账位）——**这一条是附加读数，不改变"该对不产图"** |
+| 18 | `figure1_pipeline`：`algebra.by_cpp_inline` ← `algebra.by_camel_inline` | 图（`std::gir` 文本） | **整份相同** | 6568/6568 字节，两侧同长同哈希 |
+
+**总数（从上面这张表数，不另写结论数）**：**N = 19 = 16 + 1 + 2**
+```
+整份相同（图）      16 对   —— 两侧同长、哈希相同
+只差记账位（图）     1 对   —— 13：11535/11535，offset 15639，差在 flags 0 vs 2
+不产出图              2 对   —— 16（比的是跑程序的 stdout/退出码）、17（比的是 std::stats 计数行）
+⇒ "产出同一张图" 的分母 = 16 + 1 = 17；那两对 0/计数行的**不属于这个分母**
+```
+（先前本页按"19 对里 17 对相同、2 对差记账位、1 对不产图"记 —— 那个数把 **17 当成了图对**。
+按计划原文，17 的两侧只印 `std::stats`，所以它是**不产图**的一对；修正后就是上面的 `16 + 1 + 2`。）
 
 ## 那两对到底差在哪（Lead 的 host 直连读数，不经 runner）
 
