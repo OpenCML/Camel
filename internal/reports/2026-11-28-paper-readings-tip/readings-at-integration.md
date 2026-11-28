@@ -40,12 +40,20 @@
 
 | 步 | 遍列表 | 体积 字节（Camel / C++） | nodes | edges | opers | direct_calls | indirect_calls |
 |---|---|---|---|---|---|---|---|
-| ① `inline` | `[opt::inline]` 或 `[std::cxx::inline]` | **7431 / 7431** | 28 / 28 | 26 / 26 | 12 / 12 | 0 / 0 | 1 / 1 |
+| efore（起点，不过内联器） | std::stats std::gir std::nop | **5214**（单侧） | 19 | 16 | 6 | 2 | 1 |
+| `before`（起点，不过内联器） | `std::stats std::gir std::nop` | **5214**（单侧） | 19 | 16 | 6 | 2 | 1 |
+| ① `inline` | [opt::inline] 或 [std::cxx::inline] | **7431 / 7431** | 28 / 28 | 26 / 26 | 12 / 12 | 0 / 0 | 1 / 1 |
 | ② `inline_cse` | `+ opt::cse` | **6463 / 6463** | 24 / 24 | 22 / 22 | 10 / 10 | 0 / 0 | 1 / 1 |
 | ③ `inline_cse_algebra` | `+ opt::cse + opt::algebra` | **4627 / 4627** | 18 / 18 | 14 / 14 | 6 / 6 | 0 / 0 | 1 / 1 |
 
 - **两侧逐项相同**：体积三对相同（7431/6463/4627），计数三对相同。
-- **这张表的 opers、indirect_calls 两列是本轮首次取到的量**，旧页（igure1-two-inliners.md，tip 25dcda7a2b3）没有
+- **起点这一行（`before`，不过内联器）**：体积 **5214**、nodes **19**、edges **16**、opers **6**、`direct_calls` **2**、`indirect_calls` **1**，单侧（该步没有第二条入口）。
+- ⇒ 一句话：**起点 5214 / 内联 7431：nodes 19→28、`direct_calls` 2→0、edges 16→26、opers 6→12**。与旧页比：**nodes/edges/direct_calls 一个没变**（19/16/2），**体积 4976 → 5214（+238）** 同样是渲染变长，不是图变了。
+- **起点这一行（efore，不过内联器）**：体积 **5214**、nodes **19**、edges **16**、opers **6**、direct_calls **2**、
+  indirect_calls **1**，单侧（该步没有第二条入口）。⇒ 一句话：**起点 5214 / 内联 7431：nodes 19→28、direct_calls 2→0、
+  edges 16→26、opers 6→12**。与旧页比：**nodes/edges/direct_calls 三个数一个没变**（19/16/2），
+  **体积 4976 → 5214（+238）** 同样是渲染变长，不是图变了。
+- **这张表的 `opers`、`indirect_calls` 两列是本轮首次取到的量**，旧页（igure1-two-inliners.md，tip 25dcda7a2b3）没有
   这两个字段 —— 它只有 direct_calls。所以 opers 12/10/6 与 indirect_calls 1/1 **不能与旧页混排**：它们不是
   "旧值 → 新值"，是"本页第一次有值"。
 - **与旧页（tip `b25dcda7a2b3`）的差，逐项说清**：旧页 `7067 / 6155 / 4431`。
@@ -122,3 +130,4 @@ PROBE {"key":"inline_cse_algebra.cpp","bytes":4627,"stats":"…\"nodes\":18,\"ed
 
 第一轮 `beae6726f9`（16:10:22）→ 第二轮 `d0539fba99`（16:14:05）→ 交回时再取一次：`11b21d79071f40b5c935d442be17cdae05a41cac`（16:13:15）
 / 之后继续推进。**本页读数只对各自那两行 sha 成立**；越过即需重跑同样 run（每条约 40 s，含增量 build）。
+
