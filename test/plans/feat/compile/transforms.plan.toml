@@ -3522,3 +3522,14 @@ expect_exit = 0
 expect_stdout_exact = "[1.0, 2.0, 3.0]\n[0.5, 0.25, 0.125]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+[[tests]]
+name = "transforms.derivative_of_ones_like_is_zero"
+desc = "The forward derivative of `ones_like(xs)` is the zero of the tangent type (design principles 9.9): the array it answers does not read its argument's value, so the term is constant and adds no derivative of its own. `times_ones(xs) = xs * ones_like(xs)` is `xs` itself, so at `xs = [1.0, 2.0, 3.0]` along `dxs = [0.5, 0.25, 0.125]` the forward half answers the argument's value and the argument's tangent, `[1.0, 2.0, 3.0]` and `[0.5, 0.25, 0.125]`: the constant is what the tangent multiplies, not what the tangent becomes. The entry reads the forward half alone, for the reason the `zeros_like` entry above states -- the cut refuses a lifted graph that holds one of these nodes. Red when `jvp` refuses `tensor:ones_like` or answers any other pair."
+kind = "behavior"
+case = "../../../cases/compile/transforms/derivative_of_ones_like.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_exact = "[1.0, 2.0, 3.0]\n[0.5, 0.25, 0.125]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

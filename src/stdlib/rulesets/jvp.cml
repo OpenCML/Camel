@@ -1928,6 +1928,27 @@ export rule jvp_zeros_like(t: float[...]) {
     }
 }
 
+// ---- the forward rule of `ones_like` ----
+//
+// `ones_like` and `zeros_like` are one law in two spellings: the array it answers is the same for
+// every value of `t`, so as a function of what it was made from it is constant and its derivative
+// is the zero of the tangent type (design principles 9.9). Nothing of the difference between the
+// two numbers reaches the forward half -- the derivative does not carry the constant, because the
+// tangent is what multiplies it, not what it becomes.
+//
+// The zero is carried by the tangent in hand for the reason the law above states: the extents of a
+// tensor are not in its type, and a node built from the argument's shape cannot be placed on either
+// side of the cut. `dt * 0.0` reads no number of the tangent it was handed.
+//
+// The engine's registration of `tensor:ones_like` is the same zero, so the two tables state the
+// same fact in the same way rather than agreeing by coincidence.
+export rule jvp_ones_like(t: float[...]) {
+    ones_like(t) => func (dt: float[...]) {
+        dt * 0.0
+    }
+}
+
+
 // ---- the `nn` module's primitives ----
 //
 // The operators of `nn` the engine's table answered and this library did not: `conv2d`,

@@ -110,8 +110,11 @@ cast	engine-autodiff	the conversion the front end introduces (`:op/cast`); the d
 # under `zeros_like`, so the forward half states the fact in a law instead of stating it by filing
 # nothing, and the key is one both tables answer. The engine keeps its rule, and 9.9 is still why
 # both answer zero -- what changed is that the library's side of the comparison carries the law.
+#
+# `ones_like` left it with `zeros_like`, as the same fact in its other spelling: `jvp_ones_like` is
+# filed under `ones_like`, and the zero it answers is the zero `jvp_zeros_like` answers, because the
+# constant a tangent multiplies is not a number the derivative carries.
 
-ones_like	engine-autodiff	locally constant in its operand: the ones array is the same for every value
 one_hot	engine-autodiff	its input is a label: locally constant, the rows do not move with it
 
 # ---- 丙: the engine answers and the library's forward half cannot reach it ----------------------
