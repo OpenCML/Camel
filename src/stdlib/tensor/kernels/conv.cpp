@@ -23,6 +23,7 @@
 #include "gemm.h"
 #include "minmax.h"
 #include "parallel.h"
+#include "shape_rules.h"
 
 #include <algorithm>
 #include <cmath>
@@ -642,21 +643,13 @@ Array *batchNorm(
     // one means it. From rank 3 on the last axis is no longer the channel axis, so a `[C]` whose
     // length fits more than one axis does not say which axis it is, and the shape check cannot
     // tell: `[2, 2, 2]` with `[2]` fits axes 1 and 2, and the statistics differ between them. The
-    // ambiguity is refused by name instead of answered with axis 1 alone.
+    // judgement and the sentence's list of axes are `ambiguousRankOneAxes`' (shape_rules.h); the
+    // parameter's axis 0 is the batch axis, so the candidates start at 1.
     if (input->rank() >= 3) {
-        std::string fits;
-        size_t candidates = 0;
-        for (size_t d = 1; d < input->rank(); ++d) {
-            if (input->dim(d) != C) {
-                continue;
-            }
-            if (candidates != 0) {
-                fits += (candidates + 1 == input->rank() - 1) ? " or " : ", ";
-            }
-            fits += std::to_string(d);
-            ++candidates;
-        }
-        if (candidates > 1) {
+        const int64_t channel = C;
+        const std::string fits =
+            ambiguousRankOneAxes(std::span<const int64_t>(&channel, 1), input->shapeSpan(), 1);
+        if (!fits.empty()) {
             throw ShapeError(
                 "batch_norm: the [" + std::to_string(C) + "] parameter fits axes " + fits + " of " +
                 "the tensor's shape " + dims(input->shapeSpan()) +
