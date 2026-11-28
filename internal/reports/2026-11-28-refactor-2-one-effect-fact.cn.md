@@ -360,3 +360,9 @@ FACTS probe third_f_id kept ; FACTS probe third_f_revision kept ; FACTS probe th
 **判据（改 `Anchor` 那次才算全）**：`git grep 'Anchor{.*program()' src` = 0（**改前实测 2 处**：`src/stdlib/graph/facts.cpp:65`、`src/stdlib/tiles/src/compiled_scope.cpp:37`）+ 钉子绿 + `facts` 11/11 + `facts_compare` 2/2 不变 + `BUILD_EXIT=0` / `dirty 0` / `numstat`。
 
 **钉子自己的读数**（branch `lane/fact-anchor-pin`，基 `0fb33bc32f`，tip `30521fbe3f`）：`graph_facts.plan.toml` `[SUMMARY] total: 12, pass: 12, fail: 0`；`facts` `total: 11, pass: 11, fail: 0`；`facts_compare` `total: 2, pass: 2, fail: 0`；`BUILD_EXIT=0`。
+
+**`Anchor` 的 `Program` 有第二个消费者，改 `src/kernel/facts/**` 时要一起看**（负责人点名记录，只记不催）：那 2 处 `program()` 构造点属于**两套**读者 ——
+- `src/stdlib/tiles/src/compiled_scope.cpp:37`：tiles 的 `tiles.compiled_scope`（`prepareProgram` / `compileTypes` / `hasCompiledScope`）；
+- `src/stdlib/graph/facts.cpp:65`：`std::graph` 模块的 `publishedAnchor(handle, site, node)`（`Anchor{handle->program(), &graph, node ? handle->index() : kInvalidNodeRef}`），服务 `graph.arrangeable` / `graph.effects` 那一族查询。
+
+⇒ 那件改完**不能只看 tiles**：`feat/modules/tiles.plan.toml` 与 **`feat/modules/graph.plan.toml` 的读数都要带上**（`graph.plan.toml` 今天已有 2 条红：`types_and_node_kind`、`node_kinds_match_the_graph`，见 §10）。
