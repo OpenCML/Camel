@@ -363,7 +363,12 @@ def func_src(n: N, ind: int) -> list:
     assert not n.a.get("syncfn") or (body.k == "blk" and body.a.get("sync")), \
         "a function the model calls sync has a sync body"
     mods = "#macro " if n.a.get("macro") else ""
-    head = f"{pad}{mods}func {n.a['name']}({params_src(n.a['params'])}) => {type_src(n.a['ret'])} "
+    # A function that declares no return value writes no `=> T`: `main` is the one the language
+    # calls this way (the entry point gives up its result, and a declared return value is printed
+    # as a line of the program's output, which the reference never computes).
+    ret = n.a.get("ret")
+    head = f"{pad}{mods}func {n.a['name']}({params_src(n.a['params'])})"
+    head += f" => {type_src(ret)} " if ret is not None else " "
     lines = [head + block(body, ind)]
     if n.a.get("with"):
         # Context parameters: `with <k: int>` on the line before the function.
@@ -1155,6 +1160,83 @@ def escape_violations(prog: N) -> list:
     for n in walk(prog):
         if n.k == "lam":
             check(n.c[0], n.a.get("ret"), n.a.get("params", []), "<lambda>")
+    return bad
+
+
+def capture_write_violations(prog: N) -> list:
+    """Closures that assign a name they do not own, or a name they read that someone assigns.
+
+    A closure holds the value a name had when it was made, not the name, so an assignment inside
+    a closure to a name declared outside it writes a place the closure does not hold -- the front
+    end refuses it with SemanticDiag::ClosureAssignsCapturedName -- and a name a closure read that
+    is assigned afterwards (or handed to a `var` parameter afterwards) is refused with
+    SemanticDiag::CapturedVarWrittenAfterTheClosure / SemanticDiag::CapturedVarHandedToVarParameter,
+    because the closure goes on holding the value it read. The reference evaluator answers for
+    both shapes with the old by-reference reading, so a program the language would refuse is
+    discarded here instead: a program the compiler does not accept is not a finding of any pass.
+
+    Reads of a captured name stay: a closure that only reads a value outside it is the shape the
+    language keeps. Names are unique in a generated program, so a name identifies a binding."""
+    bad = []
+
+    def owns(body: N, params) -> set:
+        """The names this body binds itself: its parameters and its own `let`/`var`s (not those
+        of a lambda or function written inside it, which binds its own)."""
+        out = {p[0] for p in params}
+        stack = [body]
+        while stack:
+            n = stack.pop()
+            if isinstance(n, list):
+                stack.extend(n)
+                continue
+            if not isinstance(n, N):
+                continue
+            if n is not body and n.k in ("lam", "func"):
+                continue
+            if n.k in ("let", "var"):
+                out.add(n.a["name"])
+            stack.extend(n.c)
+        return out
+
+    def check(body: N, params, where: str):
+        closures = [x for x in walk(body) if x is not body and x.k in ("lam", "func")]
+        if not closures:
+            return
+        captured = set()
+        for c in closures:
+            own = owns(c, c.a.get("params", []))
+            for x in walk(c):
+                name = x.a.get("name")
+                if not name or name in own:
+                    continue
+                if x.k == "assign":
+                    bad.append(f"{where}: a closure assigns '{name}', which it does not own "
+                               f"(ClosureAssignsCapturedName)")
+                elif x.k in ("ref", "call"):
+                    captured.add(name)
+        if not captured:
+            return
+        for x in walk(body):
+            if x.k == "assign":
+                name = x.a.get("name")
+                if name in captured:
+                    bad.append(f"{where}: '{name}' is assigned after a closure read it "
+                               f"(CapturedVarWrittenAfterTheClosure)")
+            elif x.k == "call" and x.a.get("vargs"):
+                for i in x.a["vargs"]:
+                    if 1 + i >= len(x.c):
+                        continue
+                    for r in walk(x.c[1 + i]):
+                        name = r.a.get("name") if r.k == "ref" else None
+                        if name in captured:
+                            bad.append(f"{where}: '{name}' is handed to a var parameter after a "
+                                       f"closure read it (CapturedVarHandedToVarParameter)")
+
+    for f in prog_funcs(prog):
+        check(f.c[0], f.a.get("params", []), f.a["name"])
+    for n in walk(prog):
+        if n.k == "lam":
+            check(n.c[0], n.a.get("params", []), "<lambda>")
     return bad
 
 
