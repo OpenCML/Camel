@@ -102,6 +102,13 @@ camel inspect --fact core.arrangeable <case>
 
 ⇒ 只改 `touchesNothing` 一处不够：它上面 5 个调用点，下面还有 `census.cpp:61` 与 `region_outline.cpp:586` 两个直接消费者。**"改完还有任何一处由 `record->pure()` 决定设备/域"就是堵了一个洞、开着六个。**
 
+**2026-11-28 进展（`lane/gpu-scope-placement@9c5fce1323`）**：`touchesNothing` 已改成读足迹 —— `!record->external() && record->uses.value.none()`。两个边界被独立推过（只读核对，没起构建）：
+
+- **未声明子句的算子**：`Record::external()`（`src/kernel/ops/operator_registry.cpp:86-91`）先用 `!uses.stated()` 返 `true` ⇒ `touchesNothing` 仍 `false`，**保守留在 host** —— 没有因为不再读 `pure` 而变宽。
+- **声明了读、读程序内资源**：`external()` false、`uses.value.none()` false ⇒ `touchesNothing` false ⇒ 不进设备侧。**"读一个资源也是设备没有的地方"**，这个答案正是 `census.cpp:61` / `deviceCapable` 那几条红要的。
+
+⇒ 上表七行里**前六行已随 `touchesNothing` 一处一起改到足迹**（它们都经它），**只剩最后一行 `keepsOrder` 仍经 `Arrangeable.all()` 的 `pure` 项（`facts.cpp:1032`）**，那一项归 405 的第五项。**所以"第五个读者"现在只有一个入口，而它要的本来就是"没读到写得到的资源"，不是"没写"。**
+
 ### 5.2 混合：拿"有没有 accesses"核对"纯不纯"的 4 处（第三处出处的候选）
 
 `pure` 一旦是"不写"，**声明了读的纯算子会被判矛盾或被拒**：
