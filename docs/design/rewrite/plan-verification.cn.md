@@ -14,7 +14,7 @@
 | 规则写法 | 按元素族重复：`int` 13、`i32` 13、`float` 16、`f32` 14、张量 15 | 35 条泛型律 `::<T>` + 2 条非泛型（`array_log_softmax_of_softmax`、`array_sigmoid_chain`）；一条律按 `when` 在多个类型上出实例 | `git grep -n "^export rule .*::<" -- lib/rules/rules.cml` |
 | 带许可的规则 | 21 条（`reassociate` 16、`refine_accuracy` 5） | 14 条（`reassociate` 11、`refine_accuracy` 3） | `git grep -c "^#requires" -- lib/rules/rules.cml` |
 | `check` 的覆盖 | 68/69（`check_library.cml` 63 + `check_accuracy_library.cml` 5，`tensor_sigmoid_chain` 漏网） | 37/37：`check_every_rule.cml` 交出全部导出规则，`verify/check_covers_every_rule.mjs` 逐名比对；原先漏网的那条今天叫 `array_sigmoid_chain`（`tensor_`→`array_` 的改名见 `check_accuracy_library.cml`），已在其中 | `test/cases/modules/rules/` |
-| 报告词表 | `ok` / `FAIL` / `unchecked` | `proved` / `refuted` / `sampled`，每行带命题、证据、原因、覆盖 | `lib/rewrite/checkreport.h` |
+| 报告词表 | `proved` / `refuted` / `sampled`，每行带命题、证据、原因、覆盖（旧词 `ok` / `FAIL` / `unchecked` 已不存在） | 不变 | `lib/rewrite/checkreport.h` |
 | `rules.plan.toml` | 121 个测试，其中 8 条跑 `check` | 157 个测试，其中 14 条的用例是 `check_*`（13 个 `.cml` 加 1 个 verify 脚本） | `git grep -c "^\[\[tests\]\]"`、`git grep -n "case = .*check"` |
 | 求解器 | `z3`/`smt`/`solver` 在代码里零命中 | `z3` 不进构建：`scripts/rule-proofs.mjs` 依次从 `$CAMEL_Z3`、`PATH`、用户本地目录找它的可执行，找不到就 `SKIPPED`；计划以 `skip_unless --probe-solver` 跳过 | `scripts/rule-proofs.mjs` |
 | `test/plan-selection.json` 对 `lib/rules/rules.cml` | 5 个计划 | 6 个，多一个 `feat/modules/rules_proofs.plan.toml` | 该文件里 `lib/rules/rules.cml` 那一项 |
@@ -24,7 +24,7 @@
 
 1. **今天没有任何求解器接入**：`z3` 只出现在 `docs/design/rewrite/v2.cn.md` 与任务书里，`smt` 只在设计稿与示例的性能说明里，`solver` 在 `src`、`include`、`modules`、`tools`、`cmake`、`conanfile.txt` 里**零次**出现。
 2. **今天的 `check` 是纯采样对照**，签名 `check(rules, samples, seed)`，返回一个 `string`。它把许可读成两件事——采样域的过滤器与一个数值容差——**没有一处把许可读成给判定器的假设**，这与 8.1 的"许可就是前提"对不上。
-3. **今天的报告词汇是 `ok` / `FAIL` / `unchecked`**，不是任务书要求的 `proved` / `refuted` / `sampled`。三个字都要换，且"只采样"这一档今天没有名字。
+3. **报告词汇已经是 `proved` / `refuted` / `sampled`**（`kVerdictWords`），每行还带命题、证据、原因、覆盖；"只采样"这一档就是 `sampled`，`nondeterministic` 的规则报 `sampled` 并写明原因 `no numeric bound`。这一条已落，不再是待办。
 4. **今天会对一条真的不成立的规则说"通过"。** 探针逐字：`x * 2 / 2 => x` 在 `int`（64 位）上是
 
    ```
@@ -35,11 +35,11 @@
 5. **泛型规则今天完全绕过 `check`**。探针逐字：
 
    ```
-   unchecked generic_add_zero: a generic rule, whose instances are not checked here
+   sampled generic_add_zero<i32>: proposition equality, evidence samples 200, fired 64 of 64 admitted, coverage integer scalar i32: (x + 0) = x, no premise yet
    ```
 
    而泛型规则的实例化机制已经落地（`test/plans/feat/modules/rules.plan.toml` 的 `rules.generic_law_is_instantiated_per_type_tuple` 等 6 条今天全绿），所以"每个实例分别证明"缺的只是 `check` 那一侧的桥，不是实例化本身。
-6. **`lib/rules/rules.cml` 今天是 69 条规则**：`int` 13、`i32` 13、`float` 16、`f32` 14、张量 15——也就是**标量 54 条、张量 15 条**；带许可的 21 条（`reassociate` 族 16、`refine_accuracy` 5），其中**那 16 条同时带 `when` 守卫**，所以今天一次值比较都没做（§1.1 末尾）。按任务书"先整数与浮点的标量算子"，第一步的翻译覆盖正好是那 54 条。
+6. **`lib/rules/rules.cml` 今天是 69 条规则**：`int` 13、`i32` 13、`float` 16、`f32` 14、张量 15——也就是**标量 54 条、张量 15 条**；带许可的 21 条（`reassociate` 族 16、`refine_accuracy` 5），其中**那 16 条同时带 `when` 守卫**，所以两侧各自抽样的值比较没跑（§1.1 末尾）——引擎在条件放行的样本上仍然比较了改写前后的值。按任务书"先整数与浮点的标量算子"，第一步的翻译覆盖正好是那 54 条。
 7. **`check` 今天只跑到 68 条，不是 69 条**：`check_library.cml` 列了 63 条、`check_accuracy_library.cml` 列了 5 条，第 69 条 `tensor_sigmoid_chain` 从未传给 `check`。任务书的验收是"**每条**规则都有标注"，所以 `69/69` 要在一开始就当硬要求（G17、S0）。
 8. **七片**：S0 判定词汇与报告类型（无求解器）∥ S1 整数标量翻译器；S1 之后 S2 反例、S3 浮点与许可、S4 `when`/`fact` 前提、S5 泛型逐实例**四路并行**；S6 报告落地与 CI 收口。每一片都有一条今天就能跑、今天失败的红前用例（§3）。缺口清单 18 条（§2）。
 9. **两个问题**交给作者：许可到前提的读法（三种许可今天读法不同，哪一种算 `proved`）与判定落在哪个面上（标注写在哪、谁发布判定、覆盖不到的怎么标）。
@@ -119,7 +119,7 @@ refuted narrow_mul_div: proposition equality, evidence counterexample, the two s
 | `change_precision` | 容差 `relative += 2^-8 * (steps + 1)` | 与 bf16 精度对应的误差界 |
 | `refine_accuracy` | 改走误差比路径（`RefEvaluator`） | "右边不比左边差"的误差界命题 |
 | `approx_math` | **`rewriteErrorBound` 里没有这个位** | 未定（设计稿没说） |
-| `nondeterministic` | `checkable = false` → `unchecked` | 未定（设计稿没说） |
+| `nondeterministic` | `checkable = false` → `sampled` + reason `no numeric bound` | 未定（设计稿没说） |
 
 **关键**：今天这套映射仍然是**采样域 + 容差**（上表前两条的许可已顺带把中间值出界的点从反例空间里排除，`flush_subnormals` 还只到采样域），不是一张可以从许可直接读出的**假设列表**。8.1 要的是一张可以从许可直接读出的前提表，交给求解器。它是本计划里"许可到前提的映射"这一项交付物的核心，也是两个问题文件里问题最多的那一块。
 
@@ -149,7 +149,7 @@ refuted narrow_mul_div: proposition equality, evidence counterexample, the two s
 | `compile/include/camel/compile/gir/rule_templates.h#genericRuleInstance` | 取某个元组的实例，按元组缓存 |
 | `lib/rewrite/module.cpp`（`genericRuleInstance` 的两处调用） | 匹配处（改写路径）与 `why_not` 的读出处 |
 
-**今天 `check` 与它的唯一交互是**：`checkKernel` 看到 `RuleObject::ruleId() != 0` 就直接 `continue`，输出 `unchecked <name>: a generic rule, whose instances are not checked here`，注释里写着这条路"是这座桥的下一步"。所以衔接点非常小：`check` 那一侧要调 `genericRuleInstance` 枚举元组，并对每个**实例**（`GenericRuleInstance::lhs` / `rhs` / `when`）分别判定。类型集合按规则：算子组注册过的类型里满足 `when` 的每一个，给了 `program` 就并上程序里出现的类型；多个类型参数时取笛卡尔积，积过大按种子抽样并在报告里写明抽了哪些。
+**今天的 `check` 已经把这座桥搭上了**：`checkGenericRule` 调 `genericRuleInstance` 枚举类型元组，对每个**实例**（`GenericRuleInstance::lhs` / `rhs` / `when`）分别判定，报告逐实例出行（`sampled generic_add_zero<i32>` / `<int>`，§1.1）；`checkKernel` 不再对 `RuleObject::ruleId() != 0` 直接 `continue`，`unchecked <name>: a generic rule, whose instances are not checked here` 这一行也不再出现。剩下的只是报告里条件句的措辞。类型集合的取法没有变：算子组注册过的类型里满足 `when` 的每一个，给了 `program` 就并上程序里出现的类型；多个类型参数时取笛卡尔积，积过大按种子抽样并在报告里写明抽了哪些。
 
 **今天词表里没有的东西**：`lib/rules/rules.cml` 的 69 条里**一条泛型规则都没有**（`rule <名字>::<` 零命中；快照——今天 37 条里有 35 条是泛型律，见 §0.0）。所以"泛型规则对每个实例分别证明"的验收要用 `test/cases/modules/rules/generic_law.cml` 那一类用例（或规则语言折叠后的新库）来做，不能拿今天的库直接做。
 
@@ -165,7 +165,7 @@ refuted narrow_mul_div: proposition equality, evidence counterexample, the two s
 | `f32` | 14 | `float32_combine`、`f32_log1p`、`f32_expm1` |
 | 张量（`Tensor<int>` / `Tensor<f32>`） | 15 | `tensor_f32_combine`、`tensor_i64_distribute`、`tensor_log_softmax_of_softmax` |
 
-带许可的 21 条：`#requires(reassociate)` 7 条、`#requires(reassociate, no_infs)` 3 条、`#requires(reassociate, no_infs, no_signed_zeros)` 6 条、`#requires(refine_accuracy)` 5 条。其余 48 条按 `docs/design-principles.cn.md` 第 7.3 节的默认值不需要许可，走 `kNoPermissions` 的按位比较路径。**21 条带许可的规则里 16 条同时带 `when` 守卫**——正好是 `reassociate` 族那 16 条（7 + 3 + 6），所以今天这 16 条一次值比较都没做（§1.1 末尾）。剩下 5 条 `refine_accuracy` 规则走误差路径。今天是**按规则条数**而不是按规则语义挑路径的，这一点决定了第一步该把"每条规则都有一条值比较或一条证明"当成硬要求。
+带许可的 21 条：`#requires(reassociate)` 7 条、`#requires(reassociate, no_infs)` 3 条、`#requires(reassociate, no_infs, no_signed_zeros)` 6 条、`#requires(refine_accuracy)` 5 条。其余 48 条按 `docs/design-principles.cn.md` 第 7.3 节的默认值不需要许可，走 `kNoPermissions` 的按位比较路径。**21 条带许可的规则里 16 条同时带 `when` 守卫**——正好是 `reassociate` 族那 16 条（7 + 3 + 6），所以今天这 16 条的两侧抽样比较没跑（§1.1 末尾）——引擎在条件放行的样本上比较的还是改写前后的值。剩下 5 条 `refine_accuracy` 规则走误差路径。今天是**按规则条数**而不是按规则语义挑路径的，这一点决定了第一步该把"每条规则都有一条值比较或一条证明"当成硬要求。
 
 算子的书写是类型化的模式（`:op/add_l`、`:op/add_i`、`:op/add_f`、`:op/add_d` 一类的后缀 `_l`/`_i`/`_f`/`_d`）。整数 `+ - *` 与一元 `-` **回绕**（`lib/std/cpp/include/camel/standalone/num.h#wrapMul` 一族的无符号重解释）；整数 `/` 与 `%` 在除数为 0 时**故障**，除数为 `-1` 时按无符号回绕（`kernel/include/camel/utils/int_div.h#quotient`、`#remainder`）。这三条正是翻译器到 SMT 位向量的直接依据——**没有任何未定义行为**，所以翻译是忠实的，不需要 C 语义那样的"UB 即自由"处理。
 
@@ -188,8 +188,8 @@ refuted narrow_mul_div: proposition equality, evidence counterexample, the two s
 | G4 | `z3`/`smt`/`solver` 在代码与构建里零命中 | Z3 作可选构建依赖，不进运行时 | 求解器接入 | `cmake/options.json`、`cmake/Options.cmake`、根 `CMakeLists.txt` + 1 文件 / 2 次（ON 与 OFF 各一次配置）/ 与 G3 并行 |
 | G5 | 许可只映射到采样域与容差 | 许可 → 前提（假设列表） | 翻译器 + 报告 | 1–2 文件（许可 → 假设） / 与 G3 同批 / 串在 G3 后 |
 | G6 | `reassociate`/`contract` 只放宽容差；16 条带守卫的走"条件选择实例"，不带守卫的实测在 `-inf` 处 FAIL | 证它们在**实数**上相等 | 翻译器 | 1 文件（实数模型）+ 报告多一列 / 同 G5 的构建 / 串在 G5 后 |
-| G7 | `refine_accuracy` 走误差比路径，措辞是 `FAIL … is less accurate` | "右边不比左边差"的误差界命题 | 报告 + 翻译器 | 与 G5 同文件 / 同上 / 串在 G5 后 |
-| G8 | `nondeterministic` → `checkable=false` → `unchecked`（第四个字） | 只能 `sampled`，且要写明原因 | 报告 | 与 G1 同文件 / 同 G1 / 串在 G1 上 |
+| G7 | `refine_accuracy` 走误差比路径，措辞是 `refuted … the rewritten left side is less accurate at (…) …` | "右边不比左边差"的误差界命题 | 报告 + 翻译器 | 与 G5 同文件 / 同上 / 串在 G5 后 |
+| G8 | `nondeterministic` → `checkable=false` → 已经是 `sampled` + reason `no numeric bound` | 已落：原因写明了 | 报告 | 已落 / 与 G1 同文件 |
 | G9 | `when` 不进前提表：条件只筛样本（采样值上能问，问出来的不是假设） | `when` 作前提 | 翻译器 | 1 文件（前提与条件图） / 1 次 / 与 G5 并行 |
 | G10 | `fact` 与判定无关 | `fact` 的结论作前提 | 翻译器 + 声明面 | 1 文件；声明面的更名由另一条工作完成，不在本计划 / 与 G9 同批 / 与 G9 并行 |
 | G11 | 泛型规则在 `check` 里直接 `continue` | 每个实例分别证明 | 翻译器 + 报告 | 1 文件（枚举元组、取实例）+ 报告每行带元组 / 1 次 / 与 G5、G9 并行 |
@@ -218,7 +218,7 @@ refuted narrow_mul_div: proposition equality, evidence counterexample, the two s
   ```
   camel test/cases/modules/rules/check_library.cml std::nvm
   ```
-  今天的输出第一行逐字是 `ok int_add_zero: 200 samples agree, fired 8 of 8`。加一条计划断言"每一行匹配 `^(proved|refuted|sampled)\b`"——今天红（首词是 `ok`）。同一片再收掉 §1.9 那条漏网：断言"`check` 的输入覆盖 `lib/rules/rules.cml` 的 **69** 条规则"——今天红（今天分两次覆盖 63 + 5 = 68，`tensor_sigmoid_chain` 不在其中）。
+  今天的输出逐字是 `sampled int_add_zero<i32>: proposition equality, evidence samples 200, fired 64 of 64 admitted, …`（还有 `int` 那一条实例一行）。"每一行匹配 `^(proved|refuted|sampled)\b`"这条断言今天已经成立，不再红。同一片再收掉 §1.9 那条漏网：断言"`check` 的输入覆盖 `lib/rules/rules.cml` 的 **69** 条规则"——今天红（今天分两次覆盖 63 + 5 = 68，`tensor_sigmoid_chain` 不在其中）。
 - **验收**：
   ```
   camel test/cases/modules/rules/check_library.cml std::nvm
@@ -250,7 +250,7 @@ refuted narrow_mul_div: proposition equality, evidence counterexample, the two s
 - **红前用例**（三条，覆盖任务书要求的两类）：
   1. `x * 2 / 2 => x`（`int`）今天 `sampled wide_mul_div: … fired 8 of 8` → 要求 `refuted`。
   2. `x + 0 => x`（`int`，标准库的 `int_add_zero`）今天 `sampled int_add_zero<i32>: … fired 64 of 64 admitted` → 要求 `proved`。
-  3. `x * 2 / 2 => x`（`i32`）今天 `refuted narrow_mul_div: … the two sides differ at (2147483647): -1 and 2147483647` → 要求 `refuted` 且反例是同一个值。**注意这条今天"看起来对了"是巧合**：`pickInt` 的边界表里恰好有 `INT32_MIN`，而 64 位的两端不在表里；所以第 1 条与第 3 条必须一起验收，否则"能给出反例"会被 32 位的运气冒充。
+  3. `x * 2 / 2 => x`（`i32`）今天 `refuted narrow_mul_div: … the two sides differ at (2147483647): -1 and 2147483647` → 要求 `refuted` 且反例是同一个值。**注意反例的位置已经变了**：这条今天的反例落在 `INT32_MAX`（`-1` 与 `2147483647`），不再是"边界表里恰好有 `INT32_MIN`"那张表给出的点——第 1 条与第 3 条仍然必须一起验收，但验收的是"能给出反例"这件事，不是某个特定值。
 - **验收**：
   ```
   camel test/cases/modules/rules/verify_witness.cml std::nvm
@@ -266,7 +266,7 @@ refuted narrow_mul_div: proposition equality, evidence counterexample, the two s
   - `refine_accuracy` → **误差界命题**，命题种类 `error bound`。
 - **红前用例**（两条，覆盖许可的两种处境）：
   1. **库里的真形状**：`float_combine`（`#requires(reassociate)` **且带** `when combineSameSign(c1, c2)`）今天逐字 `sampled float_combine<float>: … fired 24 of 24 admitted`——条件就在采样值上问，条件放行的 24 个样本上引擎重写并比较了改写前后的值；两侧各自抽样的比较没跑。计划断言 `proved float_combine, class real equality`——今天红。
-  2. **不带守卫的许可规则**（探针形状）：`#requires(reassociate)` 的 `x * c1 + x * c2 => x * (c1 + c2)` 不带 `when` 时今天逐字 `FAIL reassoc: the two sides differ at (-inf, 7, -1): -nan and -inf`（`reassociate` 不含 `no_infs`，所以样本里有 `-inf`）。按 8.1 它应当是"实数上相等"，今天却是 `FAIL`——**同一条规则在"有守卫"与"无守卫"下今天给出两种互不相干的报告**，这本身就是要把许可与 `when` 合成一张前提表（§1.4 末）的理由。计划断言这两条都得到 `proved …, class real equality`——今天两条都红。
+  2. **不带守卫的许可规则**（探针形状）：`#requires(reassociate)` 的 `x * c1 + x * c2 => x * (c1 + c2)` 不带 `when` 时今天逐字 `refuted reassoc: proposition real equality + IEEE on special values, evidence counterexample, the two sides differ at (0, -3, 0): 0 and -0 (a zero of the other sign is a different bit pattern), …`——反例不在 `-inf`（那是旧抽样器的点），而在一个符号不同的零上；按新命题（实数相等，特殊值之间按 IEEE 位相等）这一判定是对的。**同一条规则在"有守卫"与"无守卫"下今天给出两种互不相干的报告**（前者 `sampled` + 条件放行数，后者 `refuted` + 反例），这本身就是要把许可与 `when` 合成一张前提表（§1.4 末）的理由。计划断言这两条都得到 `proved …, class real equality`——今天两条都红。
 - **验收**：
   ```
   camel test/cases/modules/rules/verify_licences.cml std::nvm
@@ -288,7 +288,7 @@ refuted narrow_mul_div: proposition equality, evidence counterexample, the two s
 ### S5 泛型规则逐实例证明
 
 - **产物**：`check` 那一侧的桥。对每条泛型规则：按裁定的类型集合枚举类型元组，逐个用 `compile/include/camel/compile/gir/rule_templates.h#genericRuleInstance` 取实例，对**实例自己的** `lhs`/`rhs`/`when` 分别判定；报告每行带元组（`proved add_zero<int>`、`proved add_zero<i32>`）。一个元组 `refuted` ⇒ 那一行 `refuted`，规则整体**不**报 `proved`。实例没做出来（`GenericRuleInstance::made == false`）⇒ 该元组 `sampled`，原因写 `GenericRuleInstance::why`。
-- **红前用例**：泛型规则今天逐字 `unchecked generic_add_zero: a generic rule, whose instances are not checked here`。计划断言输出里同时有 `proved generic_add_zero<int>` 与 `proved generic_add_zero<i32>` 两行（`test/cases/modules/rules/generic_law.cml` 的 `add_zero::<T>` 就是这条规则的写法，它今天在改写路径上是绿的，见 `rules.generic_law_is_instantiated_per_type_tuple`）——今天红。
+- **红前用例**：泛型规则今天逐实例出行，逐字 `sampled generic_add_zero<i32>: proposition equality, evidence samples 200, fired 64 of 64 admitted, …` 与 `sampled generic_add_zero<int>: …`。计划断言输出里同时有 `proved generic_add_zero<int>` 与 `proved generic_add_zero<i32>` 两行（`test/cases/modules/rules/generic_law.cml` 的 `add_zero::<T>` 就是这条规则的写法，它今天在改写路径上是绿的，见 `rules.generic_law_is_instantiated_per_type_tuple`）——今天红。
 - **验收**：
   ```
   camel test/cases/modules/rules/verify_generic.cml std::nvm
@@ -370,7 +370,7 @@ S1 ──┬─► S2 ───────────────────�
 
 ## 6. 作者问题（编号，正文在两个问题文件里）
 
-1. **许可到前提的三种读法**：`reassociate`/`contract` 证"实数上相等"还是"按位相等"；`refine_accuracy` 的误差界成真时叫不叫 `proved`；`nondeterministic` 与今天的第四个字 `unchecked` 怎么合并。这留给作者。
+1. **许可到前提的三种读法**：`reassociate`/`contract` 证"实数上相等"还是"按位相等"；`refine_accuracy` 的误差界成真时叫不叫 `proved`；`nondeterministic` 报 `sampled` + `no numeric bound` 是不是就是最终答案。这留给作者。
 2. **判定落在哪个面上**：任务书说"`lib/rules/rules.cml` 每条规则都有标注"，标注写进规则语言、写成生成物、还是只在运行时报告里出现；`CheckReport` 每行带什么；覆盖不到的规则标什么、CI 要不要把 `refuted` 当硬失败。这留给作者。
 3. **`approx_math` 作为许可的前提是什么**：`kernel/core/operator_semantics.cpp#rewriteErrorBound` 里没有这个位，8.1 也没说。今天的处置是"它不影响容差"，所以带 `#requires(approx_math)` 的规则按 `kNoPermissions` 的按位比较路径处理——这是不是作者要的，需要确认。出处：`kernel/include/camel/core/operator_semantics.h#Permission` 有这个位、`kernel/core/operator_semantics.cpp#rewriteErrorBound` 没有这个分支、`kernel/core/operator_semantics.cpp#parsePermission` 认这个名字。**本计划不定下，按今天的读法落地并在报告里写明。**
 4. **一个 `refuted` 的规则应当怎样退出标准库**：8.1 说"不得入库"，但今天的库是 69 条手写的规则，没有自动化的入/出库流程。是加一个 `refuted ⇒ 移除该规则` 的闸门，还是只让 CI 红、由人来改？出处：8.1 的报告那一条；`test/plan-selection.json` 把 `lib/rules/rules.cml` 映到 5 个计划。
