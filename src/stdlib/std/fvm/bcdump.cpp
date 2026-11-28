@@ -76,9 +76,8 @@ namespace {
 using camel::execute::makePass;
 using camel::execute::PassKernel;
 
-const PassKernel bytecodeDumpKernel("std::fastvm::bytecode", makePass<BytecodeDumpPass>());
-const PassKernel linkedBytecodeDumpKernel(
-    "std::fastvm::linked_bytecode",
-    makePass<LinkedBytecodeDumpPass>());
+const PassKernel bytecodeDumpKernel("std::fvm::bytecode", makePass<BytecodeDumpPass>());
+const PassKernel
+    linkedBytecodeDumpKernel("std::fvm::linked_bytecode", makePass<LinkedBytecodeDumpPass>());
 
 } // namespace

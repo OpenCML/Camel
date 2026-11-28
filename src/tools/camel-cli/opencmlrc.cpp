@@ -3,6 +3,7 @@
 
 #include "opencmlrc.h"
 
+#include "camel/execute/pass/base.h"
 #include "camel/utils/path.h"
 
 #include "nlohmann/json.hpp"
@@ -207,7 +208,7 @@ RcPassesConfig loadOpenCmlRc(const std::string &cwd, const std::string &scriptDi
 
 } // namespace
 
-constexpr const char *DEFAULT_FALLBACK_PASS = "std::run";
+const std::string DEFAULT_FALLBACK_PASS = ::runPassName();
 
 std::vector<std::string> resolvePassListWithRc(
     const std::string &cwd, const std::string &scriptDir,

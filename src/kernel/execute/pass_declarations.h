@@ -31,6 +31,12 @@ struct PassDeclaration {
     std::vector<PassParam> params;
     /// The condition after `when`, as written; empty when the declaration has none.
     std::string when;
+    /// The operator this declaration stands for, when it writes `#op('module:name')` (design
+    /// principles 6.2): the name the pipeline and a program write is not always the URI the
+    /// operator table holds, and only the declaration says which URI that name stands for. Absent
+    /// for a declaration with no `#op`, which names its operator -- if it has one -- by its own
+    /// `module:name`.
+    std::optional<std::string> operatorUri;
 };
 
 /// Why the declarations of a module could not be read: its declaration file is a module of this

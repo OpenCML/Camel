@@ -1,25 +1,26 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-#include "camel/core/type/bytes.h"
-#include "camel/core/type/native.h"
 #include "globals.h"
 #include "builtin/executors/builtin.h"
+#include "builtin/executors/std_pass_call.h"
 #include "builtin/operators/array.h"
+#include "builtin/operators/array_convert.h"
 #include "builtin/operators/collection.h"
 #include "builtin/operators/derivative.h"
 #include "builtin/operators/enum.h"
 #include "builtin/operators/mem.h"
 #include "builtin/operators/ops.h"
-#include "builtin/operators/array_convert.h"
 #include "builtin/operators/set_value.h"
 #include "builtin/operators/struct.h"
 #include "builtin/operators/tagged.h"
 #include "camel/core/context/context.h"
 #include "camel/core/slice.h"
+#include "camel/core/type/bytes.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/enum.h"
+#include "camel/core/type/native.h"
 #include "camel/core/type/resolver.h"
 #include "camel/core/type/text.h"
 #include "camel/core/type/typevar.h"
@@ -2466,6 +2467,14 @@ bool GlobalsBuiltinModule::load() {
         return std::make_shared<Executor>(ctx, getArrayOpsMap());
     });
     declareArrayOperatorFacts();
+    // The `std` protocol answers the passes a program may name as values (`std.cml`'s `namespace
+    // cxx`, internal/plans/2026-11-26-pass-as-function step 1). Its operator map holds those six
+    // and nothing else, so every other name of `std` is answered exactly as before: the protocol
+    // has an executor, the executor has no such operator, and the caller hears "no operator".
+    context_->registerExecutorFactory("std", [ctx = context_]() {
+        return std::make_shared<Executor>(ctx, getStdProtocolOpsMap());
+    });
+    declareStdPassCallTraits();
     // The type `Error` of the prelude's declaration file (`export type Error`).
     camel::core::type::registerNativeType("prelude", "Error", camel::core::type::errorType());
     loaded_ = true;

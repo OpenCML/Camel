@@ -186,6 +186,6 @@ namespace {
 using camel::execute::makePass;
 using camel::execute::PassKernel;
 
-const PassKernel jitBinaryDumpKernel("std::fastvm::jit_bin", makePass<JitBinaryDumpPass>());
+const PassKernel jitBinaryDumpKernel("std::fvm::jit_bin", makePass<JitBinaryDumpPass>());
 
 } // namespace

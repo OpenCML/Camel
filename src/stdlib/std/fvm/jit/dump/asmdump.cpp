@@ -107,6 +107,6 @@ namespace {
 using camel::execute::makePass;
 using camel::execute::PassKernel;
 
-const PassKernel jitAsmDumpKernel("std::fastvm::jit_asm", makePass<JitAsmDumpPass>());
+const PassKernel jitAsmDumpKernel("std::fvm::jit_asm", makePass<JitAsmDumpPass>());
 
 } // namespace
