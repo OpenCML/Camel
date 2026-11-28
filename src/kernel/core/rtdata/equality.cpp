@@ -152,14 +152,6 @@ struct EqualPair {
 /// recursive enum are where the depth is.
 bool comparePair(slot_t a, slot_t b, const Type *type, std::vector<EqualPair> &pending) {
     switch (type->code()) {
-    // An integer's value is the 32 bits its type names; the slot only carries them, in its low
-    // half (`toSlot`, camel/core/rtdata/base.h). What the high half holds is therefore not part
-    // of the value: a value that reached the slot through a wider one keeps its sign there, and
-    // the same -3 then has two encodings. Comparing the whole word compares the encoding, so an
-    // `i32` that is equal to itself would answer false; reading the 32 bits is what FastVM's
-    // `EQ` on i32 does as well, so the two back ends agree on the relation.
-    case TypeCode::Int32:
-        return fromSlot<Int32>(a) == fromSlot<Int32>(b);
     case TypeCode::Float32:
         return fromSlot<Float32>(a) == fromSlot<Float32>(b);
     case TypeCode::Float64:
