@@ -496,10 +496,12 @@ struct Record {
     /// for one resource rather than spelling the rule again.
     bool declaresWrite(const sem::Resource *of = nullptr) const;
 
-    /// One of the resources this operator's own clause declares an access to is a resource some
-    /// declaration writes: the footprint's answer. Read from the declared accesses and from
-    /// `mayBeWritten`, so a read of a resource nothing writes answers false and the class of a
-    /// resource decides nothing. A clause nobody stated declares no access and answers false;
+    /// One of the resources this operator's own clause **reads** is a resource some declaration
+    /// writes: the footprint's answer. A read is a dependency, a write is an effect the region
+    /// orders, so a clause that writes a resource some declaration writes does not make this true
+    /// (design principles: a read is a dependency, not an effect). Read from the declared accesses
+    /// and from `mayBeWritten`, so a read of a resource nothing writes answers false and the class
+    /// of a resource decides nothing. A clause nobody stated declares no access and answers false;
     /// `effect()` is the reading that treats that silence conservatively.
     bool accessesWritableResource() const;
 

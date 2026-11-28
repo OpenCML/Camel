@@ -1276,9 +1276,13 @@ bool Record::accessesWritableResource() const {
     if (!uses.stated()) {
         return false;
     }
+    // Only a read is a dependency that this bit is about (design principles: a read is a
+    // dependency, a write is an effect, and a write is ordered by the region's order edges). A
+    // clause that writes a resource some declaration writes does not read state that a write
+    // reaches, so its own write is not what this answers.
     const camel::core::OperatorTable &table = camel::core::OperatorTable::instance();
     for (const camel::core::sem::ResourceAccess &access : uses.value.accesses) {
-        if (table.mayBeWritten(access.resource)) {
+        if (!camel::core::sem::writes(access.mode) && table.mayBeWritten(access.resource)) {
             return true;
         }
     }
