@@ -235,3 +235,95 @@ A 类清单的原话是"张量或嵌套数值数组"（`TensorLike`）。若要�
 被 `operatorAccepts` 的 `['tensor','array']` 覆盖 ⇒ 仍 `'fit'`，**判据也不用动**。
 但它改的是"`abs` 接不接受 `number[]`"这个**语言面**的事（真正放开要动 `unaryKernel` 的输入转换），
 与"结果元素类型"是两笔，按"一格一件"单独排，本轮不做。
+
+## 十一、落地：记录与参考声明对齐（`e50c4d6230`）
+
+第十节的清单已按"一笔"落地：**记录 + 声明 + 重生成同一个提交**，`3 文件 +9/-5`，
+`dirty 0`，rebase 到 `origin/integration@3d116749c0` 之后，**未推**。
+
+| 文件 | 改动 |
+|---|---|
+| `src/stdlib/tensor/ops/elementwise_ops.cpp` | `unaryDef` 里 `.resultDoc = k::unaryProducesFloat(Op) ? "float[...]" : "T[...]"`（4 行注释说明为什么；依据是同一模板下一行的 `.infer = unaryInfer(k::unaryProducesFloat(Op))`） |
+| `src/stdlib/tensor/signatures/tensor.cml` | `abs`、`relu` → `export func …::<T>(t: T[...]) => T[...] when is_numeric::<T>()`；描述、`@pure`、`@example` 未动 |
+| `docs/stdlib-reference.md` | `node scripts/stdlib-reference.mjs --write` 重生成，diff **恰好两行**：`abs:` 与 `relu:` 的签名行 |
+
+### 11.1 这一笔的名目：不是语言面，是记录
+
+写这段之前先取了一张"改前"的图，于是名目改了：**`abs` 作用在 `int[]` 上的静态类型，改前就已经是
+`int[]`，`float[]` 从来没有出现过。** 记录里那句 `float[...]` 是**错**的，而语言面一直是对的。
+所以这一笔是"记录与参考声明改成内核实际给出的"，不是"改语言"。
+
+读数（同一棵树上，改前/改后各一次；`std::jgir` 的调用节点 + `std::gir` 的 `value_type`）：
+
+| 读法 | 改前 | 改后 |
+|---|---|---|
+| `std::jgir`，`label: "tensor:abs"` 的节点 | `"outputType": "int[]"` | `"outputType": "int[]"` |
+| `std::jgir`，`main` 的 `signature` | `() => int[]` | `() => int[]`（值类型 `() => int[] pure`） |
+| `std::gir`，调用节点 | `N04 [label="CALL", type="CALL", value_type="int[]"]` | 同左，逐字相同 |
+| 记录里的签名文本（`inspect --ops`） | `(t: Tensor) => float[...]` | `(t: Tensor) => T[...]` |
+
+三张图里 `int[]` 一次没变，变的是**签名文本**。依据（这一串是"为什么类型不跟着变"的答案）：
+
+- 类型由 `unaryInfer` 决定，它的实参是 `k::unaryProducesFloat(Op)`（`ops/elementwise_ops.cpp` 的
+  `unaryDef`：`.infer = unaryInfer(k::unaryProducesFloat(Op))`，判定函数在
+  `kernels/elementwise.cpp#unaryProducesFloat`：`Neg`/`Abs`/`Relu` 返 false ⇒ 保留 `in.dtype`）。
+- `resultDoc` 只经 `OpDef::signature()` 进文本（`ops/op_def.cpp#OpDef`，`text += resultDoc`）。
+- 而 `signature()` 的消费者全是**诊断与工具**，没有一处参与类型检查：
+  `src/compile/src/gir/builder_call.cpp:2219`、`:2243`（"no matching function" 的候选行）、
+  `builder_operators.cpp:736`、`:793`、`:909`、`:1456`、`:1469`（`when` 条件未满足的提示）、
+  `builder_diagnostics.cpp:2086`、`:2596`、`builder_expr.cpp:954`、`:1452`、
+  `src/kernel/core/module/introspect.cpp:150`（ops-table 的 `signature` 字段）、
+  `src/kernel/core/operator_table.cpp:436`、`:492`。
+  （以上行号是 `e50c4d6230` 这棵树上的位置；符号名才是长期有效的引用。）
+
+### 11.2 读数（放开后取的，`load` 32–39，不是安静宿主）
+
+`load` 32.79 → 39.52 期间取的，日志里带着 `readings taken now are not comparable to quiet-host
+readings` 的警告，如实记在这里：
+
+| 读数 | 原文 |
+|---|---|
+| ① ops-table | `operator-uses: 825 operator row(s) from test/cases/modules/stdlib/registry_all.cml`；`BUILD_EXIT=0`；`checks: 2 run, 0 failed` |
+| ① 整份 dump 比对 | 改前 dump（同一工作树、改前那一轮，825 行）vs 放开后 dump（825 行）：`Compare-Object` **6 行差 = 3 对**，`__neg__`/`abs`/`relu` 的 `signature` 由 `(t: Tensor) => float[...]` → `(t: Tensor) => T[...]`；其余 **822 行逐字节相同** |
+| ① 12 条字段 | 12 行的 `purity`/`may_fault`/`clause_pure` **12/12 未变**；语义 8 条不变、`tanh`/`erf`/`erfc`/`gelu` 仍 `bounded`（第七节那 4 条） |
+| ② registry | `[provenance] tip e50c4d6230c231e8d97274d515312deba2cbf2bf … tier fast \| jobs 1`；`[SUMMARY] total: 14, pass: 14, fail: 0`；`[TREE] clean: … 0 before, 0 after`；14 条里含 `registry.reference_is_generated`（= `--verify-doc`，打印 `docs/stdlib-reference.md is up to date`）与 `registry.result_types_match`/`registry.parameter_types_match`（`--verify-ops`） |
+
+**③ 三层**（取在同一个 commit `468004ef0f` 上，`-Tier fast`、`-Jobs 2`、一次一层）：
+
+| 层 | `[provenance]` | `[SUMMARY]` |
+|---|---|---|
+| `test/plans/feat/modules` | `tip 468004ef0fa80ab51b26d59b34560a9893cc6806 \| binary built 2026-11-28T13:46:21+08:00 \| tree …/backend-speed \| tier fast \| jobs 2` | `total: 2093, pass: 2058, fail: 27, skip: 4, known failures: 4` |
+| `test/plans/feat/compile` | `tip 468004ef0f… \| binary built 2026-11-28T13:49:25+08:00 \| tier fast \| jobs 2` | `total: 2734, pass: 2718, fail: 13, known failures: 3` |
+| `test/plans/feat/transforms` | `tip 468004ef0f… \| binary built 2026-11-28T13:52:43+08:00 \| tier fast \| jobs 2` | `total: 72, pass: 44, fail: 5, known failures: 23` |
+
+三次都 `BUILD_EXIT=0`、`[TREE] clean: … 0 before, 0 after`、`check-doc-links exit 0`；退出码 1 来自红名，
+判词行分别是
+`backend-speed exit 1 (transfer 3.3 s, wait 0.0 s, build 15.0 s, plan 161.4 s, load (min 1m) 24.51; total 180 s)`、
+`… plan 175.2 s, load (min 1m) 26.64; total 193 s`、
+`… plan 11.0 s, load (min 1m) 33.41; total 29 s`。
+
+**对 75 表 141 名的五格**（逐名比，不比总数）：
+
+| 格 | 数 | 依据 |
+|---|---|---|
+| **甲（新红）** | **0** | 三层共 45 条红，逐名都在表里 |
+| **乙（变绿）** | **0** | 被这三层覆盖的 45 名里没有一条变绿 |
+| **丙（两处都红）** | **45** | `modules` 27 + `compile` 13 + `transforms` 5 |
+| 环境红 | 0 | — |
+| **未跑** | **96** | 表里其余 22 个 plan（`consistency.*` 66、`opt.*` 10、`trans.*` 4、`linear.*` 5、`examples` 4、`exemplars` 2、`tools.*` 3、`mm.gc_poison_sweep` 3、`probe.editview` 1 …）不在这三层 |
+
+`0 + 0 + 45 + 96 = 141`。三层的基线名数分别是 27 / 13 / 5（`feat/compile` 那 13 名里有两个无前缀 id：
+`stated_extents`、`transforms`；`feat/transforms` 那 5 名来自 `compositions` 4 + `floatgate` 1），
+**每层都是逐名相同、不是只对上了总数**。`skip` 4（`modules`）与 `known failures`（4/3/23）都不在 141 名里，
+所以没有"靠跳过去换绿"的名字。
+
+### 11.3 这一笔为什么存在（一句话）
+
+`--verify-ops` 在这笔之前一直是绿的，而记录是错的：它比较的是**两侧的文本**，参考声明当时
+也写着 `float[...]`，两个错答案长得一样，于是"相符"。绿不等于对，这是本项目里的一次实例。
+
+### 11.4 没做的
+
+- `__neg__` 的声明（没有可写的声明，判据把它排除了，见 10.4）。
+- 参数宽度 `TensorLike`（10.7 单排）。
+- 第八节那两条观察（`gelu` 参考声明说 erf 形式 / `sigmoid` 只写 definition）仍登记着，未动。
