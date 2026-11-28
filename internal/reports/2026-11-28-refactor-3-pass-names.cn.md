@@ -112,5 +112,20 @@ const camel::execute::PassKernel
 
 ## 五、边界与待裁
 
-- 本页不改代码；改动归③第 2、5 步，请先给这一步的写权与范围。
+- 本页最初只做读数；其中能不动语言表面的那一块**已做**（见下节）。
 - review 第 1 条的"顺带"（把 `check-pass-declarations.mjs` 里靠 `passAliases` 变量名把关换成行为用例）与 lead 2026-11-28 的裁定（保留 `:411` 该守卫）方向相反，请决策者裁一句：守卫留着、另加行为用例，还是替换。
+
+## 六、已做与未做（按上面的清单）
+
+**已做（`4d7e0ac41b`，不动语言表面）**
+
+- 兜底遍的名字只剩内核一处：`runPassName()` / `runPassDefaultTarget()`（`pass.cpp:2409`、`pass/base.h:139`），`config.cpp:361`、`opencmlrc.cpp:211`、`debugger/src/run.cpp:276`、`server.cpp:1182` 改读它。脚本 `camel-pass-pipelines.mjs:42` 读不到内核，**仍未做**，留在清单里。
+- `:2471` 的调度遍文案删掉后端名单：判定本来就是 `dynamic_cast<GraphSchedulePass *>`（`:2465`），句子不再列举后端。
+- 读数：`smoke` 10/10；`feat/compile` 13 全丙、`feat/modules` 20 全丙、`feat/opt` 7 全丙（新增红 0）。
+
+**未做（都要动语言表面，需决策者裁拼写）**
+
+- "要不要代码生成器"（`pass.cpp:2550`）、"能不能被调试器停住"（`debugger/src/run.cpp:124/126`）、"名字里有没有 profile"（`pass.cpp:2629`）——今天都没有可读的声明事实。要写，就得在遍声明上加性质，例如 `#native_codegen(required)`、`#debugger(stoppable=false, replace="std::fvm")`、`#profiles`。这是语言表面的新语法，不按我的口味定。
+- `settle_runs: int` 的下限（`pass.cpp:678`）：`PassParam` 今天只有类型（`params.h:59` 四个字段，没有范围），要把下限写进声明就得给 `with` 的参数语法加范围（例如 `settle_runs: int >= 1`），同样是语言表面。
+- 调试器把 `std::jit`/`std::prl` 替换成 `std::fvm` 这件事，除了上面那个性质，还牵着"替代成哪个"的取值，也要在声明里写。
+- `pass.cpp:91` 的标签读者名单：Camel 遍有 `#reads` 这条路，C++ 遍还没有对应的声明事实，同上。
