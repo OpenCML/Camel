@@ -9,5 +9,6 @@ desc = "PROBE: Figure 1's three stages, each side of the two inliners, dot bytes
 kind = "behavior"
 tool = "python"
 case = "fig1_two_routes.py"
+args = ["${case}", "${camel}", "test/cases/opt/cxx_isolation/paper_figure1.cml"]
 expect_stdout_contains = ["judge.done"]
 timeout_ms = 900000
