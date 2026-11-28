@@ -1,8 +1,10 @@
 /**
- * The check of rules with a condition: the samples cannot be used to compare the two sides,
- * because the tool cannot ask a condition about sampled values, so a conditional rule is checked
- * by firing it on its own left side: the rule must fire (the condition holds there) and the
- * rewritten left side must agree with the original one.
+ * The check of rules with a condition: the two sides are still not sampled against each other
+ * (the sampled comparison runs `!conditional`), but the condition is asked of the engine's own
+ * samples -- every scalar parameter stands for its drawn value in the graph, on the node the
+ * sample has there -- so a conditional rule is checked by firing it on its own left side: the rule
+ * must fire (the condition holds there) and the rewritten left side must agree with the original
+ * one.
  */
 import { Node, type_name, type_of } from graph
 import { check, check_text } from rewrite
