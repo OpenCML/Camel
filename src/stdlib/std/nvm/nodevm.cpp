@@ -379,6 +379,14 @@ slot_t NodeVMSchedPass::call(
         // the plan, so the list is dropped when a round starts, a loop goes back, or a tail call
         // rebinds the graph.
         std::vector<gc_node_ref_t> groupDeferred;
+        // Two buffers the walk refills many times in one run: the members of the fusion group a
+        // node is the tail of, and the captured values a call hands back. Kept across the nodes
+        // they are filled for -- a group per round and a writing call per call are the same size
+        // again and again -- so the run allocates each of them once instead of once per use. What
+        // a reader of either sees is the contents of this use: both are cleared before they are
+        // filled, and neither outlives the node it was filled for.
+        std::vector<gc_node_ref_t> groupMembersOf;
+        std::vector<slot_t> withValuesOf;
 
         // Tail-call loop. Rebind currRuntimeGraph/currFrame instead of growing the C++ stack.
     loop_start: {
@@ -473,7 +481,7 @@ slot_t NodeVMSchedPass::call(
                     // members were deferred to it.
                     continue;
                 }
-                std::vector<gc_node_ref_t> groupMembers;
+                groupMembersOf.clear();
                 camel::execute::FusionGroupRef group;
                 const camel::execute::FusionGroupAction groupAction =
                     camel::execute::runFusionGroup(
@@ -482,26 +490,26 @@ slot_t NodeVMSchedPass::call(
                         *currPlan,
                         nodeRef,
                         groupDeferred,
-                        groupMembers,
+                        groupMembersOf,
                         group);
                 if (groupAction == camel::execute::FusionGroupAction::Deferred) {
                     groupDeferred.insert(
                         groupDeferred.end(),
-                        groupMembers.begin(),
-                        groupMembers.end());
+                        groupMembersOf.begin(),
+                        groupMembersOf.end());
                     continue;
                 }
                 if (groupAction == camel::execute::FusionGroupAction::Ran) {
                     // The tail is the node the group ran at; the members the kernel reported
                     // precede it in execution order.
-                    groupMembers.push_back(nodeRef);
-                    const camel::execute::FusionGroupSite site{group.name, groupMembers};
+                    groupMembersOf.push_back(nodeRef);
+                    const camel::execute::FusionGroupSite site{group.name, groupMembersOf};
                     if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
                         observer->beforeNode(&currRuntimeGraph->view(), currFrame, nodeRef, &site);
                     }
                     // The group's members are done for this round; a later round defers them
                     // again from the head.
-                    for (const gc_node_ref_t member : groupMembers) {
+                    for (const gc_node_ref_t member : groupMembersOf) {
                         if (member != nodeRef) {
                             std::erase(groupDeferred, member);
                         }
@@ -701,18 +709,18 @@ slot_t NodeVMSchedPass::call(
                             // The call hands on the new version of each captured variable it wrote
                             // beside the return value: its With inputs are the callee's declared
                             // `with` arguments and then those captures.
-                            std::vector<slot_t> withValues;
                             const auto withInputs = en.withInputs();
-                            withValues.reserve(withInputs.size());
+                            withValuesOf.clear();
+                            withValuesOf.reserve(withInputs.size());
                             for (auto input : withInputs) {
-                                withValues.push_back(
+                                withValuesOf.push_back(
                                     currFrame->get<slot_t>(planDataIndex(*currPlan, input)));
                             }
                             value = camel::execute::runtimeFuncValue(
                                 n->dataType(),
                                 runtimeTarget,
                                 written,
-                                withValues,
+                                withValuesOf,
                                 callResult);
                         }
                         currFrame->set(n->dataIndex, value);

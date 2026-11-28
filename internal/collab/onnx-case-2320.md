@@ -11,7 +11,7 @@
 
 ## (b) 名字是不是 `export_loop_carried_array_field`
 
-**是。** `:2299` 原文 `name = "export_loop_carried_array_field"`，即计划 `modules.onnx` 下的 `modules.onnx.export_loop_carried_array_field`（也就是 72 表里唯一那条"乙"）。
+**是。** `:2299` 原文 `name = "export_loop_carried_array_field"`，即计划 `modules.onnx` 下的 `modules.onnx.export_loop_carried_array_field`（也就是 71→72 那条"乙"；73 表里仍然没有它 —— 73 的 record 写明 "stayed green, so the seventy-second reading's one green was not a one-off"）。
 
 ## (c) 它断言的完整期望串（逐字，含引号类型与句内空白）
 
@@ -65,7 +65,7 @@ whose length changes from one round to the next (the body appends to it or conca
 # (exporter.cpp, `located`): the entry call `walk(x, { xs: [0], k: 0 })` in the closure body.
 ```
 
-⇒ 一句话：**它绿在"拒绝仍在"，而拒绝的理由句仍是已撤回的那句前提。** 这正是 `baseline-73.md` 说的"过渡重钉"形态，不许当"修复"。
+⇒ 一句话：**它绿在"拒绝仍在"，而拒绝的理由句仍是已撤回的那句前提。** 这正是 `baseline-74.md` 说的"过渡重钉"形态，不许当"修复"。
 
 ## (2) `exporter.cpp` 三条消息：实测命中哪一条
 

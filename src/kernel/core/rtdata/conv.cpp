@@ -65,7 +65,12 @@ slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
     switch (typeCode) {
     case TypeCode::Int32: {
         auto intData = tt::as_shared<camel::core::data::IntData>(data);
-        return static_cast<slot_t>(intData->data());
+        // An i32 uses the low four bytes of the slot. The rest is not part of the value, and a
+        // rule compiles a constant from a slot: if this half carried the sign, two readings of
+        // the same i32 constant would compare unequal, and the same -3 would have two encodings,
+        // one from a constant and one from i32 arithmetic. Zero it, as toSlot does and as the
+        // f32 case below does.
+        return toSlot<int32_t>(intData->data());
     }
 
     case TypeCode::Int64: {

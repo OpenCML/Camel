@@ -443,8 +443,9 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
 > 它从红表里消失，缺陷还在 —— 只是这张表不再量它了。
 > 实例：`D-1128-39` 撤回了 “a Loop carries a state whose shape is the same on every round”（ONNX 的 `Loop`
 > **可以**携带 sequence 或长度逐轮变化的张量，只是这个导出器还不会降 —— 实现缺口，不是表达力边界）；
-> `modules.onnx.export_loop_carried_array_field` 在 72 表里“转绿”，实际是 `ba4d1ec233` 把
-> `expect_diagnostic_column` 从 `81` 改钉到 `9`，而 `verify_script` 断言的仍是那句已撤回的前提。按 `D-1128-52`
+> `modules.onnx.export_loop_carried_array_field` 在 72 表里“转绿”、73 表里**仍然没有它**（73 的 record 写明
+> “export_loop_carried_array_field stayed green, so the seventy-second reading's one green was not a one-off”），
+> 实际是 `ba4d1ec233` 把 `expect_diagnostic_column` 从 `81` 改钉到 `9`，而 `verify_script` 断言的仍是那句已撤回的前提。按 `D-1128-52`
 > 它要改成正向用例，降级落地前照旧红。
 > ⇒ **交回里不许把它写成“修复”**：写“过渡（钉位置 / 钉文本，前提待撤回方向落地）”或“仍红”。
 > 一句判据：**这次改动有没有让用例开始检查一件仍然成立的事？** 没有 ⇒ 那是过渡，不是修复。
