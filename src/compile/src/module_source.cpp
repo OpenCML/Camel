@@ -277,6 +277,22 @@ class SourceModuleFrontEnd final : public SourceModuleLoader {
             imported.push_back(mod);
             return true;
         };
+        // The prelude is every program's ambient layer (design principles 10.2, layer 5): a body
+        // names what the prelude declares without importing it, and the table this builder owns
+        // was empty when it was made. The imports gathered below are the module's own, and the
+        // prelude is nobody's import, so it is gathered first, with its own imports (the prelude
+        // names what the `types` module declares), and declared before this module's imports --
+        // a declaration is known before any body is built (10.1). Without it a library that walks
+        // a range finds neither `Range` nor the `for` the prelude declares beside it, and fails
+        // with LoopSequenceNotIterable: the program the context compiled declared the prelude into
+        // the context's table, and this is another program's.
+        if (auto prelude =
+                std::dynamic_pointer_cast<UserDefinedModule>(module.context()->preludeModule());
+            prelude != nullptr && prelude.get() != &module) {
+            if (!collectImports(prelude)) {
+                return Status::Failed;
+            }
+        }
         for (const auto &site : module.importSites()) {
             if (auto other = std::dynamic_pointer_cast<UserDefinedModule>(site.mod)) {
                 if (!collectImports(other)) {
