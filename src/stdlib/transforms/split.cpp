@@ -425,8 +425,17 @@ tangentArgumentsOf(const rt::GCGraph &graph, const rt::Program *program, gc_node
     for (size_t i = half; i < ordinary; ++i) {
         if (calleeType != nullptr && i < calleeType->normTypesCount()) {
             const Type *tangentType = calleeType->normTypeAt(i);
-            if (tangentType == nullptr || !camel::core::tangentSpaceOf(tangentType).hasSpace()) {
-                continue; // the `()` slot of a parameter with no tangent space
+            // Whether the slot is handed on is the **user's** question (`gradientTypeOf`,
+            // principle 9.9), the one the callee's own list answered: `Tangent<int>` is `int`, so
+            // the zero a discrete value's slot carries is an argument like any other, while a
+            // `string` or a function answers `()` and is not an argument anyone takes. Asking the
+            // machinery here dropped the discrete slot and left the callee a port short.
+            Type *const userTangent = camel::core::gradientTypeOf(const_cast<Type *>(tangentType));
+            const auto *const userTuple = tt::as_ptr<TupleType>(userTangent);
+            const bool typedSlot        = tangentType != nullptr && userTangent != nullptr &&
+                                          !(userTuple != nullptr && userTuple->size() == 0);
+            if (!typedSlot) {
+                continue; // the `()` slot of a type with no tangent space
             }
         }
         tangents.push_back(all[i]);
