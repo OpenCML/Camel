@@ -67,7 +67,7 @@ name = "debug.view_escape_aborts_alias"
 desc = "The same escape through the short alias of the pass."
 kind = "behavior"
 case = "../../cases/feat/mm/blocks.cml"
-args = ["${case}", "std::gcviews_escape", "std::nvm"]
+args = ["${case}", "std::gc::views_escape", "std::nvm"]
 expect_stderr_contains = ["A compact element view escaped into the reduce accumulator"]
 expect_output_not_contains = ["VIEW_ESCAPE not-caught"]
 # No `expect_exit`: the guard's behaviour is `std::abort()`, and no plan field can say so -- the

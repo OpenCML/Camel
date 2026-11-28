@@ -38,7 +38,7 @@
 - `std::cxx::inline*` 只负责 **inline target selection + inline rewrite**；
 - 若需要运行聚合优化流水线（如 **specialization / devirtualization / inlining**），
   入口使用 `std::opt`：循环执行去虚化、特化、内联、常量折叠、公共子表达式消除、局部算式化简与死代码消除，直到稳定或达到预算。
-  `std::opt` 是默认流水线的名字，今天指向 C++ 版（`std::cxx::opt`）；内联这一族遍在归到 `cxx::` 之前的旧名（`std::opt::inline`、`std::inline` 及六个策略旧名）**不留别名**，写了会报"不认识的遍"。
+  `std::opt` 是默认流水线的名字，今天指向 C++ 版（`std::opt`）；内联这一族遍在归到 `cxx::` 之前的旧名（`std::opt::inline`、`std::inline` 及六个策略旧名）**不留别名**，写了会报"不认识的遍"。
 
 控制依赖采用源头规避与末尾清理结合的方式。编译器加同步边时，最多检查 64 条 CTRL 边；
 冻结每张图前再清理一次，最多检查 8192 条边。内联、特化、fold、cse、dce 转接依赖时，

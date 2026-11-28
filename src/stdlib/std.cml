@@ -168,6 +168,44 @@ namespace cpp {
 // The allocator
 // -----------------------------------------------------------------------------
 
+
+/// `std::jit`: the bytecode interpreter with on-demand native code.
+/// Executes the program on the bytecode interpreter with on-demand native code.
+with <
+    /// Append per-graph bytecode and execution counts of the run to this file; null writes none.
+    stats: string? = null,
+    /// Calls from one call site before a graph is compiled; 0 compiles at the first call.
+    hot_threshold: int = 1,
+    /// Print the settings this pass runs with on standard error, before the program does; the
+    /// same line `std::fvm` prints, so the two back ends' settings can be read side by side.
+    config: bool = false
+>
+export func jit::<F>(f: F) => F! when is_function::<F>()
+
+/// `std::opt`: the standard optimization pipeline.
+/// The standard optimization pipeline.
+with <
+    /// Keep the algebraic stage to strictly equivalent floating-point transformations
+    /// (design principles 7.4).
+    safe_fp: bool = false,
+    /// Nodes specialization and inlining may copy before the remaining calls are left as calls;
+    /// 0 stops them (design principles 9.6).
+    growth_budget: int = 4096,
+    /// Bytes of constants folding may materialize in a graph. Folding buys run time with
+    /// compile-time memory, which a large value does not repay: a value above this is left as the
+    /// computation that builds it (design principles 9.6); 0 materializes none.
+    constant_budget: int = 8388608,
+    /// Test of the generic passes' screens: give the graphs they skip to the pass anyway and
+    /// fail if it rewrites one.
+    check_screens: bool = false,
+    /// How many runs of the rewrite in a row may each change the same graph before the pass
+    /// reports that it does not settle. This is the engine's internal bound, exposed so that a
+    /// test can prove the report happens; it is not a tuning knob, and 0 is refused rather than
+    /// read as "never report".
+    settle_runs: int = 32
+>
+export func opt::<F>(f: F) => F! when is_function::<F>()
+
 namespace gc {
     /// Prints a snapshot of the allocator's heap as JSON.
     export func snapshot::<F>(f: F) => F! when is_function::<F>()
@@ -239,17 +277,6 @@ namespace fastvm {
     /// Prints the linked bytecode of every graph and hands the program on.
     export func linked_bytecode::<F>(f: F) => F! when is_function::<F>()
     
-    /// Executes the program on the bytecode interpreter with on-demand native code.
-    with <
-        /// Append per-graph bytecode and execution counts of the run to this file; null writes none.
-        stats: string? = null,
-        /// Calls from one call site before a graph is compiled; 0 compiles at the first call.
-        hot_threshold: int = 1,
-        /// Print the settings this pass runs with on standard error, before the program does; the
-        /// same line `std::fvm` prints, so the two back ends' settings can be read side by side.
-        config: bool = false
-    >
-    export func jit::<F>(f: F) => F! when is_function::<F>()
     
     /// Prints the machine code the JIT generated and hands the program on.
     export func jit_asm::<F>(f: F) => F! when is_function::<F>()
@@ -300,7 +327,7 @@ export func prl::<F>(f: F) => F! when is_function::<F>()
 // -----------------------------------------------------------------------------
 //
 // The passes below are the C++ implementations, and their names say which set they belong to:
-// every one of them is written under `cxx` -- `std::cxx::opt`, `std::cxx::fold` -- while the
+// every one of them is written under `cxx` -- `std::opt`, `std::cxx::fold` -- while the
 // passes written in Camel are the module `opt` (`opt::fold`, `opt::cse`, `opt::dce`,
 // `opt::saturate`; lib/opt/opt.cml). The two sets are kept apart so that they can be compared, which
 // is what decides whether the Camel ones can carry the optimization: the same program is folded, or
@@ -310,35 +337,13 @@ export func prl::<F>(f: F) => F! when is_function::<F>()
 // Neither set is deleted until that comparison says which one carries the weight.
 //
 // The default pipeline keeps the name it has always had, `std::opt`: the choice "optimize by
-// default", which resolves to `std::cxx::opt`, so a program that names no pass, the pass the fixed
+// default", which resolves to `std::opt`, so a program that names no pass, the pass the fixed
 // lowering steps insert, and every page that writes `std::opt` run the C++ pipeline. The
 // standalone stages do **not** keep their old names: `std::opt::fold` and the rest are gone, and a
 // pipeline that writes one is refused as an unknown pass -- a reader copies `std::cxx::fold` out of
 // docs/cli.md, and an old spelling is a name nothing answers to.
 
 namespace cxx {
-    /// The standard optimization pipeline.
-    with <
-        /// Keep the algebraic stage to strictly equivalent floating-point transformations
-        /// (design principles 7.4).
-        safe_fp: bool = false,
-        /// Nodes specialization and inlining may copy before the remaining calls are left as calls;
-        /// 0 stops them (design principles 9.6).
-        growth_budget: int = 4096,
-        /// Bytes of constants folding may materialize in a graph. Folding buys run time with
-        /// compile-time memory, which a large value does not repay: a value above this is left as the
-        /// computation that builds it (design principles 9.6); 0 materializes none.
-        constant_budget: int = 8388608,
-        /// Test of the generic passes' screens: give the graphs they skip to the pass anyway and
-        /// fail if it rewrites one.
-        check_screens: bool = false,
-        /// How many runs of the rewrite in a row may each change the same graph before the pass
-        /// reports that it does not settle. This is the engine's internal bound, exposed so that a
-        /// test can prove the report happens; it is not a tuning knob, and 0 is refused rather than
-        /// read as "never report".
-        settle_runs: int = 32
-    >
-    export func opt::<F>(f: F) => F! when is_function::<F>()
     
     /// Inlining only.
     with </// Nodes specialization and inlining may copy before the remaining calls are left as calls;
@@ -416,7 +421,7 @@ namespace cxx {
 // The spellings a pipeline has always written
 //
 // A pass is named by its declaration, and the pipeline is written with names a reader learned
-// from older documents: `std::lnr` for `std::fvm`, `std::bc` for
+// from older documents: `std::fvm` for `std::fvm`, `std::fastvm::bytecode` for
 // `std::fastvm::bytecode`, and so on. Each of them is a pass a pipeline may write, so each gets a
 // declaration of the pass shape here -- the name is a pass because it is declared as one, not
 // because a table beside the declarations says what it means.
@@ -428,7 +433,7 @@ namespace cxx {
 // resolves each name exactly as it did before -- these lines change no reading.
 
 
-/// `std::jit`: the fast VM's JIT backend (`std::fastvm::jit` implements it); the parameters are
+/// `std::jit`: the fast VM's JIT backend (`std::jit` implements it); the parameters are
 
 
 

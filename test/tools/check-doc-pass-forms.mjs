@@ -457,18 +457,8 @@ const PASS_NAMES = new Set()
         const func = line.trim().match(/^export\s+func\s+([A-Za-z_][A-Za-z0-9_]*)::<F>/)
         if (func) PASS_NAMES.add('std::' + [...namespace, func[1]].join('::'))
     }
-    const text = read('src/kernel/execute/pass.cpp')
-    const start = text.indexOf('const std::map<std::string, std::string> passAliases = {')
-    const end = start < 0 ? -1 : text.indexOf('\n};', start)
-    if (start < 0 || end < 0) {
-        problems.push(
-            'src/kernel/execute/pass.cpp: the core alias table is not where the guard reads it'
-        )
-    } else {
-        for (const match of text.slice(start, end).matchAll(/\{"(std::[^"]+)",/g)) {
-            PASS_NAMES.add(match[1])
-        }
-    }
+    // The core has no alias table: a pass is written by the name its declaration writes, so the
+    // declared names above are the whole vocabulary a page may teach.
 }
 
 // A module's Camel passes: the declarations of `<module>.cml` at the root of `src/stdlib/` (the file

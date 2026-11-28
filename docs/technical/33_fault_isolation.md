@@ -275,7 +275,7 @@ Windows). Only Linux x86-64 was run. No JIT code was changed.
 | `var` written inside the boundary | **not rolled back** (1.4) |
 | Output buffers | untouched: what was printed stays, in order |
 
-### 3.6 `std::prl` / `std::prl`
+### 3.6 `std::prl`
 
 Tasks may run on other worker threads. One fact of the existing scheduler makes isolation
 possible without new machinery: **every task flow is joined by the thread that started it**

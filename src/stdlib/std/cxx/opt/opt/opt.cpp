@@ -40,10 +40,9 @@ using camel::execute::growthBudgetOf;
 using camel::execute::PassKernel;
 using camel::execute::settleRunsOf;
 
-/// `std::cxx::opt`, the C++ implementation the default pipeline's name `std::opt` selects.
+/// `std::opt`, the C++ implementation the default pipeline's name `std::opt` selects.
 const PassKernel optimizeKernel(
-    "std::cxx::opt",
-    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+    "std::opt", [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
         OptimizeRewriteConfig config;
         config.safeFloatingPoint   = args.getBool("safe_fp");
         config.checkScreens        = args.getBool("check_screens");

@@ -56,7 +56,7 @@ INPUT SETS (`--sets small,medium,large,modules`; default all):
 Pipelines per input: `compile` (`std::nop`: everything up to the graph, nothing executed);
 for inputs that can run, `passes` (std::macro, the four std::opt sub-passes, std::cxx::inline,
 std::cxx::specialize, then std::nop), and the back ends std::nvm, std::fvm, std::jit, and
-std::bc (bytecode compiled and printed, not executed: an upper bound of what std::fvm
+std::fastvm::bytecode (bytecode compiled and printed, not executed: an upper bound of what std::fvm
 spends before it executes).
 
 Only Linux is supported (taskset, LD_PRELOAD, getrusage); elsewhere `run` works without
@@ -95,7 +95,7 @@ PIPELINES = {
     "nvm": ["std::nvm"],
     "fvm": ["std::fvm"],
     "jit": ["std::jit"],
-    "bc": ["std::bc"],
+    "bc": ["std::fastvm::bytecode"],
 }
 RUN_PIPELINES = ["compile", "passes", "nvm", "fvm", "jit", "bc"]
 DEFAULT_MODULE_COUNTS = [1, 2, 4, 8, 16, 32, 64, 128]
