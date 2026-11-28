@@ -9,11 +9,10 @@ Figure 1 这一支程序（见 §5 的"没回答"）。
   车道工作树 `D:\Projects\Camel-wt\paper-readings`，分支 `lane/paper-readings`，主机构出
   `/home/zjwei/camel-work/paper-readings`。`[provenance] tip c41814ea5eb2356045f0edaab2498f17a66c20b6
   | binary built 2026-11-28T18:10:04+08:00 | tree /home/zjwei/camel-work/paper-readings | tier fast | jobs 4`。
-- **驱动**：`test/tools/probe/fig1_two_routes.py`，**已作为被跟踪文件提交在 `lane/paper-readings` 上**
-  （不在 integration 上；也**不在 `test/plans/` 下**，所以整层跑不会把它算成条目）。主机上跑的那一份自报
-  `driver.self_sha256=69f8fb22c99cc03182f37a294f53fa0131f7b7d73ac3439bf6791b749badb1da`；
-  仓库里那个 blob 是 `3f135161a7c5a64c68bab11da9a11d92b45516e0`（工作树 CRLF、入库 LF，两个哈希
-  必然不同，前者才是"主机上跑的是哪一份"的证据）。
+- **驱动**：一个一次性探针脚本，**不在本页的提交里、也不进 integration**（探针纪律：活一次、用完删）。
+  它在运行时自报 `driver.self_sha256=69f8fb22c99cc03182f37a294f53fa0131f7b7d73ac3439bf6791b749badb1da`
+  ——**"主机上跑的是哪一份"由此回答**，而不是靠仓库里有没有这个文件。复算方法见 §4：命令、输入、
+  以及"怎么解析这台机器上的输出"都在文字里，不需要那份 `.py` 也能重做。
 - **负载**：跑前 `[load] 31.45 41.71 42.81 (1m/5m/15m)`，跑后 `[load] 29.77 41.01 42.57`；
   运行器自己打了 `WARNING: 1m load 29.77 > 8 —— readings taken now are not comparable to
   quiet-host readings`。**所以本页不写任何墙钟结论**；图的字节数与计数不随负载变。
@@ -117,18 +116,11 @@ stats[cpp]=nodes:18 edges:14 direct_calls:0 graphs:4 bytes:664
 identical=True
 ```
 
-## §4 怎么复算（驱动是 `test/tools/probe/` 下的一个脚本，不是计划树里的条目）
+## §4 怎么复算（探针是临时枝上的一次性脚本，**不随本页提交**）
 
-`test/tools/probe/fig1_two_routes.py` **提交在 `lane/paper-readings` 上**，**不在 `test/plans/`
-下**：`test/tools/` 不参与层选择，所以它不会在整层跑里变成红。这一点是本页的一处修正——驱动
-第一版留在 `test/plans/probe/` 并带一个 `*.plan.toml`，那会让整层多出 4 条"故意红"，等于给红表
-送红；现在只剩脚本，读数在 §3 里原样贴着（页是记录，不需要一条会跑的计划）。
+复算需要的只有三段文字：**命令**、**输入**、**怎么解析这台机器的输出**。
 
-另一个坑也是这一轮修的：把驱动留成**未跟踪**文件时，远端同步（`[camel-remote] … 0 changed
-file(s), 2 untracked`）不会把它带过去，主机上跑的其实是别的东西，而读数里看不出这件事。所以
-驱动随枝提交，并在第一行打自己的 SHA-256，**"主机上跑的是哪一份"由读数自己回答**。
-
-命令（本轮实际执行的那一条：把驱动推到树里，然后在主机的工作树上按 stage 跑四次）：
+命令（本轮实际执行的那一条：把驱动推到主机的工作树上，然后在那边按 stage 跑四次）：
 
 ```powershell
 & "D:\Projects\Camel-wt\witness\internal\tools\camel-remote.ps1" `
@@ -136,14 +128,28 @@ file(s), 2 untracked`）不会把它带过去，主机上跑的其实是别的�
 ```
 
 ```bash
-# 在主机 /home/zjwei/camel-work/paper-readings 上，CAMEL_HOME 已设好：
+# 在主机 /home/zjwei/camel-work/paper-readings 上，CAMEL_HOME 已设好；
+# <probe.py> 是临时枝上那个脚本（它第一行会打印自己的 sha256，见页头）：
 for stage in before inline inline_cse inline_cse_algebra; do
-  python3 test/tools/probe/fig1_two_routes.py "$(command -v camel)" \
+  python3 <probe.py> "$(command -v camel)" \
       test/cases/opt/cxx_isolation/paper_figure1.cml "$stage"
 done
 ```
 
-脚本故意以 1 结束：它没有断言可下，四条 `stage=…` 的读数就是它的输出（§3 已原样贴上）。
+给要自己写这个探针的人，四个要点（这几条都是这一轮踩出来的，不是常识）：
+
+1. **读数要自己打印成 stdout**：条目若没有断言可下，就让它故意以非零结束——只有**失败条目**的
+   stdout 会被回显；通过条目不打印任何东西。
+2. **`std::jgir` 的 stdout 是 JSON 加上程序自己的输出**（这里是 `collapse dh=22.0` 那类行），
+   所以用 `json.JSONDecoder().raw_decode(text)` 取第一段，`json.loads` 会报 `Extra data`。
+3. **`std::stats` 要放在 `std::gir` 之前**：它统计的是随后被打印的那张图；把 `GRAPH_STATS` 那一行
+   剔掉剩下的字节数就是 dot 的字节。
+4. **回显会被截断**（`omitted N line(s) above -- full output: …`）：完整输出在宿主的
+   `test/results/log/<run>/fail/<条目>/stdout.txt`，直接 `ssh <host> cat` 取回来，**不要为了看全再跑一遍**。
+
+另一个坑：把驱动留成**未跟踪**文件时，远端同步（`[camel-remote] … 0 changed file(s), 2 untracked`）
+不会把它带过去，主机上跑的其实是别的东西，而读数里看不出这件事。所以驱动必须在**同一棵被推送的树**里
+（临时枝上提交，用完删枝），并且第一行打自己的 SHA-256——**"主机上跑的是哪一份"由读数自己回答**。
 
 单侧复算（在主机上、`CAMEL_HOME` 已设好时；`std::stats` 在前，取计数，再把
 `GRAPH_STATS` 那一行剔掉就是 dot 的字节）：
