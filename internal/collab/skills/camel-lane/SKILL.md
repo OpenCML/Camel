@@ -565,3 +565,5 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
   ```
   **`-fPIC` 三个字必须显式写**：用 `CMAKE_CXX_FLAGS` 覆盖时会把 CMake 原本追加的 PIC 冲掉，链接期报 `relocation R_X86_64_32S` —— 这被误当成"这台机器不能建 ASAN"三次。运行还需 `LD_LIBRARY_PATH=<工具链 lib>:<asan 构建的 Release 目录>`（否则 `GLIBCXX_3.4.36 not found`），`ASAN_OPTIONS=detect_stack_use_after_return=1:detect_leaks=0`。
 · **ASAN 二进制下每一条 `camel …` 都可能先撞 CLI 的既有 UAF，别把它记成被测模块的账**（同一天）：`clipp::group` 先析构、`parsing_result` 还引用它去数未映射参数（`third_party/clipp/clipp.h:2750` / `config.cpp:1062`），`--version` 也崩 ⇒ 撞到它时先修 CLI（`config.cpp` 的生命期），再谈被测模块；判断口径是"**换一条与被测模块无关的命令是否同样崩**"。
+
+· **闸门的拒绝理由，在它跑的那棵树、那个 ref 上才成立**（2026-11-28，`frontend.ast_record` 的 `--drop` 一格）：`check.py snapshot` 的"dropped line(s) still name a .cml file the repository has"来自 `behind`，而 `behind` 只由 `git cat-file -e <base>:<path>` 成功而来（`--base` 默认 `origin/develop`）。记录是在**宿主**上写的，宿主那棵树的 `origin/develop` 可能落后好几个小时 ⇒ 你在本地新 fetch 的 ref 上核出"没有"，闸门在宿主旧 ref 上核出"有"，**两边都对**。遇到这种"闸门说假话"的直觉，先问三句：**两边看的是同一个 ref 吗、是不是同一个 fetch 时刻、这条检查是在哪棵树跑的**；然后让**宿主先 `git fetch origin --prune`** 再跑，仍拒才用 `--base ''`（只看磁盘，工具自己的正当通路），**不要**为了过闸门去挪存档标签或改工具。
