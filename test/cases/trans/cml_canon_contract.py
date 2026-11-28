@@ -121,7 +121,7 @@ base_text, base = canonical(LOOPS)
 assert (base_text, base) == canonical(LOOPS), "the canonical dump is not deterministic"
 optional = {"root"}
 required_graph = {
-    "id", "flags", "signature", "nodes", "regions",
+    "id", "signature", "nodes", "regions",
     "normalPorts", "contextPorts", "capturePorts", "exit",
 }
 required_node = {"id", "kind", "type", "inputs"}

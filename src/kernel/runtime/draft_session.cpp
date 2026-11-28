@@ -1721,12 +1721,8 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
     const std::vector<GCGraph *> closure = collectCommitClosure();
     ASSERT(!closure.empty(), "Runtime draft commit received an empty closure.");
     for (auto *graph : closure) {
-        // Rewrites may leave gates that wait on nothing; they are plain forwarding. A graph
-        // nobody has edited since a commit looked at its gates is not decoded again.
+        // Rewrites may leave gates that wait on nothing; they are plain forwarding.
         const bool drafted = drafts_.contains(graph);
-        if (!drafted && (graph->flags() & kGraphFlagGatesDissolved)) {
-            continue;
-        }
         (void)ensureDraft(graph);
         DraftEntry &entry = *drafts_.at(graph);
         auto &draft       = entry.transaction->edit();
@@ -1754,7 +1750,6 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
             // it was decoded from, so the graph keeps its version.
             edited_.erase(graph);
             if (!drafted) {
-                GCGraphBuildAccess::addFlags(graph, kGraphFlagGatesDissolved);
 #ifndef NDEBUG
                 // Before the draft is destroyed: the Debug record must never name a freed draft.
                 noteDraftClosed(*debugRoots_, *drafts_.at(graph)->transaction);
@@ -1805,7 +1800,6 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
     const auto encode = [&](GCGraph *graph) {
         const DraftEntry &entry = *drafts_.at(graph);
         auto &draft             = entry.transaction->edit();
-        draft.setFlags(draft.flags() | kGraphFlagGatesDissolved);
         encodeDraftGraph(
             context_,
             entry.identity,
