@@ -1,0 +1,1649 @@
+[
+ {
+  "seed": 1,
+  "path": "gen/prog_001.cml",
+  "expected": [
+   "L6 0 0",
+   "null",
+   "L7 3 8",
+   "L8 0 8",
+   "L8 0 8",
+   "L8 0 8",
+   "L8 0 8"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 2,
+  "path": "gen/prog_002.cml",
+  "expected": [
+   "L2 0 a 5",
+   "L2 0 a 5",
+   "q40 5",
+   "L1 10 10",
+   "L3 11 true true",
+   "q40 42",
+   "L5 (46, 42, 30)",
+   "L6 [1.5, 0.0, 0.0]"
+  ],
+  "attempts": 10
+ },
+ {
+  "seed": 3,
+  "path": "gen/prog_003.cml",
+  "expected": [
+   "q47 1",
+   "q47 12",
+   "q47 5",
+   "L3 4",
+   "L4 false",
+   "L5 true",
+   "L6 r:false truek9r:false truer:false truer:false truek9k9k9xpqcd"
+  ],
+  "attempts": 3
+ },
+ {
+  "seed": 4,
+  "path": "gen/prog_004.cml",
+  "expected": [
+   "q44 1",
+   "L2 0 0",
+   "L1 0 0",
+   "L3 x",
+   "L4 2",
+   "L5 a",
+   "L6 0",
+   "L7 true",
+   "L8 xcd",
+   "L9 [true, true, false, true, true, true, false]",
+   "L10 12"
+  ],
+  "attempts": 3
+ },
+ {
+  "seed": 5,
+  "path": "gen/prog_005.cml",
+  "expected": [
+   "q42 -1",
+   "q42 -1",
+   "L5 0",
+   "L6 a false a",
+   "q42 1",
+   "q42 -1",
+   "L7 bbk9k9"
+  ],
+  "attempts": 6
+ },
+ {
+  "seed": 6,
+  "path": "gen/prog_006.cml",
+  "expected": [
+   "q33 21",
+   "q33 7",
+   "q33 8",
+   "q33 0",
+   "q33 100",
+   "q33 2",
+   "L3 true ab",
+   "L4 2.0 8 true",
+   "L4 1.0 8 true",
+   "L4 0.0 8 true",
+   "L4 -0.5 8 true",
+   "L4 2.0 8 true",
+   "L4 0.25 8 true",
+   "L4 2.0 8 true",
+   "L4 0.0 8 true",
+   "L4 0.5 8 true",
+   "L5 -0.375 true true pq",
+   "L5 0.25 true true pq",
+   "L5 4.75 true true pq",
+   "L5 -0.5 true true pq",
+   "L6 true",
+   "L7 (0.5, [-0.5, -0.5, -1.5])"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 7,
+  "path": "gen/prog_007.cml",
+  "expected": [
+   "q28 1",
+   "q28 0",
+   "q25 3",
+   "L2 true v=0,false-3 x",
+   "q28 2",
+   "L3 3",
+   "L4 1",
+   "L5 true",
+   "L6 true",
+   "L7 true",
+   "L8 (3, 0)"
+  ],
+  "attempts": 4
+ },
+ {
+  "seed": 8,
+  "path": "gen/prog_008.cml",
+  "expected": [
+   "L1 -5 -5",
+   "L4 -4 0 ab { n: 12, tag: a, w: 1.5 }",
+   "L5 1.0",
+   "L5 -1.5",
+   "L5 2.5",
+   "L6 1 -4 12",
+   "q38 1",
+   "L7 false false",
+   "null",
+   "L8 ab 10.0",
+   "L8 ab 10.0",
+   "L8 pq 10.0"
+  ],
+  "attempts": 13
+ },
+ {
+  "seed": 9,
+  "path": "gen/prog_009.cml",
+  "expected": [
+   "q34 2",
+   "L3 a",
+   "L4 (7, 22)",
+   "q31 4",
+   "L5 4",
+   "L6 2",
+   "L7 true",
+   "L8 (67, 8, 25)",
+   "L9 false"
+  ],
+  "attempts": 3
+ },
+ {
+  "seed": 10,
+  "path": "gen/prog_010.cml",
+  "expected": [
+   "q46 3",
+   "L2 1 v=yz 6 3.00  (3.0, [a, yz, v=yz 6 3.00 ])",
+   "L3 yz true",
+   "L4 3 3",
+   "L4 7 7",
+   "L4 3 3",
+   "L5 yz 3",
+   "q46 3"
+  ],
+  "attempts": 3
+ },
+ {
+  "seed": 11,
+  "path": "gen/prog_011.cml",
+  "expected": [
+   "q60 2",
+   "L6 0 cd",
+   "L7 31"
+  ],
+  "attempts": 2
+ },
+ {
+  "seed": 12,
+  "path": "gen/prog_012.cml",
+  "expected": [
+   "4",
+   "q37 8",
+   "q37 100",
+   "L4 8",
+   "L5 4.75",
+   "L6 false",
+   "L7 <false x r:4>100,|",
+   "L8 [35, ab, cd]"
+  ],
+  "attempts": 12
+ },
+ {
+  "seed": 13,
+  "path": "gen/prog_013.cml",
+  "expected": [
+   "q68 -2",
+   "L7 4",
+   "L8 (false, pq)",
+   "L9 4"
+  ],
+  "attempts": 5
+ },
+ {
+  "seed": 14,
+  "path": "gen/prog_014.cml",
+  "expected": [
+   "q21 3",
+   "q21 3",
+   "L4 0 { n: 0, tag: a } 0",
+   "q21 0",
+   "null",
+   "q21 3",
+   "L5 true",
+   "L6 true",
+   "L7 -4",
+   "L8 true",
+   "L9 0"
+  ],
+  "attempts": 3
+ },
+ {
+  "seed": 15,
+  "path": "gen/prog_015.cml",
+  "expected": [
+   "q18 3",
+   "L4 false 5",
+   "L5 -1.5"
+  ],
+  "attempts": 3
+ },
+ {
+  "seed": 16,
+  "path": "gen/prog_016.cml",
+  "expected": [
+   "L1 3 3",
+   "",
+   "q36 3",
+   "L3 a",
+   "L4 false",
+   "L5 false",
+   "L6 [{ x: 3, y: 6 }]"
+  ],
+  "attempts": 3
+ },
+ {
+  "seed": 17,
+  "path": "gen/prog_017.cml",
+  "expected": [
+   "q48 6",
+   "L5 v=6| cd",
+   "L6 5 5",
+   "L7 0"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 18,
+  "path": "gen/prog_018.cml",
+  "expected": [
+   "q24 3",
+   "L1 -7 -15",
+   "L1 -7 -15",
+   "q24 10",
+   "q24 2",
+   "L2 ab",
+   "L3 3",
+   "L4 true",
+   "L5 -14",
+   "L6 -14",
+   "L7 true",
+   "L8 false"
+  ],
+  "attempts": 13
+ },
+ {
+  "seed": 19,
+  "path": "gen/prog_019.cml",
+  "expected": [
+   "L4 1 0",
+   "L5 11.0",
+   "L6 5",
+   "L7 false"
+  ],
+  "attempts": 2
+ },
+ {
+  "seed": 20,
+  "path": "gen/prog_020.cml",
+  "expected": [
+   "q27 -2",
+   "L3 8 8 cd",
+   "q27 100",
+   "L4 cd 3 3.0",
+   "L4 cd 3 3.0",
+   "L4 cd 3 3.0",
+   "L4 cd 3 3.0",
+   "L5 -2 true",
+   "L5 -2 true",
+   "L5 -2 true",
+   "L5 -2 true",
+   "L5 7 true",
+   "q27 7",
+   "q27 13",
+   "q27 -8",
+   "L6 -2",
+   "L7 true",
+   "L8 100",
+   "L9 true"
+  ],
+  "attempts": 3
+ },
+ {
+  "seed": 21,
+  "path": "gen/prog_021.cml",
+  "expected": [
+   "L2 5",
+   "L2 5",
+   "L2 5",
+   "q21 3",
+   "q21 2",
+   "L3 2 2 x",
+   "q21 5",
+   "q21 2",
+   "b",
+   "L4 8",
+   "L5 false",
+   "L6 false",
+   "L7 true"
+  ],
+  "attempts": 3
+ },
+ {
+  "seed": 22,
+  "path": "gen/prog_022.cml",
+  "expected": [
+   "q32 4",
+   "L8 true true 3",
+   "q32 4",
+   "L5 -7 4",
+   "L6 4 4 4",
+   "4",
+   "L9 false cd,cd,pq,yz",
+   "L10 1 (4, 13) 1",
+   "L11 4 0.25",
+   "L11 4 0.25",
+   "L11 4 0.25",
+   "L11 4 0.25",
+   "L12 (4, 13) (4, 13)",
+   "L13 (1, 4, 13) (1, 4, 13)"
+  ],
+  "attempts": 3
+ },
+ {
+  "seed": 23,
+  "path": "gen/prog_023.cml",
+  "expected": [
+   "L3 a a",
+   "L5 10 10",
+   "L5 -1 -1",
+   "L6 0",
+   "L7 -1",
+   "L8 -9.5"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 24,
+  "path": "gen/prog_024.cml",
+  "expected": [
+   "q29 31",
+   "q29 4",
+   "L2 pq",
+   "L2 pq",
+   "L2 pq",
+   "L3 true 4 4",
+   "q29 -7",
+   "L4 yz (false, false, 2.5)",
+   "L4 m (false, false, 2.5)",
+   "(false, k9)",
+   "L6 true",
+   "L7 abcd"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 25,
+  "path": "gen/prog_025.cml",
+  "expected": [
+   "L3 2 2",
+   "q32 4",
+   "q32 2",
+   "L4 a",
+   "L5 false",
+   "L6 false",
+   "L7 false"
+  ],
+  "attempts": 2
+ },
+ {
+  "seed": 26,
+  "path": "gen/prog_026.cml",
+  "expected": [
+   "q36 -3",
+   "q36 4",
+   "q36 4",
+   "L3 true 0 10 []",
+   "L3 true -100 10 []",
+   "L3 true -100 10 []",
+   "L3 true -100 10 []",
+   "L4 true true",
+   "L6 0",
+   "L7 (0.5, false)"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 27,
+  "path": "gen/prog_027.cml",
+  "expected": [
+   "L2 4",
+   "L3 false 4",
+   "L9 31 4 4"
+  ],
+  "attempts": 8
+ },
+ {
+  "seed": 28,
+  "path": "gen/prog_028.cml",
+  "expected": [
+   "L4 4 4 4 -3",
+   "L5 4 4 [{ x: 4, y: 4 }, { x: -2, y: 4 }]",
+   "q30 -3",
+   "q30 -3",
+   "true",
+   "L7 false",
+   "L7 false"
+  ],
+  "attempts": 4
+ },
+ {
+  "seed": 29,
+  "path": "gen/prog_029.cml",
+  "expected": [
+   "q34 -7",
+   "q34 1",
+   "L4 3",
+   "L5 10.0",
+   "L6 (1, 4)"
+  ],
+  "attempts": 5
+ },
+ {
+  "seed": 30,
+  "path": "gen/prog_030.cml",
+  "expected": [
+   "L4 1 1",
+   "q61 0",
+   "3.0",
+   "L6 0",
+   "L7 false",
+   "L8 5",
+   "L9 [{ x: -2, y: 1 }]",
+   "L10 (1, 4)"
+  ],
+  "attempts": 3
+ },
+ {
+  "seed": 31,
+  "path": "gen/prog_031.cml",
+  "expected": [
+   "q24 -1",
+   "q24 13",
+   "q24 3",
+   "q27 4",
+   "false",
+   "q27 4000",
+   "L3 -10",
+   "L4 false",
+   "L5 yzabx",
+   "L6 false",
+   "L7 [-10, 84, -2]",
+   "L8 false"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 32,
+  "path": "gen/prog_032.cml",
+  "expected": [
+   "q48 4",
+   "q48 4",
+   "L4 4",
+   "L5 3",
+   "L6 4"
+  ],
+  "attempts": 6
+ },
+ {
+  "seed": 33,
+  "path": "gen/prog_033.cml",
+  "expected": [
+   "L1 2 2",
+   "3",
+   "3",
+   "L2 yz 2",
+   "L2 cd 2",
+   "q37 2",
+   "q40 2",
+   "q40 2",
+   "L6 2 2",
+   "3",
+   "q37 2",
+   "L7 false"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 34,
+  "path": "gen/prog_034.cml",
+  "expected": [
+   "q47 5",
+   "L2 2",
+   "L3 3",
+   "L4 true",
+   "L5 [3, 4, 3, 8, 4, 3]",
+   "L6 2"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 35,
+  "path": "gen/prog_035.cml",
+  "expected": [
+   "L7 2.5 cd",
+   "L7 2.5 cd",
+   "L7 2.5 cd",
+   "L7 5.25 cd",
+   "q64 1",
+   "[{ x: 0, y: 5 }, { x: 12, y: -2 }, { x: -2, y: -2 }, { x: -2, y: 4 }]",
+   "L2 3.5 -3",
+   "L2 3.5 -3",
+   "L8 true 2 5",
+   "L8 true 1 5",
+   "L8 true 1 5",
+   "L8 true 1 5",
+   "[{ x: -10, y: 60 }, { x: 5, y: 60 }, { x: -10, y: 60 }]",
+   "L2 2.0 -3",
+   "L2 2.0 -3",
+   "L9 -2",
+   "L10 4.75"
+  ],
+  "attempts": 2
+ },
+ {
+  "seed": 36,
+  "path": "gen/prog_036.cml",
+  "expected": [
+   "L2 { x: 100, y: 0 }",
+   "L2 { x: 100, y: 0 }",
+   "q21 0",
+   "L3 0 0 2",
+   "L4 false",
+   "L4 false",
+   "L4 false",
+   "L1 0 0 0",
+   "L1 -30 -90 -270",
+   "L1 -30 -90 -270",
+   "L1 -30 -90 -270",
+   "L5 -1",
+   "L5 -1",
+   "L6 -2",
+   "L7 (-29, -86, -63)",
+   "L8 1",
+   "L9 true"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 37,
+  "path": "gen/prog_037.cml",
+  "expected": [
+   "L4 -3 -4",
+   "-4",
+   "L7 cd",
+   "L8 -1.5",
+   "L9 true",
+   "L10 -4"
+  ],
+  "attempts": 7
+ },
+ {
+  "seed": 38,
+  "path": "gen/prog_038.cml",
+  "expected": [
+   "q27 -2",
+   "q24 10",
+   "q27 1",
+   "L2 false",
+   "L2 false",
+   "L2 false",
+   "L1 -3 -3",
+   "q27 8",
+   "q24 31",
+   "L4 cd",
+   "L5 8",
+   "L6 true",
+   "L7 false",
+   "L8 true",
+   "L9 -2.0"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 39,
+  "path": "gen/prog_039.cml",
+  "expected": [
+   "L3 0 1",
+   "L4 5 -17 b",
+   "L4 5 0 b",
+   "L5 -5 cd-cd-cd-a cd-cd-cd-a m",
+   "L5 -4 cd-cd-cd-a cd-cd-cd-a m",
+   "L5 -1 cd-cd-cd-a cd-cd-cd-a m",
+   "L5 -3 cd-cd-cd-a cd-cd-cd-a m",
+   "0.25",
+   "L6 0",
+   "L7 1"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 40,
+  "path": "gen/prog_040.cml",
+  "expected": [
+   "q43 1",
+   "L4 8 1.25",
+   "L5 5",
+   "L6 32.0"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 41,
+  "path": "gen/prog_041.cml",
+  "expected": [
+   "q25 3",
+   "q25 3",
+   "q25 0",
+   "L4 true",
+   "L5 [19.0, -7.0]",
+   "L6 1",
+   "L7 1.5",
+   "L8 1.5",
+   "L9 v=1xyz,",
+   "L10 (4, 13)",
+   "L11 10"
+  ],
+  "attempts": 6
+ },
+ {
+  "seed": 42,
+  "path": "gen/prog_042.cml",
+  "expected": [
+   "q47 2",
+   "q47 -3",
+   "L3 yz",
+   "L4 8",
+   "L5 -13",
+   "L6 true",
+   "L7 false",
+   "L8 1",
+   "L9 true"
+  ],
+  "attempts": 6
+ },
+ {
+  "seed": 43,
+  "path": "gen/prog_043.cml",
+  "expected": [
+   "q35 -20",
+   "L1 (1, 4)",
+   "q35 -20",
+   "L1 (1, 4)",
+   "q35 -20",
+   "L1 (1, 4)",
+   "q35 -20",
+   "L1 (1, 4)",
+   "q35 40",
+   "L2 (2, -59)",
+   "L3 0 8 -7",
+   "m",
+   "L4 [a, a]",
+   "L5 (-20, -59, -79)",
+   "L6 false",
+   "L7 0"
+  ],
+  "attempts": 2
+ },
+ {
+  "seed": 44,
+  "path": "gen/prog_044.cml",
+  "expected": [
+   "q43 0",
+   "q43 1",
+   "q43 2",
+   "L7 false",
+   "L8 false"
+  ],
+  "attempts": 2
+ },
+ {
+  "seed": 45,
+  "path": "gen/prog_045.cml",
+  "expected": [
+   "q37 31",
+   "L3 3 3 3",
+   "L3 3 3 3",
+   "L4 2",
+   "L5 [1]",
+   "L6 true",
+   "L7 4"
+  ],
+  "attempts": 6
+ },
+ {
+  "seed": 46,
+  "path": "gen/prog_046.cml",
+  "expected": [
+   "q44 2",
+   "L9 a true { n: -7, tag: a }",
+   "L9 a true { n: -7, tag: a }",
+   "L9 a true { n: -7, tag: a }",
+   "L9 a true { n: -7, tag: a }",
+   "0.0",
+   "q44 2",
+   "L11 true cd mam",
+   "q44 34",
+   "L12 3",
+   "L13 true",
+   "L14 2.0"
+  ],
+  "attempts": 8
+ },
+ {
+  "seed": 47,
+  "path": "gen/prog_047.cml",
+  "expected": [
+   "L5 1 1 0.25",
+   "L6 2 [] 1",
+   "L7 1 1 []",
+   "q46 100",
+   "-3",
+   "-3",
+   "-3",
+   "-3",
+   "-3",
+   "L9 false",
+   "L10 false"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 48,
+  "path": "gen/prog_048.cml",
+  "expected": [
+   "L4 ab 8",
+   "ab",
+   "L6 -1 8 (1.0, true, 8)",
+   "L6 10 8 (1.0, true, 8)",
+   "L6 8 8 (1.0, true, 8)",
+   "L7 30 true",
+   "L7 30 false",
+   "L3 (ab, true) (ab, true)",
+   "L3 (ab, true) (ab, true)",
+   "q64 30",
+   "L8 [{ x: 8, y: -7 }, { x: 4, y: 30 }, { x: 10, y: 8 }, { x: -3, y: 0 }]",
+   "L9 aa",
+   "L10 false"
+  ],
+  "attempts": 5
+ },
+ {
+  "seed": 49,
+  "path": "gen/prog_049.cml",
+  "expected": [
+   "L2 0 ab v=31>-1",
+   "L2 0 ab v=31>-1",
+   "L1 4 4",
+   "L3 0 [true, false]",
+   "L4 5 ab",
+   "L4 5 ab"
+  ],
+  "attempts": 3
+ },
+ {
+  "seed": 50,
+  "path": "gen/prog_050.cml",
+  "expected": [
+   "q32 1",
+   "q32 3",
+   "q32 3",
+   "q32 3",
+   "L3 1",
+   "L4 false",
+   "L5 [-0.5, 10.0, -1.5, 3.0]",
+   "L6 false"
+  ],
+  "attempts": 2
+ },
+ {
+  "seed": 51,
+  "path": "gen/prog_051.cml",
+  "expected": [
+   "L3 yz yz b",
+   "q42 4",
+   "q42 100",
+   "q42 8",
+   "L4 false b",
+   "L2 -1 -1",
+   "L5 true",
+   "L6 0",
+   "L7 0"
+  ],
+  "attempts": 4
+ },
+ {
+  "seed": 52,
+  "path": "gen/prog_052.cml",
+  "expected": [
+   "q53 10",
+   "q53 10",
+   "L4 true 2",
+   "q53 4",
+   "q53 3",
+   "L5 8",
+   "L6 ab",
+   "L7 true",
+   "L8 false",
+   "L9 false"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 53,
+  "path": "gen/prog_053.cml",
+  "expected": [
+   "q47 3",
+   "L1 -102 -102",
+   "3",
+   "L3 yz yz",
+   "L4 -101 yz",
+   "L4 -101 yz",
+   "L1 -204 -204",
+   "L5 yz",
+   "L6 5.375",
+   "L7 true"
+  ],
+  "attempts": 7
+ },
+ {
+  "seed": 54,
+  "path": "gen/prog_054.cml",
+  "expected": [
+   "q29 3",
+   "L2 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2] true",
+   "L3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2] true",
+   "L3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2] true",
+   "L3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2] true",
+   "L3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2] true",
+   "L3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2] true",
+   "L3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2] true",
+   "L3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2] true",
+   "L3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2] true",
+   "L3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2] true",
+   "L3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true",
+   "L3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true",
+   "L3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true",
+   "L3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true",
+   "L3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true",
+   "L3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true",
+   "L4 2",
+   "L5 v=true,-2>7|"
+  ],
+  "attempts": 2
+ },
+ {
+  "seed": 55,
+  "path": "gen/prog_055.cml",
+  "expected": [
+   "q37 8",
+   "L1 2 2 2",
+   "L2 4 true",
+   "L2 4 true",
+   "L1 2 2 2",
+   "L1 2 2 2",
+   "L3 1",
+   "L4 ab",
+   "L5 1",
+   "L6 falseyz",
+   "L7 1",
+   "L8 1"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 56,
+  "path": "gen/prog_056.cml",
+  "expected": [
+   "q34 9",
+   "q34 1",
+   "L2 9",
+   "L3 5",
+   "L4 true",
+   "L5 [10, -7, 5, 1, -2]",
+   "L6 false"
+  ],
+  "attempts": 4
+ },
+ {
+  "seed": 57,
+  "path": "gen/prog_057.cml",
+  "expected": [
+   "L1 r:x  m r:x ",
+   "L1 r:x  r:x r:x  r:x ",
+   "L1 r:x  r:x  r:x ",
+   "L4 1",
+   "L5 true",
+   "L6 [(1.5, b), (-1.5, a)]",
+   "L7 -2.0",
+   "L8 -2.0"
+  ],
+  "attempts": 4
+ },
+ {
+  "seed": 58,
+  "path": "gen/prog_058.cml",
+  "expected": [
+   "L6 yz (7, 22, 67)",
+   "L7 4 1",
+   "L7 4 4",
+   "L7 4 2",
+   "L7 4 22",
+   "L9 (7, 22, 67) [31, 4]",
+   "1",
+   "1",
+   "1",
+   "L11 (7, 22, 67)",
+   "L11 (7, 22, 67)",
+   "L11 (7, 22, 67)",
+   "L11 (7, 22, 67)",
+   "L12 true true"
+  ],
+  "attempts": 6
+ },
+ {
+  "seed": 59,
+  "path": "gen/prog_059.cml",
+  "expected": [
+   "L2 8 cd",
+   "q54 -7",
+   "L5 -8",
+   "L6 (false, [yz, cd])"
+  ],
+  "attempts": 8
+ },
+ {
+  "seed": 60,
+  "path": "gen/prog_060.cml",
+  "expected": [
+   "L6 (true, true)",
+   "L7 (true, true) cd (true, true)",
+   "L5 21 cd",
+   "L5 0 cd",
+   "L5 31 cd",
+   "L5 31 cd",
+   "L5 20181 cd",
+   "L9 21 20181 21",
+   "L10 20181 0",
+   "L10 20181 0",
+   "L10 20181 0",
+   "L10 20181 0",
+   "L10 20181 0",
+   "L10 20181 0",
+   "L10 20181 0",
+   "L10 20181 0",
+   "0"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 61,
+  "path": "gen/prog_061.cml",
+  "expected": [
+   "L4 0 0",
+   "L4 0 0",
+   "L4 0 0",
+   "L4 0 0",
+   "q38 2",
+   "L2 -2 -1",
+   "L5 0 0",
+   "L2 2 -5",
+   "L1 0 0",
+   "q38 0",
+   "q38 0",
+   "q38 0",
+   "q38 0",
+   "L6 0"
+  ],
+  "attempts": 8
+ },
+ {
+  "seed": 62,
+  "path": "gen/prog_062.cml",
+  "expected": [
+   "L1 -2 -2",
+   "q32 -3",
+   "L3 8",
+   "L4 cd",
+   "L5 cd0",
+   "L6 (true, 16.0)",
+   "L7 false",
+   "L8 ([(false, true), (false, true), (false, false), (true, false)], m)"
+  ],
+  "attempts": 5
+ },
+ {
+  "seed": 63,
+  "path": "gen/prog_063.cml",
+  "expected": [
+   "L3 b b",
+   "q34 5",
+   "L6 -32 -32"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 64,
+  "path": "gen/prog_064.cml",
+  "expected": [
+   "L5 b true",
+   "L6 -1.5 x -1.5",
+   "L6 0.0 x 0.0",
+   "L6 0.5 x 0.5",
+   "q57 30",
+   "L7 ab true",
+   "L8 { n: 31, tag: b }"
+  ],
+  "attempts": 9
+ },
+ {
+  "seed": 65,
+  "path": "gen/prog_065.cml",
+  "expected": [
+   "q33 -1",
+   "L1 0 0",
+   "L2 5",
+   "L3 0.5",
+   "L4 -1",
+   "L5 1",
+   "L6 0.75"
+  ],
+  "attempts": 3
+ },
+ {
+  "seed": 66,
+  "path": "gen/prog_066.cml",
+  "expected": [
+   "q43 1",
+   "q43 3",
+   "L2 x 4",
+   "L5 [false, false]",
+   "L5 [false, false]",
+   "L5 [false, false]",
+   "L6 { x: 6, y: 20 }",
+   "L7 []"
+  ],
+  "attempts": 4
+ },
+ {
+  "seed": 67,
+  "path": "gen/prog_067.cml",
+  "expected": [
+   "mcd",
+   "L1 0 0",
+   "q45 -2",
+   "L4 2",
+   "L5 (-2, -2.0)",
+   "L6 false",
+   "L7 20"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 68,
+  "path": "gen/prog_068.cml",
+  "expected": [
+   "L3 1 [1, 3, 1, 5, 2, 3, 4, 5]",
+   "L1 7 7",
+   "q26 1",
+   "q26 5",
+   "q26 1",
+   "L5 1",
+   "L6 5",
+   "L7 false",
+   "L8 -3",
+   "L9 false"
+  ],
+  "attempts": 3
+ },
+ {
+  "seed": 69,
+  "path": "gen/prog_069.cml",
+  "expected": [
+   "q37 12",
+   "L3 0 bk9",
+   "L4 true",
+   "L5 0 [(0.5, m), (2.5, m), (10.0, k9), (1.5, pq), (3.0, pq), (2.0, ab), (1.0, ab), (4.75, ab), (10.0, b), (10.0, b)] 0",
+   "L3 1 bk9",
+   "L4 true",
+   "L5 0 [(0.5, m), (2.5, m), (10.0, k9), (1.5, pq), (3.0, pq), (2.0, ab), (1.0, ab), (4.75, ab), (10.0, b), (10.0, b)] 0",
+   "L3 2 bk9",
+   "L4 true",
+   "L5 0 [(0.5, m), (2.5, m), (10.0, k9), (1.5, pq), (3.0, pq), (2.0, ab), (1.0, ab), (4.75, ab), (10.0, b), (10.0, b)] 0",
+   "q37 5"
+  ],
+  "attempts": 2
+ },
+ {
+  "seed": 70,
+  "path": "gen/prog_070.cml",
+  "expected": [
+   "q29 -2",
+   "L1 [(cd, false), (cd, false), (cd, false)] false",
+   "q29 2",
+   "L2 0",
+   "L3 ab",
+   "L4 false"
+  ],
+  "attempts": 3
+ },
+ {
+  "seed": 71,
+  "path": "gen/prog_071.cml",
+  "expected": [
+   "L4 (10, 31) 2",
+   "q32 0",
+   "q32 2",
+   "q32 4",
+   "q32 -2",
+   "L5 3",
+   "L6 true",
+   "L7 (7, 22, 67)",
+   "L8 [2, -3]",
+   "L9 true",
+   "L10 false"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 72,
+  "path": "gen/prog_072.cml",
+  "expected": [
+   "L2 8 0",
+   "q31 0",
+   "L4 b",
+   "L5 true",
+   "L6 [(b, 1.0), (m, 0.5)]",
+   "L7 false"
+  ],
+  "attempts": 4
+ },
+ {
+  "seed": 73,
+  "path": "gen/prog_073.cml",
+  "expected": [
+   "L6 3",
+   "L6 3",
+   "L6 3",
+   "L7 3 3 3",
+   "L7 ab ab ab",
+   "L8 false"
+  ],
+  "attempts": 2
+ },
+ {
+  "seed": 74,
+  "path": "gen/prog_074.cml",
+  "expected": [
+   "q64 4",
+   "q64 5",
+   "q64 1",
+   "L6 x",
+   "L7 3",
+   "L8 false"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 75,
+  "path": "gen/prog_075.cml",
+  "expected": [
+   "q32 0",
+   "q32 0",
+   "q32 0",
+   "q32 0",
+   "L4 27 3",
+   "L3 [3.0, 4.75, 0.25] [3.0, 4.75, 0.25]",
+   "q32 7",
+   "L5 3",
+   "L6 true",
+   "L7 v=b 98,cd,m,x,a,",
+   "L8 true",
+   "L9 true"
+  ],
+  "attempts": 3
+ },
+ {
+  "seed": 76,
+  "path": "gen/prog_076.cml",
+  "expected": [
+   "L5 4 4",
+   "q50 4",
+   "L6 13.25 4 4",
+   "L6 13.25 4 4",
+   "L7 4 1.0,k9pq true",
+   "q50 0",
+   "L8 0",
+   "L9 true"
+  ],
+  "attempts": 2
+ },
+ {
+  "seed": 77,
+  "path": "gen/prog_077.cml",
+  "expected": [
+   "L5 1 true",
+   "q27 2",
+   "q27 2",
+   "false",
+   "L6 false x"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 78,
+  "path": "gen/prog_078.cml",
+  "expected": [
+   "q44 12",
+   "null",
+   "q44 5",
+   "L6 yz",
+   "L7 false",
+   "L8 (4, 13)",
+   "L9 [4, 4, 4, 4]",
+   "L10 false"
+  ],
+  "attempts": 5
+ },
+ {
+  "seed": 79,
+  "path": "gen/prog_079.cml",
+  "expected": [
+   "L1 true",
+   "L2 (5, [x, , pq])",
+   "L3 (yz|, yz) (yz|, yz)",
+   "q27 2",
+   "L4 cd 1 cd",
+   "L4 x 1 x",
+   "L4 <-2.00|100| 1 <-2.00|100|",
+   "q27 2",
+   "0",
+   "1",
+   "L6 1 <-2.00|100| <-2.00|100|",
+   "L7 false",
+   "L8 false"
+  ],
+  "attempts": 9
+ },
+ {
+  "seed": 80,
+  "path": "gen/prog_080.cml",
+  "expected": [
+   "q32 0",
+   "L2 5 5 [{ x: 100, y: 5 }]",
+   "L3 -3 2",
+   "L3 1.0>k9  2",
+   "L3 1.0>k9  2",
+   "L3 1.0>k9  2",
+   "L3 1.0>k9  2",
+   "L4 5 2 1.0>k9 ",
+   "L5 k9 -3 0",
+   "L5 k9 -3 5",
+   "L5 k9 -3 14",
+   "L6 -3 -3",
+   "L6 -3 -3",
+   "L7 -1"
+  ],
+  "attempts": 13
+ },
+ {
+  "seed": 81,
+  "path": "gen/prog_081.cml",
+  "expected": [
+   "L4 yz",
+   "q29 7",
+   "L6 2",
+   "q29 2",
+   "L7 cd",
+   "L8 true"
+  ],
+  "attempts": 4
+ },
+ {
+  "seed": 82,
+  "path": "gen/prog_082.cml",
+  "expected": [
+   "L2 x 0 b",
+   "q47 0",
+   "q47 0",
+   "L3 false false true",
+   "L4 0 false",
+   "xx",
+   "q47 0",
+   "xx",
+   "q47 0",
+   "L5 ({ x: 10, y: 0 }, 2)",
+   "L6 true"
+  ],
+  "attempts": 2
+ },
+ {
+  "seed": 83,
+  "path": "gen/prog_083.cml",
+  "expected": [
+   "L1 12 12",
+   "q29 1",
+   "L4 (true, yzb) 0",
+   "L4 (true, yzb) 7",
+   "q26 0",
+   "L5 0",
+   "L6 true",
+   "L7 (3, 7)"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 84,
+  "path": "gen/prog_084.cml",
+  "expected": [
+   "L2 5 5 5 5",
+   "q35 2",
+   "q35 -1",
+   "q35 10",
+   "L3 3",
+   "L4 false",
+   "L5 10"
+  ],
+  "attempts": 8
+ },
+ {
+  "seed": 85,
+  "path": "gen/prog_085.cml",
+  "expected": [
+   "L3 5 yzb",
+   "q37 1",
+   "q37 5",
+   "L5 (0, -0.5)"
+  ],
+  "attempts": 4
+ },
+ {
+  "seed": 86,
+  "path": "gen/prog_086.cml",
+  "expected": [
+   "q45 0",
+   "L1 -1 2",
+   "L1 -1 2",
+   "L1 -1 2",
+   "q45 1",
+   "q45 0",
+   "q45 7",
+   "L1 -1 2",
+   "L5 3",
+   "L6 (-7.0, 0)",
+   "L7 4",
+   "L8 3",
+   "L9 false",
+   "L10 [(a, -3), (a, -3)]",
+   "L11 3",
+   "L12 true",
+   "L13 false",
+   "L14 true",
+   "L15 3"
+  ],
+  "attempts": 3
+ },
+ {
+  "seed": 87,
+  "path": "gen/prog_087.cml",
+  "expected": [
+   "q46 22",
+   "q46 5",
+   "q46 9",
+   "q46 5",
+   "q46 9",
+   "q46 5",
+   "q46 9",
+   "q46 5",
+   "L1 -1 -1",
+   "q46 0",
+   "L5 x",
+   "L6 10.0",
+   "L7 40.0",
+   "L8 0"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 88,
+  "path": "gen/prog_088.cml",
+  "expected": [
+   "q56 -7",
+   "L1 false 2 (2, 2)"
+  ],
+  "attempts": 9
+ },
+ {
+  "seed": 89,
+  "path": "gen/prog_089.cml",
+  "expected": [
+   "q33 -7",
+   "q33 0",
+   "L1 1 1 100",
+   "L2 false -1",
+   "L3 true 100",
+   "L2 true 100",
+   "L3 true 100",
+   "L2 false 100",
+   "L3 true 100",
+   "L4 cd (false, 100)",
+   "L5 false cd",
+   "L5 false cd",
+   "L5 false cd",
+   "L5 false cd",
+   "q33 3",
+   "L7 ab",
+   "L8 5",
+   "L9 false",
+   "L10 [1, 1, 1]"
+  ],
+  "attempts": 1
+ },
+ {
+  "seed": 90,
+  "path": "gen/prog_090.cml",
+  "expected": [
+   "q63 8",
+   "L3 yz",
+   "q63 3",
+   "L5 yz 8",
+   "L5 yz 8",
+   "L5 yz 8",
+   "L5 yz 8",
+   "L4 false",
+   "q63 3",
+   "L6 8",
+   "L7 false",
+   "L8 3",
+   "L9 4"
+  ],
+  "attempts": 3
+ },
+ {
+  "seed": 91,
+  "path": "gen/prog_091.cml",
+  "expected": [
+   "q28 0",
+   "L2 x",
+   "L3 3 3 3",
+   "L4 1 1 1 -3",
+   "q28 0",
+   "q28 0",
+   "L6 false false false 7",
+   "L7 true",
+   "L8 false",
+   "L9 -19.25"
+  ],
+  "attempts": 11
+ },
+ {
+  "seed": 92,
+  "path": "gen/prog_092.cml",
+  "expected": [
+   "q43 2",
+   "q43 12",
+   "q43 0",
+   "L3 ab ab",
+   "L3 ab cdab",
+   "L3 ab cdab",
+   "q43 1",
+   "L5 [{ x: 3, y: 31 }, { x: 3, y: 100 }]",
+   "L6 true",
+   "L7 true"
+  ],
+  "attempts": 5
+ },
+ {
+  "seed": 93,
+  "path": "gen/prog_093.cml",
+  "expected": [
+   "q37 2",
+   "q37 0",
+   "L2 4",
+   "L3 3",
+   "L4 12",
+   "L5 ab",
+   "L6 0",
+   "L7 true",
+   "L8 { n: 4, tag: ab }"
+  ],
+  "attempts": 2
+ },
+ {
+  "seed": 94,
+  "path": "gen/prog_094.cml",
+  "expected": [
+   "L5 cd",
+   "L6 4 4 cd",
+   "L7 cd 0 0",
+   "q31 0",
+   "q31 0",
+   "L1 -2 0",
+   "L9 <bk9|4|0>"
+  ],
+  "attempts": 3
+ },
+ {
+  "seed": 95,
+  "path": "gen/prog_095.cml",
+  "expected": [
+   "L3 false -3 [-3, 131, 100, 46]",
+   "L3 false 131 [-3, 131, 100, 46, 38]",
+   "L3 false 100 [-3, 131, 100, 46, 38, 40]",
+   "L3 false 46 [-3, 131, 100, 46, 38, 40, 42]",
+   "L4 -2 -2",
+   "q55 10",
+   "q52 3",
+   "L6 8",
+   "L7 false",
+   "L8 true"
+  ],
+  "attempts": 7
+ },
+ {
+  "seed": 96,
+  "path": "gen/prog_096.cml",
+  "expected": [
+   "5",
+   "q34 15",
+   "L9 <5 ",
+   "L10 true"
+  ],
+  "attempts": 2
+ },
+ {
+  "seed": 97,
+  "path": "gen/prog_097.cml",
+  "expected": [
+   "q29 2",
+   "L2 3 false",
+   "L3 3 false acd",
+   "L4 2 2",
+   "L5 8",
+   "L6 3",
+   "L7 aaa",
+   "L8 b"
+  ],
+  "attempts": 11
+ },
+ {
+  "seed": 98,
+  "path": "gen/prog_098.cml",
+  "expected": [
+   "q42 4",
+   "L3 bb 4 bb",
+   "L3 bb 4 bb",
+   "L3 bb 4 bb",
+   "L3 bb 4 bb",
+   "q39 8",
+   "L4 4 true bpq",
+   "q39 0",
+   "q42 3",
+   "L5 (-2, -5) v=2,4,5",
+   "L5 (-2, -5) v=2,4,5",
+   "L5 (-2, -5) v=2,4,5",
+   "L5 (-2, -5) v=2,4,5",
+   "q42 4",
+   "L6 b true",
+   "L7 true"
+  ],
+  "attempts": 5
+ },
+ {
+  "seed": 99,
+  "path": "gen/prog_099.cml",
+  "expected": [
+   "L1 (, 10.0)",
+   "2",
+   "L6 b b b",
+   "L7 b b [b, b, m, b]",
+   "L8 b 2",
+   "q58 -2"
+  ],
+  "attempts": 2
+ },
+ {
+  "seed": 100,
+  "path": "gen/prog_100.cml",
+  "expected": [
+   "4",
+   "L11 0 { n: 0, tag: m }",
+   "L13 (16, 49, 51)",
+   "L14 51 2",
+   "L14 49 2",
+   "L14 49 2",
+   "L14 49 2",
+   "L1 0 0",
+   "L2 [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)]",
+   "L3 [(10.0, 2.5), (-0.5, 0.0)] 0",
+   "L1 0 0",
+   "L2 [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)]",
+   "L3 [(10.0, 2.5), (-0.5, 0.0)] 0",
+   "L1 0 0",
+   "L2 [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)]",
+   "L3 [(10.0, 2.5), (-0.5, 0.0)] 0",
+   "L1 0 0",
+   "L2 [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)]",
+   "L3 [(10.0, 2.5), (-0.5, 0.0)] 0",
+   "L15 (r:0.25, r:0.25)"
+  ],
+  "attempts": 2
+ }
+]

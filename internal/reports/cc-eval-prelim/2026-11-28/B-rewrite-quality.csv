@@ -1,0 +1,41 @@
+rewrite,implementation,case_id,verdict,wall_ms,nodes,graphs,comparison,source
+fold,cpp,cxx_isolation.fold.by_cpp,PASS,202.7,34,5,reference run,this-lane run @353d36e3d1
+fold,camel,cxx_isolation.fold.by_camel,PASS,294.3,34,5,jgir canonical=true vs by_cpp,this-lane run @353d36e3d1
+cse,cpp,cxx_isolation.cse.by_cpp,PASS,117.3,30,5,reference run,this-lane run @353d36e3d1
+cse,camel,cxx_isolation.cse.by_camel,PASS,270.8,30,5,jgir canonical=true vs by_cpp,this-lane run @353d36e3d1
+inline,cpp,cxx_isolation.inline_figure1.by_cpp,PASS,121.9,30,4,reference run,this-lane run @353d36e3d1
+inline,camel,cxx_isolation.inline_figure1.by_camel,PASS,481.9,30,4,jgir canonical=true vs by_cpp,this-lane run @353d36e3d1
+dce,cpp,camel_passes.dce.by_cpp,PASS,105.1,20,5,reference run,this-lane run @353d36e3d1
+dce,camel,camel_passes.dce.by_camel,PASS,223.7,20,5,jgir canonical=true vs by_cpp,this-lane run @353d36e3d1
+fold,cpp,camel_passes.fold.by_cpp,PASS,98.1,34,5,reference run,this-lane run @353d36e3d1
+fold,camel,camel_passes.fold.by_camel,PASS,274.8,34,5,jgir canonical=true vs by_cpp,this-lane run @353d36e3d1
+cse,cpp,camel_passes.cse.by_cpp,PASS,108.7,30,5,reference run,this-lane run @353d36e3d1
+cse,camel,camel_passes.cse.by_camel,PASS,222.9,30,5,jgir canonical=true vs by_cpp,this-lane run @353d36e3d1
+cse,cpp,camel_passes.cse_written_variable.by_cpp,PASS,110.1,-,-,reference run,this-lane run @353d36e3d1
+cse,camel,camel_passes.cse_written_variable.by_camel,PASS,259.8,-,-,jgir canonical=true vs by_cpp,this-lane run @353d36e3d1
+fold,cpp,camel_passes.fold.constant_budget.by_cpp,PASS,86.4,-,-,reference run,this-lane run @353d36e3d1
+fold,camel,camel_passes.fold.constant_budget.by_camel,PASS,247.4,-,-,jgir canonical=true vs by_cpp,this-lane run @353d36e3d1
+cse,cpp,camel_passes.cse.after_inline.by_cpp,PASS,146.4,-,-,reference run,this-lane run @353d36e3d1
+cse,camel,camel_passes.cse.after_inline.by_camel,PASS,296.5,-,-,jgir canonical=true vs by_cpp,this-lane run @353d36e3d1
+inline,cpp,figure1_pipeline.algebra.by_cpp_inline,PASS,345.0,-,-,reference run,this-lane run @353d36e3d1
+inline,camel,figure1_pipeline.algebra.by_camel_inline,PASS,355.9,-,-,jgir canonical=true vs by_cpp_inline,this-lane run @353d36e3d1
+fold,camel,camel_passes.fold.same_text,PASS,216.4,34,5,text (dumps and warnings) vs by_cpp,this-lane run @353d36e3d1
+fold,camel,camel_passes.fold_fault.same_text,PASS,269.4,-,-,text (dumps and warnings) vs by_cpp,this-lane run @353d36e3d1
+cse,cpp,cxx_isolation.algebra_single_x.by_cpp,PASS,244.7,-,-,reference run,this-lane run @353d36e3d1
+cse,camel,cxx_isolation.algebra_single_x.by_camel,PASS,350.3,-,-,jgir canonical=true vs by_cpp,this-lane run @353d36e3d1
+cse,cpp,cxx_isolation.algebra_two_writes.by_cpp,PASS,198.8,-,-,reference run,this-lane run @353d36e3d1
+cse,camel,cxx_isolation.algebra_two_writes.by_camel,PASS,347.5,-,-,jgir canonical=true vs by_cpp,this-lane run @353d36e3d1
+cse,cpp,cxx_isolation.algebra_bound.by_cpp,PASS,280.3,-,-,reference run,this-lane run @353d36e3d1
+cse,camel,cxx_isolation.algebra_bound.by_camel,PASS,348.5,-,-,jgir canonical=true vs by_cpp,this-lane run @353d36e3d1
+cse,cpp,cxx_isolation.algebra_display.by_cpp,PASS,250.7,-,-,reference run,this-lane run @353d36e3d1
+cse,camel,cxx_isolation.algebra_display.by_camel,PASS,418.2,-,-,jgir canonical=true vs by_cpp,this-lane run @353d36e3d1
+inline,cpp,cxx_isolation.inline_closure.by_cpp,PASS,145.4,-,-,reference run,this-lane run @353d36e3d1
+inline,camel,cxx_isolation.inline_closure.by_camel,PASS,232.0,-,-,jgir canonical=true vs by_cpp,this-lane run @353d36e3d1
+inline,cpp,cxx_isolation.inline_budget_zero.by_cpp,PASS,223.9,-,-,reference run,this-lane run @353d36e3d1
+inline,camel,cxx_isolation.inline_budget_zero.by_camel,PASS,244.4,-,-,jgir canonical=true vs by_cpp,this-lane run @353d36e3d1
+inline,cpp,cxx_isolation.inline_recursion.by_cpp,PASS,143.1,-,-,reference run,this-lane run @353d36e3d1
+inline,camel,cxx_isolation.inline_recursion.by_camel,PASS,234.3,-,-,jgir canonical=true vs by_cpp,this-lane run @353d36e3d1
+inline,cpp,cxx_isolation.inline_closure_corpus.by_cpp,PASS,101.7,-,-,reference run,this-lane run @353d36e3d1
+inline,camel,cxx_isolation.inline_closure_corpus.by_camel,PASS,224.5,-,-,jgir canonical=true vs by_cpp,this-lane run @353d36e3d1
+inline,cpp,cxx_isolation.paper_figure1.by_cpp,PASS,117.1,-,-,reference run,this-lane run @353d36e3d1
+inline,camel,cxx_isolation.paper_figure1.by_camel,PASS,218.3,-,-,jgir canonical=true vs by_cpp,this-lane run @353d36e3d1

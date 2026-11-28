@@ -1,0 +1,20 @@
+/**
+ * A rewrite that changes what the program computes without making the graph illegal: the rule
+ * replaces an addition with a subtraction, so every graph it produces is well formed, every port
+ * has its type, every conflict keeps its order, and the commit accepts it. The two values below
+ * are the before/after reading a differential comparison against the unmodified run looks at.
+ */
+import { Rule, rewrite } from rewrite
+
+rule add_becomes_sub(a: int, b: int) { a + b => a - b }
+
+func f(x: int) => int {
+    return x + 1
+}
+
+func main() sync {
+    println(f(5))
+    let rules: Rule[] = [add_becomes_sub]
+    let broken = f->rewrite<rules> !! f
+    println(broken(5))
+}

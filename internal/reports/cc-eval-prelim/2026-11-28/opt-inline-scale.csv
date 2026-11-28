@@ -1,0 +1,24 @@
+# preliminary -- read once, on one commit, not on a quiet host
+# tip: e205a08cc5defae8b904cbc121f665c74a67afd2 (lane/opt-inline-pairs = origin/integration of 2026-11-28)
+# machine: tangshan88 (the 88 host), Release build, tier fast, jobs 4, 1m load ~32-38 during the reading; about 3 of those cores are not Camel (qemu/sidekiq/llm_server), and both sides ran on that one machine, in that one layer -- the times are relative, the machine state is what a reader re-checks
+# date: 2026-11-28
+# reading: camel <case> [<inline pass>] std::stats std::nop, one GRAPH_STATS line per run; GRAPH_STATS carries graphs,nodes,edges,opers,closures,branches (no calls key)
+corpus,side,graphs,nodes,edges,opers,closures,branches,node_delta_vs_before
+inline_figure1,before,4,21,19,7,0,0,0
+inline_figure1,by_cpp,4,30,29,13,0,0,9
+inline_figure1,by_camel,4,30,29,13,0,0,9
+inline_closure,before,6,41,43,9,3,0,0
+inline_closure,by_cpp,6,41,43,9,3,0,0
+inline_closure,by_camel,6,41,43,9,3,0,0
+inline_budget_zero,before,4,16,13,4,0,0,0
+inline_budget_zero,by_cpp,4,16,13,4,0,0,0
+inline_budget_zero,by_camel,4,16,13,4,0,0,0
+inline_recursion,before,3,20,21,5,0,1,0
+inline_recursion,by_cpp,3,20,21,5,0,1,0
+inline_recursion,by_camel,3,20,21,5,0,1,0
+inline_closure_corpus,before,3,14,14,3,1,0,0
+inline_closure_corpus,by_cpp,3,14,14,3,1,0,0
+inline_closure_corpus,by_camel,3,14,14,3,1,0,0
+paper_figure1,before,4,19,16,6,0,0,0
+paper_figure1,by_cpp,4,28,26,12,0,0,9
+paper_figure1,by_camel,4,28,26,12,0,0,9
