@@ -1,7 +1,7 @@
 # Copyright (c) the OpenCML Organization
 # SPDX-License-Identifier: MIT
 
-# The workers of the parallel scheduler (std::tf / std::prl) are threads of tf::Executor, which
+# The workers of the parallel scheduler (std::prl / std::prl) are threads of tf::Executor, which
 # creates them with std::thread: there is no way to say how large their native stack is. That
 # size is the process's stack limit with glibc (8 MiB by default), the value in the executable's
 # header on Windows, and 512 KiB on macOS, where the deepest recursion the default limit allows
@@ -20,13 +20,13 @@ option(CAMEL_TASKFLOW_WORKER_STACK
 
 # What to do when a line this file rewrites is not found.
 set(_camel_taskflow_help
-    "This build rewrites three lines of Taskflow's headers so that the workers of std::tf get an "
+    "This build rewrites three lines of Taskflow's headers so that the workers of std::prl get an "
     "8 MiB stack (cmake/TaskflowWorkerStack.cmake, written against Taskflow 3.10.0; see "
     "docs/technical/06_runtime_and_execution.md, section 4.3). The Taskflow found here is written "
     "differently. Either keep the version of conanfile.txt, or adapt the three patterns of that "
     "file to the new Executor::_spawn and Worker, or configure with "
     "-DCAMEL_TASKFLOW_WORKER_STACK=OFF to build with Taskflow unchanged (workers then have the "
-    "platform's default stack: 512 KiB on macOS, where deep recursion under std::tf will not fit).")
+    "platform's default stack: 512 KiB on macOS, where deep recursion under std::prl will not fit).")
 string(CONCAT _camel_taskflow_help ${_camel_taskflow_help})
 
 function(camel_taskflow_with_worker_stack target)

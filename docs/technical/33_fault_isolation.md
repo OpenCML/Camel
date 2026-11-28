@@ -275,7 +275,7 @@ Windows). Only Linux x86-64 was run. No JIT code was changed.
 | `var` written inside the boundary | **not rolled back** (1.4) |
 | Output buffers | untouched: what was printed stays, in order |
 
-### 3.6 `std::prl` / `std::tf`
+### 3.6 `std::prl` / `std::prl`
 
 Tasks may run on other worker threads. One fact of the existing scheduler makes isolation
 possible without new machinery: **every task flow is joined by the thread that started it**
@@ -414,7 +414,7 @@ fault, would make an isolated fault cost a full collection).
 ## 6. Cost for programs that do not use it
 
 No node kind, no frame field, no check on a call path was added. The changed shared code is
-`reportRuntimeFault` (one thread-local read, on the fault path), in `std::tf` two more words
+`reportRuntimeFault` (one thread-local read, on the fault path), in `std::prl` two more words
 copied when a task inherits its context and three polls of a flag *removed* from the item
 loops, and the registry insert/erase of 4.2 per foreign resource. Measurements are in
 section 8.

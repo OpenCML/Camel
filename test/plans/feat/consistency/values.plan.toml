@@ -72,7 +72,7 @@ golden = "golden/effect_not_used.txt"
 
 [[tests]]
 name = "value.float_compare"
-desc = "IEEE comparisons: NaN equals nothing, itself included; the two zeros are equal. (std::nvm and std::tf compared the bit patterns.)"
+desc = "IEEE comparisons: NaN equals nothing, itself included; the two zeros are equal. (std::nvm and std::prl compared the bit patterns.)"
 case = "../../../cases/consistency/values/float_compare.cml"
 golden = "golden/float_compare.txt"
 

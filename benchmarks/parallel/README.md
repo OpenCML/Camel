@@ -1,6 +1,6 @@
 # Parallel scheduler benchmarks
 
-Programs and scripts for measuring `std::prl` (`std::tf`) against the linear back ends. The
+Programs and scripts for measuring `std::prl` (`std::prl`) against the linear back ends. The
 results and what they mean are in `docs/technical/06_runtime_and_execution.md`, 4.3.2 (cost
 model) and 4.3.3 (serial graphs run as bytecode).
 

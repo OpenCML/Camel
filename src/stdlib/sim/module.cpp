@@ -14,7 +14,7 @@ using namespace camel::core::module;
 SimModule::SimModule(context_ptr_t ctx) : BuiltinModule("sim", ctx) {
     // Both kernels are functions of their arguments: the random generator is local and seeded
     // from the seed argument. Registered pure so that schedulers may run them concurrently
-    // (std::taskflow keeps the elements of a map in order unless the element function is
+    // (std::prl keeps the elements of a map in order unless the element function is
     // provably free of effects) and passes may fold or merge them.
     for (const char *uri : {"sim:pi_hits", "sim:asian_call_price"}) {
         camel::core::OperatorTable::instance().set(uri, {.pure = true, .elementwise = false});

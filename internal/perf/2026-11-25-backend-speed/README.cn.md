@@ -42,7 +42,7 @@
 ## 后端与线程
 
 `std::nvm`、`std::fvm`、`std::jit`、`std::prl`（`--threads 1 / 4 / 16`，`std::prl` 是
-`std::taskflow` 的别名；线程数由命令行 `-t/--threads` 给，不是 pass 参数）。
+`std::prl` 的别名；线程数由命令行 `-t/--threads` 给，不是 pass 参数）。
 
 ## 计时的形状
 

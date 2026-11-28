@@ -60,7 +60,7 @@ PIPELINES = [
     ["std::macro", "std::opt", "std::jit"],
     ["std::cxx::inline", "std::cxx::inline", "std::cxx::inline", "std::cxx::inline", "std::cxx::inline"],
     ["std::opt", "std::cxx::fold", "std::opt", "std::cxx::fold", "std::opt", "std::cxx::fold", "std::opt", "std::cxx::fold", "std::cxx::dce"],
-    ["std::opt", "std::tf"],
+    ["std::opt", "std::prl"],
     ["std::opt", "std::nvm"],
     ["std::opt", "std::fvm"],
     ["std::opt", "std::jit"],

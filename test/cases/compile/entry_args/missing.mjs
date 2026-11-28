@@ -17,7 +17,7 @@ const CAMEL = path.join(REPO_ROOT, 'out', 'latest', 'bin', process.platform === 
 const env = { ...process.env, CAMEL_HOME: process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest') }
 
 let failed = false
-for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
+for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::prl']) {
     const args = ['--diag-format', 'json', path.join(HERE, 'scalars.cml'), '--arg', 'n=3', '--arg', 'name=hi']
     if (pass) args.push(pass)
     const proc = spawnSync(CAMEL, args, { env, encoding: 'utf8' })

@@ -80,7 +80,7 @@ set(CAMEL_STACK_SIZE_BYTES 33554432)
 # /STACK takes a reserve and, optionally, a commit size. Only the reserve is given, so the commit
 # size stays the linker default (one page) and pages are committed as the stack is touched: this
 # is address space, not committed memory. The value is also the default of every thread the
-# process creates on Windows, and a std::tf worker takes the executable's reserve when it is
+# process creates on Windows, and a std::prl worker takes the executable's reserve when it is
 # larger than 8 MiB (kernel/include/camel/utils/big_stack_thread.h), so the workers get it too.
 set(CAMEL_DEBUG_STACK_SIZE_BYTES 134217728)
 function(target_camel_stack_size target)

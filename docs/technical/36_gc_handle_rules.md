@@ -44,7 +44,7 @@ safepoints and nowhere else. A safepoint is reached by exactly these:
 
 | Reached by | Where |
 |---|---|
-| A call of a Camel function | `std::nvm`: entry of every graph. `std::fvm`, `std::jit` (interpreter): every `CALL`, `FUNC`, `TAIL`. `std::tf` / `std::prl`: whenever a worker is outside a region (below) |
+| A call of a Camel function | `std::nvm`: entry of every graph. `std::fvm`, `std::jit` (interpreter): every `CALL`, `FUNC`, `TAIL`. `std::prl` / `std::prl`: whenever a worker is outside a region (below) |
 | A round of a loop | the round boundary of every back end that runs loops in the frame (`loopEnd`, `LEND`): `std::nvm`, `std::fvm`, `std::jit` (compiled or interpreted, `07_jit_architecture.md` 17.9), the macro evaluator and `std::prl` — once per round, before the next round's state is bound |
 | A higher-order operator calling its element function | the same, once per element: `map`, `apply`, `filter`, `reduce`, `foreach` and everything built on them |
 | The macro evaluator | before every static operator, at every function entry, at every node (`lib/std/macro/eval.cpp`) |
@@ -242,7 +242,7 @@ root tracers), and nothing read before a call is used after it.
   of the callee there is no safepoint; the poll comes after the callee frame is filled and
   active. A result goes from the callee's return into the caller's slot without a poll in
   between.
-- **`std::tf` / `std::prl`.** A worker reads and writes object slots only inside a
+- **`std::prl` / `std::prl`.** A worker reads and writes object slots only inside a
   `TaskflowGcRegion`; the collector runs only while no other thread is inside one. Outside
   regions a worker holds frames, graphs, static-area tuples, types and `RootHandle`s, all of
   which stay where they are. A collector that finds another worker inside a long operator waits
