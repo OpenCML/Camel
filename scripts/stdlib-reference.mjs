@@ -4143,9 +4143,11 @@ if (mode === '--write' || mode === '--verify-doc') {
     )
     const mismatched = exampleProblems(coverage)
     for (const problem of mismatched) console.log(problem)
+    // Both kinds are counted on the last lines, whichever there are: a closing line that named only
+    // the documentation problems read as "this is all", and the example problems printed above it
+    // went unread until the first kind was fixed.
     if (problems.length > 0) {
         console.log(`${problems.length} documentation problem(s) in ${checked} compiled example(s)`)
-        process.exit(1)
     }
     if (mismatched.length > 0) {
         // `mismatched` is one line per problem, and a problem is what a member did: it entered a
@@ -4157,8 +4159,8 @@ if (mode === '--write' || mode === '--verify-doc') {
             `${mismatched.length} example problem(s) between the run and the script's records: an example ` +
                 'that entered, one that left, or a marker that is stale -- each is named above',
         )
-        process.exit(1)
     }
+    if (problems.length > 0 || mismatched.length > 0) process.exit(1)
     console.log(
         `every declared name has a description and an @example: ${checked} example(s) checked, ` +
             `${fragments} entry(ies) marked a fragment were compiled too`,

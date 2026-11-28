@@ -194,6 +194,41 @@ check(
     git(remote, ['rev-parse', 'integration']),
 );
 
+// --- a lane pinned to the commit its reading was taken on --------------------------
+// The lane goes on committing after it was queued; the pin merges the commit that was read, and a
+// pin that is not on the branch is no lane to merge.
+git(seat, ['checkout', '--quiet', '-B', 'lane/pinned', 'origin/integration']);
+write(seat, 'p1.txt', 'read\n');
+const pinRead = commit(seat, 'the commit the reading was taken on');
+write(seat, 'p2.txt', 'after the reading\n');
+commit(seat, 'a commit nobody read');
+git(seat, ['checkout', '--quiet', '--detach', 'origin/integration']);
+const pinFile = path.join(root, 'pinned.lanes.json');
+fs.writeFileSync(pinFile, JSON.stringify([
+    { branch: 'lane/pinned', commit: pinRead, reading: 'adds p1.txt' },
+    { branch: 'lane/ff', commit: pinRead, reading: 'a pin that is not on this branch' },
+]));
+const pinned = spawnSync(process.execPath, [tool, '--seat', seat, '--lanes', pinFile, '--build', `node "${buildStub}"`, '--no-fetch'], { encoding: 'utf8' });
+const pinnedOut = `${pinned.stdout ?? ''}${pinned.stderr ?? ''}`;
+const pinnedLine = pinnedOut.split('\n').find((one) => one.startsWith('MERGE_BATCH_RESULT '));
+const pinnedResult = pinnedLine ? JSON.parse(pinnedLine.slice('MERGE_BATCH_RESULT '.length)) : null;
+check(
+    'a pinned lane is merged at the commit that was read, and its later commit does not come with it',
+    pinnedResult !== null &&
+        pinnedResult.merged.length === 1 &&
+        pinnedResult.merged[0].branch === 'lane/pinned' &&
+        git(seat, ['rev-parse', `${pinnedResult.merged[0].sha}^2`]) === pinRead &&
+        pinnedOut.includes('lane/pinned is merged at') &&
+        git(seat, ['ls-tree', '--name-only', pinnedResult.tip]).split('\n').includes('p1.txt') &&
+        !git(seat, ['ls-tree', '--name-only', pinnedResult.tip]).split('\n').includes('p2.txt'),
+    pinnedOut,
+);
+check(
+    'a pin that is not on its branch is skipped and says so',
+    pinnedResult !== null && pinnedResult.skipped.some((one) => one.branch === 'lane/ff' && one.reason.includes('is not on the branch')),
+    JSON.stringify(pinnedResult && pinnedResult.skipped),
+);
+
 // --- with --push: the remote moves to the tool's tip ---------------------------
 // The seat carries the real pre-push hook, so a batch of three merges is pushed through the shape
 // and trailer rules the repository enforces, not past them.
