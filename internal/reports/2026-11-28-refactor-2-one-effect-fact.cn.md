@@ -205,3 +205,78 @@
 **开工前提（现在未满足，故未开工）**：`origin/integration` 尚未包含 `lane/c4-round-source@ae14f65247`（2026-11-28 17:5x 核对：`merge-base --is-ancestor ae14f65247 origin/integration` 退出码 1，只有 `lane/c4-round-source` 带着它）。落地后本枝 rebase 到新 integration 尖端，第一条按 §7 的范围动手。
 
 **同批的边界（已核，不撞）**：`lane-enter-shape` 的 `lane/jgir-accesses`（`git diff --stat origin/integration...lane/jgir-accesses`）只动 `src/stdlib/std/gir/dot/graphviz.cpp`、`src/stdlib/std/gir/json/gir.cpp`、`docs/technical/gir-interchange.md`、`docs/technical/61_capture_census.md`、`scripts/check-capture-census.mjs` 与 `test/cases/trans/*`、几个 `.jgir` 黄金 —— **没有动 `src/kernel/facts/` 的足迹接口，也没有动 `operator_record.h` / `resource_semantics.h`**。它管 jgir 那一份事实，本件管判定函数；第 2 刀（第五项按值）之前再核一次。
+
+## 8 `lane/two-bits-model` 的参考原文（该枝只作材料、不进合并；读到的抄在这里，枝已删）
+
+决策者裁定：该枝的两笔（`Record::accessesOutsideProgram()` 与 `ResourceSignature::pure()`）**正是本件要删的那两份真相之一**，所以它是材料、不是要合进来的东西。下面把它记的两处 `pure()` 与"承诺怎么拼"的原文抄下来，供第 1 刀（§7）直接用。
+
+### 8.1 今天两处 `pure()` 各在哪（本页底，`src/` 未动）
+
+| 位置 | 原文 | 它问的问题 |
+|---|---|---|
+| `src/kernel/ops/include/camel/ops/operator_record.h:487-492` | `bool pure() const { return uses.stated() && !uses.value.externalEffect && !uses.value.functionOperand && !uses.value.allocates && !declaresWrite(); }` | 子句**声明了没写**：已声明、无外部效果、无函数操作数、不分配、没有一条写访问。**读不影响它**。 |
+| `src/kernel/include/camel/core/resource_semantics.h:378-382` | `bool pure() const { return mode == Mode::Concrete && params.empty() && captures.empty() && ambient.empty() && anyOf.empty() && !allocates && !external; }` | 签名**每个部件都空**：`params`/`captures`/`ambient`/`anyOf` 全空、不分配、不外部。**只要读进签名就不纯** —— 与左边那条不是一个判据（这就是"两份真相"的现场：同一句 `pure` 的声明，一处说"没写"，一处说"没访问"）。 |
+
+### 8.2 `lane/two-bits-model` 上"承诺的四个部分"怎么拼（原文）
+
+`cffdb3de2e`（`sem: the signature's pure is the same promise as the record's, read once`）新增**一处判定的内联函数**，在 `src/kernel/include/camel/core/resource_semantics.h:427-441`：
+
+```cpp
+/// What a `pure` clause promises, in four parts, decided once: nothing is written, every access is
+/// to a resource of the program's own, nothing is allocated, and nothing outside the program is
+/// depended on. Both statements of the promise read this and only this -- the declaration's
+/// (`Record::pure`) and the signature's (`ResourceSignature::pure`) -- so a reader cannot find two
+/// answers to one question.
+inline bool
+keepsPurePromise(bool writes, bool accessesOutsideProgram, bool allocates, bool dependsOnOutside) {
+    return !writes && !accessesOutsideProgram && !allocates && !dependsOnOutside;
+}
+```
+
+两处 `pure()` 改成给它**喂四个布尔**（`cffdb3de2e:src/kernel/core/resource_semantics.cpp:606-615`、`:src/kernel/ops/include/camel/ops/operator_record.h:481-491`）：
+
+```cpp
+// 签名侧：把签名自己的部件翻成四个布尔
+bool ResourceSignature::pure() const {
+    return mode == Mode::Concrete && keepsPurePromise(
+                                         writesSomething(*this),
+                                         !ambient.empty(),
+                                         allocates.has_value(),
+                                         external && ambient.empty());
+}
+
+// 记录侧：把子句翻成四个布尔（第二格是 d892f35d72 加进来的"程序自己的"）
+bool pure() const {
+    return sem::keepsPurePromise(
+        !uses.stated() || declaresWrite(),
+        accessesOutsideProgram(),
+        uses.stated() && uses.value.allocates.has_value(),
+        uses.stated() && (uses.value.externalEffect || uses.value.functionOperand));
+}
+```
+
+`d892f35d72`（`ops: reading is not writing, but what a pure clause reads still has to be the program's own`）加的就是第二格那个部件，`Record::accessesOutsideProgram()`（该枝 `src/kernel/core/operator_table.cpp:1275-1290`）：
+
+```cpp
+bool Record::accessesOutsideProgram() const {
+    if (!uses.stated()) {
+        return false;
+    }
+    for (const camel::core::sem::ResourceAccess &access : uses.value.accesses) {
+        // Reading a file or the console is `mode Read` too, so "no write" alone would call such an
+        // operator pure. The resource has to be the program's own: one whose class is not outside,
+        // or one the declaration makes `readonly` ...
+        if (camel::core::sem::reachesOutside(access.resource.cls) && !access.modifiers.readonly) {
+            return true;
+        }
+    }
+    return false;
+}
+```
+
+### 8.3 读到之后的结论（对 §7 第 1 刀的落点）
+
+1. **`keepsPurePromise` 的四格是要的形状**：承诺 = 不写、访问都在程序内、不分配、不依赖程序外 —— 已经是**一处判定**。
+2. **但那枝仍留了两份拼装**：`ResourceSignature::pure()` 自己把 `!ambient.empty()` / `allocates.has_value()` / `external && ambient.empty()` 翻成四格，`Record::pure()` 自己把 `!uses.stated() || declaresWrite()` / `accessesOutsideProgram()` / … 翻成四格 —— 两边各拼一次。这正是决策者说的"要被删的两份真相之一"。第 1 刀要做的是：**`declaresNoWrite(...)` 只留一份拼装**，两个读者各自只交出自己那份事实（记录：子句；签名：测量出的部件），四格的拼装与判定不重复。
+3. **`accessesOutsideProgram` 不新增为记录的第二个方法**：它是同一句"读的必须是程序自己的"在记录侧的又一次拼装；若保留，只能作为 `declaresNoWrite` 的**输入之一**，不许再自成一份判定。
+4. **pre-publish 自检那一笔已被取代**：`bbed9dd32b`（`pure && (writes || allocates || externalEffect || functionOperand)` ⇒ 拒绝，用 `std::any_of` 内联问 `sem::writes`）后来由 `lane/c4-round-source@63384055bc` 改成 `sem::writesSomething(sem::signatureOf(r, 0))` + 文案 `a pure operator writes a resource`。第 1 刀以 `c4-round-source` 那一版为准（它是合并位那一批），`bbed9dd32b` 只作形状参考。
