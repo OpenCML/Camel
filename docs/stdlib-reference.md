@@ -6911,13 +6911,13 @@ the values it captured, sharing every graph nothing changed. The draft is over.
 #### `commit_of`
 
 ```camel
-commit_of: (d: Graph, f: F) => F! when is_function::<F>()
+commit_of: (d: Draft<F>, f: F) => F! when is_function::<F>()
 ```
 
 The commit an edit block's lowering calls: the same commit, with the function the draft was
-opened from as a witness. The draft is a `Graph`, which does not say what the commit gives, and
-the block's expected type cannot reach into the closure's body where the commit is written;
-design `docs/design/graph-editing/README.cn.md` 2 gives the fallback as `f`'s type, and 5 has
+opened from as a witness. The draft already says what it gives (`Draft<F>`), and the witness is
+what the block's expected type cannot reach into the closure's body for; design
+`docs/design/graph-editing/README.cn.md` 2 gives the fallback as `f`'s type, and 5 has
 the draft remember the function it opened. Internal: written by the compiler, never named by a
 program.
 
