@@ -8333,8 +8333,10 @@ Adding a rule changes docs/stdlib-reference.md; regenerate it with
 lift: (x: T) => Lift<T>
 ```
 
-`x` lifted: the value, and the zero tangent of its type -- the empty tuple for a type that has
-no tangent, a tensor of zeros for a tensor, and each member's own zero for a tuple or a struct.
+`x` lifted: the value, and the zero tangent of its type -- the zero of a number or a `bool`
+(which are their own tangent space), a tensor of zeros for a tensor, and each member's own zero
+for a tuple or a struct whose members all have one. A `string` and a function have no tangent
+space, and the empty tuple stands for it: a value that carries no data and that a rule ignores.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `lift(3.0)` gives `(3.0, 0.0)`
