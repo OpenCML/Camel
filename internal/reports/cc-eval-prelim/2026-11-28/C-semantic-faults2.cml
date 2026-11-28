@@ -1,0 +1,30 @@
+/**
+ * Two more rewrites that change what a program computes while leaving every graph legal: one flips a
+ * comparison, one folds a constant to the wrong value. Each is applied to a function of its own, so
+ * the four printed lines are "before, before, after, after" for the two injections: 1 < 3 is true and
+ * the flipped one is false; 5 * 2 is 10 and the mis-folded one is 8. No refusal, no diagnostic.
+ */
+import { Rule, rewrite } from rewrite
+
+rule flip_lt(a: int, b: int) { a < b => a > b }
+
+rule double_becomes_plus_three(a: int) { a * 2 => a + 3 }
+
+func less(x: int, y: int) => bool {
+    return x < y
+}
+
+func dbl(x: int) => int {
+    return x * 2
+}
+
+func main() sync {
+    println(less(1, 3))
+    println(dbl(5))
+    let flip: Rule[] = [flip_lt]
+    let bad_less = less->rewrite<flip> !! less
+    println(bad_less(1, 3))
+    let mis_fold: Rule[] = [double_becomes_plus_three]
+    let bad_dbl = dbl->rewrite<mis_fold> !! dbl
+    println(bad_dbl(5))
+}
