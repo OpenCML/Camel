@@ -307,8 +307,8 @@ git(maker, ['push', '--quiet', 'origin', 'red-base']);
 const remoteBefore = git(remote, ['rev-parse', 'integration']);
 const redBase = run(['--push', '--base', 'origin/red-base']);
 check(
-    'a base that does not build stops the tool with its own exit code (4)',
-    redBase.status === 4,
+    'a base that does not build stops the tool with its own exit code (7)',
+    redBase.status === 7,
     redBase.out,
 );
 check(
@@ -652,6 +652,41 @@ check(
         git(readRemote, ['cat-file', '-e', `${stackedTip}:src/stack_second.cpp`]) === '' &&
         stacked.result && stacked.result.stackedOn === firstTip,
     `${firstLanded.stdout ?? ''}${firstLanded.stderr ?? ''}${stacked.out}`,
+);
+
+// A lane whose added lines carry a process trace is dropped before the build, with the line the
+// repository's own checker found; a clean lane beside it is merged. The seat gets the checker the
+// way a real one has it: as a file of the integration tip.
+git(readMaker, ['fetch', '--quiet', 'origin', 'integration']);
+git(readMaker, ['checkout', '--quiet', '-B', 'with-checker', 'origin/integration']);
+write(readMaker, 'scripts/check-process-traces.mjs', fs.readFileSync(path.resolve(here, '..', '..', 'scripts', 'check-process-traces.mjs'), 'utf8'));
+commit(readMaker, 'the tip carries the process-trace checker');
+git(readMaker, ['push', '--quiet', 'origin', 'with-checker:integration']);
+// The branch name is joined here so that this file holds no lane name of its own.
+laneFrom('lane/traced', 'src/trace.cpp', `// see ${'lane'}/some-branch for why\nint traced() { return 1; }\n`);
+laneFrom('lane/untraced', 'src/untraced.cpp', 'int untraced() { return 1; }\n');
+const traced = spawnSync(
+    process.execPath,
+    [
+        tool, '--seat', readSeat,
+        '--lane', 'lane/traced=adds a unit with a comment naming a lane',
+        '--lane', 'lane/untraced=adds a unit with no comment',
+        '--build', `node "${builtStub}"`,
+        '--read', `node "${readStub}" "{seat}" {plans}`,
+        '--base', 'origin/integration',
+    ],
+    { encoding: 'utf8', timeout: 120000 },
+);
+const tracedOut = `${traced.stdout ?? ''}${traced.stderr ?? ''}`;
+const tracedLine = tracedOut.split('\n').find((one) => one.startsWith('MERGE_BATCH_RESULT '));
+const tracedResult = tracedLine ? JSON.parse(tracedLine.slice('MERGE_BATCH_RESULT '.length)) : null;
+const tracedSkip = tracedResult && tracedResult.skipped.find((one) => one.branch === 'lane/traced');
+check(
+    'a lane whose added lines carry a process trace is skipped before the build with the hook\'s reason and the line, and the clean lane is merged',
+    (traced.status ?? -1) === 0 && tracedResult && names(tracedResult.merged) === 'lane/untraced' &&
+        tracedSkip && tracedSkip.reason.includes('process traces, which the pre-push hook refuses') &&
+        /src[\\/]trace\.cpp:1/.test(tracedSkip.reason) && !tracedOut.includes('could not read'),
+    tracedOut,
 );
 
 fs.rmSync(readRoot, { recursive: true, force: true });

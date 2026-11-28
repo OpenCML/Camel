@@ -70,11 +70,18 @@
  * builds on the host and runs nothing else. The default plan run is the same script with `-Plan` and
  * `-Tier fast`, the layer the promotion's red table is measured on.
  *
+ * A lane whose own added lines carry process traces (the check the pre-push hook runs, when the seat
+ * has it) is skipped before the build, with the lines it found; a check that cannot read a lane is
+ * reported and the lane merges unchecked.
+ *
  * Exit codes: 0 done (lanes may have been skipped; read the summary), 2 the tool could not do its
- * job (bad arguments, dirty seat, a build that did not run, touched plans that could not be
- * selected, a plan run that left no summary), 3 the push was refused, 4 the integration tip itself
- * does not build (nothing dropped, nothing pushed; fix the tip first), 5 the plans the batch touched
- * have reds the newest promotion does not (nothing pushed; the reds are printed).
+ * job (bad arguments, dirty seat, a git command that failed, a build or plan run that gave no
+ * verdict, touched plans that could not be selected, a plan run that left no summary or no timing
+ * rows, no promotion red table to compare with), 3 the push was refused, 4 the seat's checkout was
+ * held by another run (the code camel-remote gives for it), 5 the plans the batch touched have reds
+ * the newest promotion does not (nothing pushed; the reds are printed), 6 the batch this one stacks
+ * on did not land (nothing pushed), 7 the integration tip itself does not build (nothing dropped,
+ * nothing pushed; fix the tip first). One code, one meaning.
  */
 
 import { spawnSync } from 'node:child_process'
@@ -537,6 +544,33 @@ function main() {
         return { lane, sha: found.out }
     }).filter((one) => one.sha !== undefined)
 
+    // The pre-push hook refuses a push whose added lines carry process traces, and it says so only
+    // after the build and the reading; asking the same checker about each lane's own added lines
+    // first keeps one lane from costing the whole batch that wait. Returns the first hit lines
+    // (up to three, joined) when the lane carries traces, otherwise null. A seat without the checker
+    // is not asked; a checker that cannot read the lane is reported and the lane merges unchecked.
+    const processTraces = (lane, sha) => {
+        const checker = path.join(seat, 'scripts', 'check-process-traces.mjs')
+        if (!fs.existsSync(checker)) return null
+        const unchecked = (why) => {
+            process.stdout.write(`merge-batch: the process-trace check could not read ${lane.branch} (${why}); merging it unchecked\n`)
+            return null
+        }
+        const base = git(['merge-base', baseSha, sha], { allowFailure: true })
+        if (base.code !== 0 || !base.out) return unchecked('no merge base with the integration tip')
+        const run = spawnSync(process.execPath, [checker, '--root', seat, '--range', `${base.out}..${sha}`], {
+            encoding: 'utf8',
+            maxBuffer: 256 * 1024 * 1024,
+        })
+        if (run.error) return unchecked(run.error.message)
+        const out = run.stdout || ''
+        if (run.status === 0) return null
+        if (run.status !== 1) return unchecked(`exit ${run.status}: ${out.trim().split('\n')[0] || (run.stderr || '').trim().split('\n')[0] || 'no output'}`)
+        const hits = out.split('\n').filter((line) => /^ {2}\S/.test(line)).map((line) => line.trim())
+        if (hits.length === 0) return unchecked(`exit 1 with no listed line: ${out.trim().split('\n')[0] || 'no output'}`)
+        return hits.slice(0, 3).join('; ')
+    }
+
     const mergeAll = (candidates, afterReason) => {
         for (const { lane, sha } of candidates) {
             if (sha === null) {
@@ -545,6 +579,11 @@ function main() {
             }
             if (git(['merge-base', '--is-ancestor', sha, 'HEAD'], { allowFailure: true }).code === 0) {
                 skipped.push({ branch: lane.branch, reason: 'already in the tip' })
+                continue
+            }
+            const traces = processTraces(lane, sha)
+            if (traces) {
+                skipped.push({ branch: lane.branch, reason: `its added lines carry process traces, which the pre-push hook refuses: ${traces}` })
                 continue
             }
             const result = mergeOne(lane, sha, args.integration)
@@ -573,7 +612,7 @@ function main() {
                 buildSeconds += probe.seconds
                 builds += 1
                 if (!probe.timedOut && probe.code === args.redExit) {
-                    fail(4, `the integration tip itself does not build (${baseSha.slice(0, 12)}); no lane is to blame, none was dropped and nothing was pushed; fix the tip first`)
+                    fail(7, `the integration tip itself does not build (${baseSha.slice(0, 12)}); no lane is to blame, none was dropped and nothing was pushed; fix the tip first`)
                 }
                 if (probe.timedOut || probe.code !== 0) {
                     fail(2, `${noVerdict(probe, args.redExit)}; nothing was pushed and no lane was dropped`)
