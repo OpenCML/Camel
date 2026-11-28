@@ -170,3 +170,68 @@ export func mymap::<T, U>(xs: T[], f: (item: T) => U) => U[] {
 - 箭头写法不存在是 5.9 已写明的规则，不是缺陷。
 
 ⇒ 下一步（未做，等指令）：把 `visitComprehension` 造的 lambda 改成"形参不写类型"的普通 lambda（不再 `TypeVarType::create("$element"…)`），位置与 `with` 传递方式不变。
+## 8 第二刀的改动面（只读准备）：`SCHD` 22 处**改前清单**
+
+本节的用途只有一个：第 (4) 步的验收是"逐处消失、或搬进 `LOOP` 侧"，**没有这份改前清单就没有验收**。命令与输出取自 `lane/map-as-loop`、`tip f229687410`、`dirty 0`：
+
+```
+git grep -n 'SCHD' -- src      # 22 处
+```
+
+第一刀已落（`f229687410`：`visitComprehension` 的元素函数不再造 `$elementN`，形参站 `void` 并由位置（5.9）定型；`git grep '$element' -- src` 为空）。第二刀按 **(1) 降低产出 `LOOP` → (2) 内核图内联进循环体区域 → (4) `SCHD` 所有权搬给 `LOOP` → (3) 删旧路** 的顺序；删旧路放最后，因为不可逆，且只有前三步在三后端逐字节相等时才敢删，先删会失去对照。"应搬"指搬到 `LOOP` 侧（`LBEG/LTST/LEND` + `ExecLoop`），不是换个名字留着。
+
+### 8.1 A 组：操作码本体（**应消失**）
+
+| 位置 | 是什么 | 处置 |
+|---|---|---|
+| `src/stdlib/std/fvm/bytecode.h:43` | `SCHD` 枚举项（"Use fastop[0] as the scheduling strategy ID"） | 应消失（操作码不再存在） |
+| `src/stdlib/std/fvm/bytecode.h:123` | "BRCH .. SCHD: variable-arity instructions" 注释 | 应消失（区间尾改到 `LEND`） |
+| `src/stdlib/std/fvm/bytecode.h:139` | 变长指令的编码/长度判定里的 `case OpCode::SCHD` | 应消失 |
+| `src/stdlib/std/fvm/bytecode.h:295` | 另一处 `case OpCode::SCHD` 分派 | 应消失 |
+| `src/stdlib/std/fvm/bytecode.cpp:34-35` | `SCHD` 的名字表项（反汇编用） | 应消失 |
+| `src/stdlib/std/fvm/bytecode.cpp:182` | 解码路径里的 `case OpCode::SCHD` | 应消失 |
+
+### 8.2 B 组：标记与发射（**应搬去 `LOOP` 侧，或消失**）
+
+| 位置 | 是什么 | 处置 |
+|---|---|---|
+| `src/stdlib/std/fvm/compile.cpp:61-80` `markOpCodeOf` | `ElementShape` → `MarkOpCode`（"这个算子调用要逐元素跑"） | 应搬：这一判断的产出改为"编成 `LOOP` 区间"；函数本身不再保留 |
+| `src/stdlib/std/fvm/compile.cpp:587` | 发 `OpCode::SCHD` 的那一处 | 应搬：改发 `LBEG/LTST/LEND` |
+| `src/stdlib/std/fvm/bytecode.h:424` | `MarkOpCode mark; // for SCHD` 字段 | 应消失（随 `SCHD`） |
+| `src/stdlib/std/builtin/executors/builtin_semantics.cpp:226-230` | `elementCalls` 形状表（`:mark/map_arr` → `Map` 等） | **保留**：这是**语义事实**，`src/kernel/runtime/resources.cpp:629` 的 `Fold` 判定还读它。去掉的只是**它到操作码的那一段**（上两行）。**不要把"表还在"当成"没搬干净"** |
+
+### 8.3 C 组：解释器（**应消失**）
+
+| 位置 | 是什么 | 处置 |
+|---|---|---|
+| `src/stdlib/std/fvm/gotovm.cpp:241` | 跳表里的 `label_SCHD` 项 | 应消失 |
+| `src/stdlib/std/fvm/gotovm.cpp:895` | `label_SCHD` handler（元素调用的解释器入口） | 应消失（循环由 `:416/426/439` 的 `LBEG/LTST/LEND` 跑） |
+| `src/stdlib/std/fvm/fastvm.cpp:1176-1179` | 调用里遇 `SCHD` 转交 gotovm 的那条回落分支与注释 | 应消失 |
+| `src/stdlib/std/fvm/fastvm_stats.cpp:133` | 统计里认 `blocker.kind == "SCHD"` | 应搬：记到 `LOOP` / 轮上 |
+
+### 8.4 D 组：JIT（**应消失**；`:471-472` 是判据点名的一处）
+
+| 位置 | 是什么 | 处置 |
+|---|---|---|
+| `src/stdlib/std/fvm/jit/backend/x64/x64_backend.cpp:471-472` | 链接期遇 `SCHD` 就整图回落（"unsupported opcode SCHD"） | **必须消失**——否则等于没搬（判据点名） |
+| `src/stdlib/std/fvm/jit/backend/x64/x64_backend.cpp:1699` | 已编图里遇 `SCHD` → `emitExitToDriver(Interp)` | 应搬：轮内执行后这条出口归 `LOOP` 的一轮结束 |
+| `src/stdlib/std/fvm/jit/backend/backend.h:81` | "…BRCH-match、JOIN-match、SCHD、frame-too-large" 回落条件注释 | 应消失 |
+| `src/stdlib/std/fvm/jit/mir/mir.h:204` | `Interp = 3 // CALL or SCHD at exitPc` 注释 | 应消失（只剩 `CALL`） |
+| `src/stdlib/std/fvm/jit/regalloc/regalloc.cpp:305` | 变长指令列表里的 `SCHD` | 应消失 |
+| `src/stdlib/std/fvm/jit/regalloc/regalloc.cpp:336` | `case OpCode::SCHD` 的寄存器处置 | 应消失 |
+
+### 8.5 E 组：注释（**应改写**）
+
+| 位置 | 是什么 | 处置 |
+|---|---|---|
+| `src/stdlib/std/exec/include/camel/execute/operator_call.h:9` | "一行怎么丢的：`SCHD` 指令……" 那段注释 | 应改写：改成"轮由 `LOOP` 区间跑"的口径 |
+
+### 8.6 接收方（**现成、不改语义**）
+
+`src/stdlib/std/fvm/bytecode.h:46-52`（`LBEG/LTST/LEND`）、`src/kernel/include/camel/runtime/exec_plan.h:72`（`ExecLoop`：`iterates/hasCond/collectionCount/stateComponents/stateCount`）、`gotovm.cpp:416/426/439`（三个 handler）、`x64_backend.cpp:257`（`loopRoundsOf`）与 `:313-336`（轮形状判定）。**后端不得各自补语义**（第 2 节末）。
+
+### 8.7 验收（第 (3)(4) 步共用）
+
+- (4)：上表每一处**要么消失、要么搬进 `LOOP` 侧**，逐处对照本清单列出；`x64_backend.cpp:471-472` 必须消失。
+- (3)：删旧路**前后**五个基准程序三后端 stdout 逐字节相同（`fib 53A000093408DFA6` / `loop 2B1CD2AD9DCBBEC4` / `tensor 07E6B571983FCC62` / `closure C08FD1D4AD6EDD41` / `tasks 46543F0BDB8A937E`）；`feat/opt`、`feat/compile`、`smoke` 逐名新增红 0；**不许改任何期望**。
+- 每步一笔、`dirty 0`、两行 `rev-parse` 相等、不 push。
