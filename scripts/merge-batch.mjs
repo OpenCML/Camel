@@ -279,6 +279,10 @@ function runBuild(command, label) {
         } else {
             process.stdout.write('  (the run left no HELD record under test/results/log; read the lines above)\n')
         }
+        // The run's own code is kept: 4 means "this checkout has an owner already" for camel-remote,
+        // and a batch that reported it as "the sources do not build" would send its reader to the wrong
+        // problem. The record above says which of the two this was.
+        fail(4, "the seat's checkout was held by another run; the record above names the holder and the command that ends it")
     }
     return { code: run.code ?? -1, seconds, timedOut: run.timedOut }
 }
