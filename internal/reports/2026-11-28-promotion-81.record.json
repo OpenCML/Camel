@@ -1,0 +1,88 @@
+{
+  "kind": "promotion",
+  "promotion": 81,
+  "tip": "fbdc5de8e1f499739a3de2778823243a9767f0a4",
+  "measured_tip": "fbdc5de8e1f499739a3de2778823243a9767f0a4",
+  "pushed_develop_sha": "fbdc5de8e1f499739a3de2778823243a9767f0a4",
+  "landing_tip": "the record is a documentation commit and lands on whatever integration holds at push time; the tip this layer measured was read with git rev-parse origin/integration^{commit} at the moment the run started, and anything that arrived in integration afterwards is not part of this layer",
+  "note": "the layer was measured at fbdc5de8e1f4, the tip carrying the repair of the eightieth layer's one new red: the canonical-header guard's own --fix rewrote the evaluation report script, so the guard passes again and the tree it guards is unchanged in meaning. Between the eightieth reading and this one, twenty-eight commits arrived, seventeen of them build paths, including the whole of seat/batch18 built and read at 995a0e51965b, and none of it moved a verdict",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at fbdc5de8e1f4; load 1m 40.15 at the start of the run",
+  "binary_built": "2026-11-28T16:02:03+08:00",
+  "readings": {
+    "total": 9929,
+    "pass": 9735,
+    "fail": 133,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 0,
+    "re_run": 0,
+    "re_run_passed": 0,
+    "load_before": "1m 40.15, 5m 39.06, 15m 37.80",
+    "load_warning": "[load] WARNING: 1m load 40.15 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth to eighthy layers carried; a promotion does not wait on load, D-1128-36). The 1m value was a shade over the 40 the coordinator set as the start condition and the decision was to read in this window rather than wait for a perfectly quiet one, since one does not come; the number is written down as it was rather than rounded or waited away"
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-79-reds.tsv (141 names), which is the table a tool selects by a landed promotion; the eightieth layer found a new red and so has no pushed_develop_sha, and its table is not selected. Both baselines were computed, and they agree on this layer: nothing appeared against either",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], with the plan aliases transforms/compile.transforms and stated_extents/compile.stated_extents read as the same plan; this reading writes the bare names transforms (8 rows) and stated_extents (1 row), the same spelling the seventy-ninth table holds",
+    "still_red": 133,
+    "turned_green": 9,
+    "turned_green_names": [
+      "modules.graph|constant_folding_makes_a_value",
+      "modules.graph|constant_folding_survives_a_safepoint",
+      "modules.rules|rules.alternate_alternates_rounds",
+      "modules.rules|rules.repeat_counts_rounds",
+      "modules.rules|rules.repeat_honours_the_budget",
+      "modules.rules|rules.until_honours_the_budget",
+      "modules.rules|rules.until_reads_the_predicate_before_a_round",
+      "opt.commit_refusal|commit_refusal.loop_body_read",
+      "docs.headers|docs.headers.canonical"
+    ],
+    "turned_green_split": {
+      "against_the_seventy_ninth_table": 8,
+      "against_the_eightieth_table": 1,
+      "note": "eight names are green against the seventy-ninth table and the ninth, docs.headers|docs.headers.canonical, is green against the eightieth table, because it was that table's one new red"
+    },
+    "turned_green_kind": {
+      "modules.graph|constant_folding_makes_a_value": "fixed: the constant-folding lane corrected the behaviour these two cases state",
+      "modules.graph|constant_folding_survives_a_safepoint": "fixed: same lane, same reason",
+      "modules.rules|rules.alternate_alternates_rounds": "fixed: the rules lane's correction of round counting and budget arithmetic",
+      "modules.rules|rules.repeat_counts_rounds": "fixed: same lane",
+      "modules.rules|rules.repeat_honours_the_budget": "fixed: same lane",
+      "modules.rules|rules.until_honours_the_budget": "fixed: same lane",
+      "modules.rules|rules.until_reads_the_predicate_before_a_round": "fixed: same lane",
+      "opt.commit_refusal|commit_refusal.loop_body_read": "fixed: the case material was re-pinned by lane/cc-eval-prelim-2, so the case now reads the name the refusal actually names; a fixed case, not a changed verdict and not a deleted one",
+      "docs.headers|docs.headers.canonical": "fixed: the guard's own --fix rewrote internal/reports/cc-eval-prelim/2026-11-28/make-C-gen.py with the two header lines it was missing; this is the guard repairing a file, not a verdict that changed and not a case that was deleted, and the file's meaning is untouched"
+    },
+    "new_reds": 0,
+    "new_reds_names": [],
+    "vanished_reds": 0,
+    "arithmetic": "141 names against the seventy-ninth table: 8 turned green, 0 vanished, 0 appeared, 133 remain red; plus the eightieth table's one red is now green, so the layer holds 133 red. Against the eightieth table's 134: 1 turned green, 0 appeared, 133 remain",
+    "total_delta": "zero: the layer declares 9929 entries, the same count the eightieth layer declared, and no case was added, removed or moved between layers. The only declared-set change since the seventy-ninth layer remains the eight cases the eightieth layer reported",
+    "notes": [
+      "seat/batch18 arrived in this layer's coverage and changed no verdict: it is built and read at 995a0e51965b and its reading was plan-scoped, so this is the first whole-layer reading that includes it",
+      "the layer was read at 1m 40.15, a shade over the coordinator's start condition, and the reading was taken rather than deferred: the shape of the day suggests a quiet window is not coming, and a number written down beats a number hoped for",
+      "no case timed out in this layer and none was re-run; fault_deep.prl_off is absent for the fifteenth round running because the scheduler root-cause fix holds",
+      "the lesson the eightieth layer wrote down is confirmed here rather than just stated: repairing the header and reading the whole layer again turns exactly that one red green and leaves the other 133 where they were"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 0,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [],
+    "how": "the layer reported timed_out 0 and re_run 0, so there was no timeout to run alone"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-81-reds.tsv",
+  "red_table_rows": 133,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-81-reds.tsv (133 names)",
+  "new_red_names": [],
+  "pushed_as": "develop, fast-forwarded from 35c115adbd47 to fbdc5de8e1f4, the tip this layer measured",
+  "develop_before": "35c115adbd472f8e307d6d3c3115924770f5874e",
+  "develop_after": "fbdc5de8e1f499739a3de2778823243a9767f0a4",
+  "commits_brought_in": 28,
+  "commits_touching_src": 17
+}
