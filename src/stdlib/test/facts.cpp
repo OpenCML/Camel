@@ -338,7 +338,7 @@ FactStoreTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     // ---- A fact on a graph a later commit did not change: a pin, not a red->green -----------
     //
     // This is a **pin**, not a case that was red before the change it guards. Measured on the
-    // tree before the change (`origin/integration` at 0fb33bc32f, probe run of this pass):
+    // tree before the change (a probe run of this pass):
     //
     //   FACTS probe_two_commits_f valid ; FACTS probe_old_program_f valid ; FACTS
     //   probe_same_program_f valid

@@ -385,7 +385,7 @@ expect_stderr_contains = ["the effects of a draft are not computed: a draft has 
 # A pin, not a red->green: a fact recorded on a graph no commit changed was already found after a
 # further commit on the tree before the `Anchor` change, measured with a probe run of `test::facts`
 # (`FACTS probe_two_commits_f valid ; FACTS probe_old_program_f valid ; FACTS probe_same_program_f
-# valid`, `origin/integration` at 0fb33bc32f). The reason is written where the lines are printed
+# valid`). The reason is written where the lines are printed
 # (facts.cpp): a commit copies a graph keeping its GraphId and its revision, and a stamp is the
 # closure hash of those ids and revisions. So this entry says what taking the Program out of an
 # anchor's identity must not lose; it was green before that change and must stay green after it.
