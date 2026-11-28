@@ -15,7 +15,6 @@ import { encode } from bytes
 func sha256_bytes(data: Bytes) => string
 
 /// The SHA-256 digest of a `Bytes` value, as 64 lower-case hexadecimal digits.
-/// @example-fragment the example builds its `Bytes` value with `encode` from the `bytes` module, which this page does not import
 /// @example sha256(encode('abc'))    // 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
 export func sha256(data: Bytes) => string {
     return sha256_bytes(data)

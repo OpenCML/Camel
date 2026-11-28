@@ -45,8 +45,11 @@
  * that has no such trailer.
  *
  * Usage:
- *   node scripts/merge-batch.mjs --seat <worktree> --lane <branch>=<reading> [--lane ...]
- *        [--lanes <file.json>]      a JSON array of {"branch": ..., "reading": ...}
+ *   node scripts/merge-batch.mjs --seat <worktree> --lane <branch>[@<commit>]=<reading> [--lane ...]
+ *        [--lanes <file.json>]      a JSON array of {"branch": ..., "commit": ..., "reading": ...}
+ *                                   (`commit` optional). A lane with a commit is merged at it -- the
+ *                                   commit the reading was taken on -- not at whatever its branch
+ *                                   grew to after it was queued; the commit must be on the branch.
  *        [--build <command>]        run in the seat; {seat} is replaced by the seat path
  *        [--red-exit <n>]           the build's exit code that means "the sources do not build"
  *        [--build-timeout <s>]      a build still running after this long is ended with its whole tree
@@ -92,6 +95,13 @@ function fail(code, why) {
     process.exit(code)
 }
 
+// `<branch>` or `<branch>@<commit>`: the second merges the branch at the commit its reading was
+// taken on. A branch name holds no `@`, so the last one splits the two.
+function laneSpec(name, reading) {
+    const at = name.lastIndexOf('@')
+    return at > 0 ? { branch: name.slice(0, at), pin: name.slice(at + 1), reading } : { branch: name, reading }
+}
+
 function parseArgs(argv) {
     const out = {
         seat: null,
@@ -120,7 +130,7 @@ function parseArgs(argv) {
             const spec = value()
             const at = spec.indexOf('=')
             if (at <= 0) fail(2, `--lane needs <branch>=<reading>, got '${spec}'`)
-            out.lanes.push({ branch: spec.slice(0, at), reading: spec.slice(at + 1) })
+            out.lanes.push(laneSpec(spec.slice(0, at), spec.slice(at + 1)))
         } else if (name === '--lanes') out.lanesFile = value()
         else if (name === '--build') out.build = value()
         else if (name === '--red-exit') out.redExit = Number(value())
@@ -143,7 +153,11 @@ function parseArgs(argv) {
             fail(2, `${out.lanesFile} could not be read as JSON: ${error.message}`)
         }
         if (!Array.isArray(list)) fail(2, `${out.lanesFile} must hold a JSON array`)
-        for (const one of list) out.lanes.push({ branch: String(one?.branch ?? ''), reading: String(one?.reading ?? '') })
+        for (const one of list) {
+            const named = laneSpec(String(one?.branch ?? ''), String(one?.reading ?? ''))
+            if (one?.commit) named.pin = String(one.commit)
+            out.lanes.push(named)
+        }
     }
     if (out.lanes.length === 0) fail(2, 'no lane given (--lane <branch>=<reading> or --lanes <file>)')
     const seen = new Set()
@@ -435,10 +449,27 @@ function main() {
 
     const skipped = []
     const merged = [] // { lane, sha } in merge order; the chain the build search runs over
+    // A lane given as <branch>@<commit> is merged at that commit: the reading was taken there, and a
+    // lane that went on committing after it was queued would otherwise bring commits nobody read.
+    // The commit must still be on the branch, so a pin cannot name work the lane has dropped.
     const resolved = args.lanes.map((lane) => {
-        const found = git(['rev-parse', '--verify', '--quiet', `${lane.branch}^{commit}`], { allowFailure: true })
-        return { lane, sha: found.code === 0 ? found.out : null }
-    })
+        const target = lane.pin ?? lane.branch
+        const found = git(['rev-parse', '--verify', '--quiet', `${target}^{commit}`], { allowFailure: true })
+        if (found.code !== 0) return { lane, sha: null }
+        if (lane.pin) {
+            const onBranch = git(['merge-base', '--is-ancestor', found.out, `${lane.branch}^{commit}`], { allowFailure: true })
+            if (onBranch.code !== 0) {
+                skipped.push({ branch: lane.branch, reason: `${lane.pin} is not on the branch` })
+                return { lane, sha: undefined }
+            }
+            const tip = git(['rev-parse', `${lane.branch}^{commit}`]).out
+            if (tip !== found.out) {
+                const ahead = git(['rev-list', '--count', `${found.out}..${tip}`]).out
+                process.stdout.write(`merge-batch: ${lane.branch} is merged at ${found.out.slice(0, 12)}, ${ahead} commit(s) before its tip\n`)
+            }
+        }
+        return { lane, sha: found.out }
+    }).filter((one) => one.sha !== undefined)
 
     const mergeAll = (candidates, afterReason) => {
         for (const { lane, sha } of candidates) {

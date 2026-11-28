@@ -2044,8 +2044,7 @@ what the generic form is written with when the library takes it, and this name k
 that shape until then.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example (a fragment, not compiled): `let step = has_aux(func (w: float) { (w * 2.0, w) })`
-- Why it is not compiled: `loss` must be a function of one parameter whose result is a pair, and that takes a declaration, so the example is a fragment of a program that declares it
+- Example: `let step = has_aux(func (w: float) { (w * 2.0, w) })`
 
 <a id="tensor"></a>
 
@@ -5199,8 +5198,7 @@ The whole content of a file, every byte preserved.
 
 - With effects: reads a file.
 - Failure: error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the read; error value `IOError` when the path is a directory or the read fails for another reason.
-- Example (a fragment, not compiled): `'pixels.bin'->read_bytes !! encode('')` gives `the bytes of the file`
-- Why it is not compiled: the example builds its default `Bytes` with `encode` from the `bytes` module, which this page does not import
+- Example: `'pixels.bin'->read_bytes !! encode('')` gives `the bytes of the file`
 
 #### `read_chunk`
 
@@ -5213,8 +5211,7 @@ it. Reading a large file piece by piece is `read_chunk` with a growing offset.
 
 - With effects: reads a file.
 - Failure: fault `InvalidArgument` when offset or size is negative; error value `NotFound`, `PermissionDenied` or `IOError` as for `read_bytes`.
-- Example (a fragment, not compiled): `'notes.txt'->read_chunk<0, 16> !! encode('')` gives `the first 16 bytes`
-- Why it is not compiled: the example builds its default `Bytes` with `encode` from the `bytes` module, which this page does not import
+- Example: `'notes.txt'->read_chunk<0, 16> !! encode('')` gives `the first 16 bytes`
 
 ### Writing
 
@@ -5243,8 +5240,7 @@ Replaces the content of the file at path with bytes; creating, atomic and errors
 
 - With effects: writes a file.
 - Failure: error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason (no space left included).
-- Example (a fragment, not compiled): `encode('abc')->write_bytes<'payload.bin', atomic: true>`
-- Why it is not compiled: the example builds its `Bytes` with `encode` from the `bytes` module, which this page does not import
+- Example: `encode('abc')->write_bytes<'payload.bin', atomic: true>`
 
 #### `append_text`
 
@@ -5268,8 +5264,7 @@ Adds bytes to the end of the file at path; creating and errors as for `append_te
 
 - With effects: writes a file.
 - Failure: error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason.
-- Example (a fragment, not compiled): `encode('abc')->append_bytes<'payload.bin'>`
-- Why it is not compiled: the example builds its `Bytes` with `encode` from the `bytes` module, which this page does not import
+- Example: `encode('abc')->append_bytes<'payload.bin'>`
 
 ### Questions about a path
 
@@ -5766,8 +5761,7 @@ sha256: (data: Bytes) => string
 
 The SHA-256 digest of a `Bytes` value, as 64 lower-case hexadecimal digits.
 
-- Example (a fragment, not compiled): `sha256(encode('abc'))` gives `'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'`
-- Why it is not compiled: the example builds its `Bytes` value with `encode` from the `bytes` module, which this page does not import
+- Example: `sha256(encode('abc'))` gives `'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'`
 
 #### `sha256`
 
@@ -6921,8 +6915,7 @@ what the block's expected type cannot reach into the closure's body for; design
 the draft remember the function it opened. Internal: written by the compiler, never named by a
 program.
 
-- Why it is not compiled: written by the compiler for `edit d = f { … }`
-- Why it is not compiled: commit_of(open(f), f)
+- Example: `commit_of(open(func (x: int) => int { x + 1 }), func (x: int) => int { x + 1 })` gives `what an edit block lowers to`
 
 #### `abort`
 

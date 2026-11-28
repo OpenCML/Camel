@@ -764,6 +764,26 @@ export function apply(ctx, rawConfig) {
                 target: agent ? { status: agent.status, since: since.get(String(agent.id)) ?? null } : null,
                 dmLastSeen,
                 lastTurn,
+                // The sessions whose recent tool calls name one of these files, with the call: who
+                // most likely wrote a path into the main checkout, so the reminder points at a lane
+                // instead of leaving the coordinator to compare diffs against every worktree.
+                mentioning: (paths) => {
+                    const names = new Map((lanesNow && Array.isArray(lanesNow.lanes) ? lanesNow.lanes : []).map((one) => [String(one.id), one.name]))
+                    const bases = paths.map((p) => String(p).split('/').pop()).filter((b) => b.length > 3)
+                    const found = []
+                    for (const [id, tail] of tails) {
+                        if (agent && id === String(agent.id)) continue
+                        for (let i = tail.length - 1; i >= 0; i--) {
+                            const entry = tail[i]
+                            if (!entry.line.startsWith('call ') || now - entry.time > 60 * 60_000) continue
+                            if (bases.some((b) => entry.line.includes(b))) {
+                                found.push({ who: names.get(id) || id, line: entry.line.slice(0, 160) })
+                                break
+                            }
+                        }
+                    }
+                    return found
+                },
             }
             const due = []
             for (const rule of hot.rules.module.RULES) {
