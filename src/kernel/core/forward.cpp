@@ -44,7 +44,7 @@ constexpr std::array<WrittenOperation, 6> kWrittenOperations{{
 /// reduction's name with the axis and the flag in angle brackets -- `mean<axis, keepdims>(xs)` --
 /// so their laws are filed under `mean` at one operand, and the name inside the URI says neither
 /// ( a reduction over an axis has one name).
-const std::array<RuleKeyException, 10> kRuleKeyExceptions{{
+const std::array<RuleKeyException, 12> kRuleKeyExceptions{{
     {":op/idx_arr",
      "index_into",
      2,
@@ -66,6 +66,27 @@ const std::array<RuleKeyException, 10> kRuleKeyExceptions{{
      "`xs[positions]` is the same bracket form with an array of positions in its first word: it "
      "answers a copy of the value with the first dimension read at those positions, and it has no "
      "token either, so its rule is filed under the call `index_take(x, positions)`"},
+
+    {":op/slice_sub",
+     "slice",
+     6,
+     "a slice is written as a subscript (`t[a..b]`, `t[a..b..s]`, `t[..b]`, `t[a..]`) or as the "
+     "function form (`slice<axis, start, end, step>(t)`), and both spellings build the one node "
+     "whose words are read positionally: the value, the axis, the two bounds, the step, and the "
+     "mask saying which of the two bounds the program wrote. A subscript is none of `a <op> b`, "
+     "`<op> a` or `f(a, b)`, and the function form's own name takes one operand and the rest in "
+     "`<>`, so the node has no token a rule's left side could be written with; its rule is filed "
+     "under the call `slice(value, axis, start, end, step, written)`, the six words in the node's "
+     "order"},
+
+    {":op/slice_sub",
+     "slice",
+     5,
+     "the same node with the mask left out: a caller that does not say which of the two bounds it "
+     "wrote leaves five words, and the kernel reads that as both bounds written (mask 3). Every "
+     "source spelling builds six words -- the builder adds the mask, and the step has a default -- "
+     "so five is a shape a graph handed to a transform can have, not one the compiler makes, and "
+     "no law is filed at five"},
 
     {"tensor:argmax_axis",
      "argmax",
