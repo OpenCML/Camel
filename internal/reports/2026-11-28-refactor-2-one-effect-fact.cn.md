@@ -314,4 +314,20 @@ bool Record::accessesOutsideProgram() const {
   - **20 条 FAIL（换底前的红，逐名）**：`op_stats.table.nvm`、`op_stats.table.fvm`、`export_unsupported_op`、`export_impure_op`、`pass_export_refusal_located.request_in_arm_json`、`as_refusal.constant_fails.pass`、`as_refusal.constant_fails.operator`、`slice_runtime`、`si_as_fails`、`si_as_fails_fvm`、`si_as_fails_jit`、`si_as_fails_prl`、`fusion_group.profile.none`、`npy_generic_wrapper_mismatch`、`rename.env_graph_identity`、`rename.process_graph_identity`、`types_and_node_kind`、`node_kinds_match_the_graph`、`outline_delivers_the_graph_it_makes`、`outline_delivers_a_graph_the_bytecode_vm_can_compile`。
   - **4 条 XFAIL（已知失败，不是红）**：`second_order_refused_vjp`、`ort_loop_values_dynamic`、`conv2d_shaped.derived_input_states_the_input_extents.nvm`、`conv2d_shaped.kernel_builds_what_it_derived.nvm`。
   - 第 1 刀后的判据是：这 20 条**一条不多、一条不少**（新增红 0），4 条 XFAIL 不动。
+  - **20 条 FAIL 按 plan 归类（只归类，不解释）**：
+
+| plan | 条数 | 名字（原样） |
+|---|---|---|
+| `test/plans/feat/modules/onnx.plan.toml` | 5 | `export_unsupported_op`、`export_impure_op`、`pass_export_refusal_located.request_in_arm_json`、`as_refusal.constant_fails.pass`、`as_refusal.constant_fails.operator` |
+| `test/plans/feat/modules/tensor/shape_inference.plan.toml` | 4 | `si_as_fails`、`si_as_fails_fvm`、`si_as_fails_jit`、`si_as_fails_prl` |
+| `test/plans/feat/modules/tensor.plan.toml` | 2 | `op_stats.table.nvm`、`op_stats.table.fvm`（plan 里是 `name = "op_stats.table"`，`:1295`，按后端展开） |
+| `test/plans/feat/modules/rename_identity.plan.toml` | 2 | `rename.env_graph_identity`、`rename.process_graph_identity` |
+| `test/plans/feat/modules/graph.plan.toml` | 2 | `types_and_node_kind`、`node_kinds_match_the_graph` |
+| `test/plans/feat/modules/graph_outline.plan.toml` | 2 | `outline_delivers_the_graph_it_makes`、`outline_delivers_a_graph_the_bytecode_vm_can_compile` |
+| `test/plans/feat/modules/tensor/bounds.plan.toml` | 1 | `slice_runtime` |
+| `test/plans/feat/modules/tensor/dtype.plan.toml` | 1 | `npy_generic_wrapper_mismatch` |
+| `test/plans/feat/modules/fusion_group.plan.toml` | 1 | `fusion_group.profile.none` |
+| **合计** | **20** | |
+
+  - **两条 `graph_outline` 的红要单独盯**：`outline_delivers_the_graph_it_makes`、`outline_delivers_a_graph_the_bytecode_vm_can_compile` 与本件平行的 `lane-editview-commit`（"被 outline 造在外层程序之外的图没进提交的 closure"）同族 —— 第 1 刀后若它们**变绿或变红**，单独点名报给负责人；**不去修**（不在 ② 范围）。
 - **注意**：这组底不是最新 integration（`c4-round-source` 未落地，integration 已到 `a5b8663744`）；换底后按 §7 的规矩**重取**一遍再把行号/读数改掉。
