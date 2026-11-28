@@ -1582,7 +1582,18 @@ SplitGraph cutBranchGraph(
         addResidualCaptures(draft, cuts, backward);
         for (size_t i = sourcePorts.size() / 2; i < sourcePorts.size(); ++i) {
             Type *type = function->funcType()->normTypeAt(i);
-            if (type == nullptr || !camel::core::tangentSpaceOf(type).hasSpace()) {
+            // Whether the parameter gets a port is the **user's** question (`gradientTypeOf`,
+            // principle 9.9), the one the half's type already answered above: `Tangent<int>` is
+            // `int`, so a discrete parameter's place in the half is that parameter's own type and
+            // the port it needs is a real one. A space that exists is not the same statement as a
+            // space with a place to accumulate in, and asking the second here left the type naming
+            // an `int` while the graph declared no port for it -- two arguments at the call, one
+            // port at the callee.
+            Type *const userTangent     = camel::core::gradientTypeOf(const_cast<Type *>(type));
+            const auto *const userTuple = tt::as_ptr<TupleType>(userTangent);
+            const bool typedSlot        = type != nullptr && userTangent != nullptr &&
+                                          !(userTuple != nullptr && userTuple->size() == 0);
+            if (!typedSlot) {
                 // A () slot is an answer this half gives, never an argument it takes.
                 continue;
             }
@@ -2615,7 +2626,15 @@ SplitGraph buildSplitGraph(
                 continue;
             }
             Type *type = function->funcType()->normTypeAt(i);
-            if (type == nullptr || !camel::core::tangentSpaceOf(type).hasSpace()) {
+            // The same question as the branch half above: the port list follows the **user's**
+            // tangent of the parameter (`gradientTypeOf`, principle 9.9), not the machinery's
+            // space of the lifted slot. `string` and a function still answer `()` and still get no
+            // port.
+            Type *const userTangent     = camel::core::gradientTypeOf(const_cast<Type *>(type));
+            const auto *const userTuple = tt::as_ptr<TupleType>(userTangent);
+            const bool typedSlot        = type != nullptr && userTangent != nullptr &&
+                                          !(userTuple != nullptr && userTuple->size() == 0);
+            if (!typedSlot) {
                 continue;
             }
             const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
