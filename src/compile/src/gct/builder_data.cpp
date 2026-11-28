@@ -377,14 +377,16 @@ node_ptr_t Builder::visitComprehension(const AST::node_ptr_t &ast) {
         setOriginFromAst(context_, node, at, camel::source::OriginKind::GctNode, what);
         return node;
     };
-    // The function `(x) => body`: what a lambda with an expression body is, with the type of
-    // `x` left to the call that receives it (a type variable no program can write).
+    // The function `(x) => body`: what a lambda with an expression body is. Its parameter type
+    // is not written -- the signature stands `void` there and the pair's origin goes to the FUNC
+    // node, exactly as for a lambda a program writes as `func (x) { … }` (design principles 5.9:
+    // a lambda takes the type of a parameter it does not write from the function type of the
+    // position it stands in). Giving it a type variable of its own would be a second source of
+    // types beside that position, and 5.9's expectation -- the call's `(item: T) => U`, with `T`
+    // already solved from the source array -- could never reach it.
     const auto elementFunction = [&](const AST::node_ptr_t &body) {
         FunctionTypeFactory factory;
-        factory.addNormArg(
-            nameRef.ident(),
-            TypeVarType::create("$element" + std::to_string(idIndex_++), true),
-            false);
+        factory.addNormArg(nameRef.ident(), Type::Void(), false);
         FunctionType *type  = factory.buildOpen(); // a function being defined: see openSignature_
         node_ptr_t typeNode = place(tree_->makeType(type), body, "gct.func.type");
         const ValueUseScope valueUseScope(*this);
@@ -397,6 +399,8 @@ node_ptr_t Builder::visitComprehension(const AST::node_ptr_t &ast) {
         // "which function is a comprehension's element function" has one answer.
         node_ptr_t funcNode = place(tree_->makeFunc(std::string()), body, "gct.func.element");
         *funcNode << typeNode << bodyNode;
+        tree_->setUnwrittenParams(
+            funcNode, {Tree::UnwrittenParam{0, nameAst->load()->origin(), false}});
         return funcNode;
     };
     // `value->op<function>`.
