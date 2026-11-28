@@ -576,3 +576,8 @@ git worktree add --detach <旧提交>
 
 **20. 一行级工具错误的例外用法（铁律 18 的实操）。**
 `benchmarks/tools/grad_referee.py` 把计划给的 `--block-limit` 原样转给 camel，而 camel 只认 `--spaces block_mb=`（`src/tools/camel-cli/config.cpp:650/:823/:1239`）⇒ `unknown option`、4 条 slow 用例全红。改法唯一（目标写法由 CLI 自己规定），按铁律 18 例外我先改后报：`cmd += ["--spaces", f"block_mb={_block_limit_mb}"]`，当轮 `oversight_tell` 写明"改了哪一行、为什么只能这样改、不同意就回退"。**两笔缺一不可**：计划侧传裁判的参数名（`--block-limit`）与脚本侧传 camel 的参数名（`--spaces block_mb=`）是两个不同的接口，别把两笔当成重复。
+
+**24. 判"这条红是谁的账"先换基线跑一遍，别先怀疑合并进来的枝。**
+`cxx_isolation.inline_closure.by_cpp` 在合并位读出 `4/25`（期望 `4/26`），我第一反应是"哪条枝合进来把它带红了"。`lane-oper-shape-guard` 用同一语料（`bound_closures.cml`）在自己的两棵树上各跑一次就分开了：`lane/opt-inline @ bb25349c42`（基线 `8788cb501b`）= **26 绿**；`lane/nvm-int-compare @ 3f33b62591`（基线 `97e6bf8a47`，另含两笔与内联无关的提交）= **25**。两棵树唯一的差别是**基线** ⇒ 变化来自 `8788cb501b..97e6bf8a47` 之间的上游提交，与那两条枝都无关。
+**定法**：判红归属先做"同一个语料、两个基线各跑一次"这一步（一次语料级读数，比二分便宜得多）；确认是基线差之后，先用 `git log <old>..<new> -- <相关路径>` 看那段里有没有人**动过那条路径**（零构建），再决定是"期望该跟改 + 写原因行"还是"转给动它的那条车道"。只有 `git log` 一条都没命中时才值得 `git bisect`（那是每发一次构建）。
+另：`by_cpp` 一侧读的是 C++ 参考实现（`std::cxx::inline`），所以"枝让它红"与"改动造成"是两件事 —— 交回里要分开写。
