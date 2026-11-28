@@ -1,0 +1,13 @@
+id = "probe.fig1_two_routes"
+order = 950
+tier = "fast"
+tags = ["probe", "fig1"]
+
+[[tests]]
+name = "probe.fig1_two_routes"
+desc = "PROBE: Figure 1's three stages, each side of the two inliners, dot bytes and SHA-256; commits its own identity so the reading names the driver that ran."
+kind = "behavior"
+tool = "python"
+case = "fig1_two_routes.py"
+expect_stdout_contains = ["judge.done"]
+timeout_ms = 900000
