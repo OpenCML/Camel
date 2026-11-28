@@ -1480,7 +1480,10 @@ class ArrangeWalk {
             return Arrangeable{};
         }
         case graph::NodeKind::Brch: {
-            Arrangeable terms{true, true, true, true};
+            // The start of the conjunction is AND's identity: the terms hold until a member of the
+            // regions says otherwise, and the fifth one -- the footprint -- is a member's answer
+            // as well, not a refusal made before the walk begins.
+            Arrangeable terms{true, true, true, true, true};
             for (const RegionId region : view.regionsOwnedBy(ref)) {
                 terms = andRegions(view, region, terms);
             }
@@ -1489,12 +1492,14 @@ class ArrangeWalk {
         case graph::NodeKind::Loop: {
             // The loop's own termination term is its form's (design principles 3.10): a `for` and
             // a `for ... while` take a finite sequence, and a `while` has no bound to read, so it
-            // is not known to end.
+            // is not known to end. The rest hold until a member of the regions says otherwise, the
+            // fifth one (the footprint) with them: the start of the conjunction is AND's identity.
             Arrangeable terms{
                 true,
                 true,
                 true,
-                view.loopFormOf(ref).kind != camel::core::LoopKind::While};
+                view.loopFormOf(ref).kind != camel::core::LoopKind::While,
+                true};
             for (const RegionId region : view.regionsOwnedBy(ref)) {
                 terms = andRegions(view, region, terms);
             }
