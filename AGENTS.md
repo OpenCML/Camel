@@ -4,11 +4,12 @@ This file is the entry point. Read the detailed rules under `agents/` before mak
 For any branch, merge, rebase, or release task, you must read `agents/branching.md` first and follow it exactly.
 In particular, before any `develop` -> `main` release merge, you must confirm the release version, confirm the next development version, and confirm the `changes.log` release-note content with the user.
 
-## Design Principles (read first)
+## Design Principles and Architecture (read first)
 - Anyone, human or AI, who changes semantics, passes, schedulers, the exporter or autodiff must read `docs/design-principles.cn.md` first (English translation: `docs/design-principles.en.md`; the Chinese file is authoritative).
 - It is normative: when it conflicts with the code, with other documents or with a test result, it prevails, and the conflict is recorded as a defect or a to-do. Do not change semantics to make a test pass.
 - Questions it lists as undecided, or does not cover, go to the language author. Do not decide them ad hoc.
 - Its section 14 lists misreadings that have actually happened; check your change against them.
+- `docs/design/architecture/` is the target shape of the code (start at `README.cn.md`). Before fixing a defect, find out whether the architecture keeps or replaces the mechanism it lives in, and fix it the way `agents/refactor.md` says for that case. Do not patch a mechanism that is being replaced.
 
 ## Core Rules
 - Runtime shell: Windows PowerShell.
@@ -31,7 +32,7 @@ In particular, before any `develop` -> `main` release merge, you must confirm th
 - `CAMEL_HOME` must point to the installation root, including `bin`, `lib`, and related directories.
 - `CAMEL_STD_LIB` overrides the stdlib location.
 - `CAMEL_PACKAGES` adds extra module search roots and uses `;` separators on Windows.
-- Runtime DLLs for `out/.../libs/` come from `modules/python/sdks/python3xx/` after `collect-out`.
+- Runtime DLLs for `out/.../libs/` come from `src/stdlib/sdks/python3xx/` after `collect-out`.
 - `sync-python-sdks` copies `python3xx.dll`, `python3.dll`, and `vcruntime140*.dll` into the SDK cache.
 - If SDK DLLs are missing, the build falls back to `VIRTUAL_ENV`, `CONDA_PREFIX`, or `python` on PATH.
 - CMake build uses SDKs first; if the SDK root is missing, it falls back to the active virtual environment.
@@ -57,7 +58,7 @@ $env:PATH = "$env:CAMEL_HOME\bin;$env:PATH"
 ## Pass Execution Model
 - Canonical syntax: `camel xxx.cml pass1 pass2 ...`
 - `std::run` is the fallback pass when no pass is specified or when specified passes complete without yielding an empty graph: it is "run this program", an alias of a scheduling pass whose target is `.opencmlrc`'s `passes.run` (`std::fvm` when the configuration names none; a target that is not a scheduling pass is refused before anything runs). Write `std::nvm`, `std::fvm`, `std::jit` or `std::prl` when which back end runs the program is the point.
-- Pass settings are pass parameters, not environment variables: `key=value` words after the pass name, with no parentheses (`std::opt safe_fp=true`, `std::jit hot_threshold=0`, `std::prl bytecode=false`, `onnx::export out=m.onnx`). The declared type decides how the value is read (design principles 9.3): a `string` parameter takes the word as written and needs no quotes, a `bool`/`int`/`float` parameter takes a constant expression, and a value with spaces is quoted by the shell. A pass is a function declared in the standard library (`stdlib/std.cml` for the core's, `with <...>` for its parameters); see `docs/cli.md`, "Pass parameters".
+- Pass settings are pass parameters, not environment variables: `key=value` words after the pass name, with no parentheses (`std::opt safe_fp=true`, `std::jit hot_threshold=0`, `std::prl bytecode=false`, `onnx::export out=m.onnx`). The declared type decides how the value is read (design principles 9.3): a `string` parameter takes the word as written and needs no quotes, a `bool`/`int`/`float` parameter takes a constant expression, and a value with spaces is quoted by the shell. A pass is a function declared in the standard library (`src/stdlib/std.cml` for the core's, `with <...>` for its parameters); see `docs/cli.md`, "Pass parameters".
 - `std::` is for the core's own passes; a module's passes use the module's name (`tiles::compile`) and the module registers them (`registerModulePass`). The pipeline is composed explicitly: importing a module never adds a pass, and a library whose pass is a precondition diagnoses the missing pass and names it.
 
 ## Test Execution
@@ -80,6 +81,8 @@ $env:PATH = "$env:CAMEL_HOME\bin;$env:PATH"
 - `node scripts/test.js --changed` runs the plans a change touches: directory rules in
   `test/plan-selection.json` first, file rules second; base `origin/develop`, override with
   `CAMEL_TEST_BASE`.
+- The plan file format (`tier`, `flaky`, `cores`, `[defaults]` and the `verify_*` fields) is documented in `docs/test-plans.md`.
+- In the collaboration lanes, builds and plan runs go to the build host through `internal/tools/camel-remote.ps1`. The merge gate is the fast layer run there, not GitHub Actions; see `internal/collab`.
 - Prefer passing the target explicitly instead of adding new `npm run test:*` aliases.
 - Shorthand targets such as `smoke`, `feat`, `all`, `parse`, `compile`, `opt`, `trans`, `linear`, `para`, `modules`, and `perf` resolve to the matching plan directories. The whole plan tree is `all` (`--all`, or the `test/plans` directory itself); `.` is not the whole tree: the leading dots of a target are stripped, so `.` is the bare name `feat`, i.e. `test/plans/feat`.
 - Direct examples:
@@ -96,16 +99,21 @@ node test\tools\run-tests.mjs --update-golden test\plans\smoke\core.plan.toml
 
 | Pass | Description |
 |------|-------------|
-| `std::gir` | Translation pass: prints compact GIR DOT with semantic metadata and returns an empty graph |
-| `std::rgir` | Translation pass: prints rich GIR DOT with Graphviz styling and returns an empty graph |
+| `std::gir` | Translation pass: prints compact GIR DOT with semantic metadata and hands the graph on |
+| `std::rgir` | Translation pass: prints rich GIR DOT with Graphviz styling and hands the graph on |
 | `std::agir` / `std::argir` | Translation passes: `std::gir` / `std::rgir` with boundary roles (scalar boundary, branch contract, effect, export capability) from the node-role registry: a `role` attribute and legend, with fill colors in the rich variant |
-| `std::jgir` | Translation pass: prints versioned JSON GIR with explicit graph references for tooling (`egraph=true` writes the document `egraph-serialize` reads) |
+| `std::jgir` | Translation pass: prints versioned JSON GIR with explicit graph references for tooling and hands the graph on (`canonical=true` prints the form two graphs are compared in; `egraph=true` writes the document `egraph-serialize` reads) |
+| `std::cpp` | Translation pass: prints the program as standalone C++ source and hands the graph on |
+| `std::nop` | Drops the graph without executing it: returns an empty graph and has no effect |
+| `std::opt` | Rewrite pass: the standard optimization pipeline |
+| `opt::fold` / `opt::cse` / `opt::dce` / `opt::inline` | Rewrite passes written in Camel (`src/stdlib/opt.cml`); each has a C++ counterpart under `std::cxx::`, and `test/plans/feat/opt` compares the two |
 | `std::cxx::saturate` | Optimization pass: saturates the standard rules library and leaves the state where a value has several writings, extracting nothing; `std::gir` / `std::rgir` / `std::jgir` draw that state as one dashed cluster per class, and mark the writing extraction would take |
 | `std::stats` | Prints `GRAPH_STATS {json}` (graphs, nodes, edges, operators, calls, closures, branches) and passes the graph on unchanged |
 | `std::run` | Scheduling pass: runs this program -- the fallback when no pass is written; its target is `passes.run` from `.opencmlrc` (default `std::fvm`) |
 | `std::nvm` | Scheduling pass: executes on the node VM linearly, then returns an empty graph |
 | `std::fvm` | Scheduling pass: high-performance bytecode VM, returns an empty graph |
 | `std::jit` | Scheduling pass: JIT-enabled bytecode VM, returns an empty graph |
+| `std::prl` | Scheduling pass: parallel scheduler, returns an empty graph |
 | `std::cxx::inline` | Optimization pass: inlines small functions into larger graphs to reduce call overhead; returns an optimized graph |
 
 ### Graph Inspection Preference

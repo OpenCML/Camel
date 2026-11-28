@@ -4,6 +4,10 @@ Read [`../docs/design-principles.cn.md`](../docs/design-principles.cn.md) first.
 
 ## Design and structure
 
+- Fix a defect at its root, and judge the root against the target architecture (`docs/design/architecture/`), not against the code as it stands. The whole repository may be restructured; do not assume a change must stay small.
+  - If the architecture replaces the mechanism the defect lives in, do not repair that mechanism. Add the minimal program as a regression case and fix the defect by doing the replacement.
+  - If the mechanism stays, fix the step that should have produced the right value. Do not add an exception condition, a side table, a bookkeeping field, or a later pass that tidies what an earlier step left behind.
+- A removed or renamed spelling is deleted everywhere it appears: no alias, and no diagnostic that points to the new name.
 - Prefer the correct end state over a compatibility-preserving series of partial designs. Do not leave parallel implementations, adapters, bridge layers or migration scaffolding without a deletion path.
 - One fact has one source and one implementation. Read operator, resource, effect, type and declaration properties rather than comparing module or operator names.
 - Reuse the existing generic mechanism before adding a special case. A generic layer never knows a concrete module, operator or type name.
