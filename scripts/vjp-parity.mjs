@@ -58,6 +58,12 @@
 //                 tangent operators are machinery no program writes, a conversion to a discrete
 //                 type has no tangent to carry) but not silently: each row here is a decision,
 //                 and the decision is written in the exemption list below.
+//   covered-by-the-rule / transform-handled
+//                 the two shapes of `engine-only` that are not debt and need no row of their own:
+//                 the result has no tangent space (the general step covers it -- the criterion is
+//                 the engine's own, `tangent_space.cpp#answerOf`), or the transform recognises
+//                 the key before it looks a law up (`transforms/node_operator.h#memberReadOf`,
+//                 read out of that function). Both are read from the tree; neither is a name list.
 //
 // The third column is why the split exists: `both` counted a key whose only law was `jvp_conv2d`
 // beside one whose two halves are the pair an adjoint is, and route five's question -- can the
@@ -1306,6 +1312,7 @@ const rows = {
     libraryOnly: [],
     engineOnly: [],
     coveredByRule: [],
+    transformHandled: [],
 }
 for (const [key, entry] of libraryKeys) {
     if (engineKeys.has(key)) {
@@ -1372,18 +1379,62 @@ rows.engineOnly.sort(byKey)
 // library operator. A key whose type cannot be read stays in `engineOnly` and says why, because
 // "unread" is not "covered".
 const DISCRETE = new Set(['Int32', 'Int64', 'Bool', 'i32', 'int', 'i64', 'bool'])
+// The type argument that decides a family's answer: the last one. `i32([1.0, 2.0])` is declared
+// `=> WithElement<A, i32>` (`stdlib/prelude.cml`), and the engine's own `answerOf` decides an
+// array by its element ("the element decides", `src/kernel/core/tangent_space.cpp`), so a
+// discrete last argument leaves the whole result with no tangent space -- the general step covers
+// the operator, which is the same criterion this file already reads for a bare type name.
+const splitTypeArguments = (inside) => {
+    const parts = []
+    let depth = 0
+    let from = 0
+    for (let at = 0; at < inside.length; at += 1) {
+        const character = inside[at]
+        if (character === '<') {
+            depth += 1
+        } else if (character === '>') {
+            depth -= 1
+        } else if (character === ',' && depth === 0) {
+            parts.push(inside.slice(from, at))
+            from = at + 1
+        }
+    }
+    parts.push(inside.slice(from))
+    return parts.map((one) => one.trim())
+}
 const discreteOf = (declared) => {
     if (typeof declared !== 'string') {
         return null
     }
+    // A declaration may carry a constraint after the type (`=> WithElement<A, i32> when
+    // is_compact_array::<A>()`): the type is what precedes it.
+    const at = declared.indexOf(' when ');
+    if (at >= 0) {
+        declared = declared.slice(0, at)
+    }
     const token = declared.trim().match(/[A-Za-z_][A-Za-z0-9_]*/)
-    return token !== null && DISCRETE.has(token[0]) ? token[0] : null
+    if (token === null) {
+        return null
+    }
+    if (DISCRETE.has(token[0])) {
+        return token[0]
+    }
+    const family = declared.trim().match(/^[A-Za-z_][A-Za-z0-9_:]*\s*<([\s\S]*)>\s*$/)
+    if (family === null) {
+        return null
+    }
+    const typeArguments = splitTypeArguments(family[1])
+    const last = typeArguments[typeArguments.length - 1]
+    const element = last === undefined ? null : last.match(/^[A-Za-z_][A-Za-z0-9_]*/)
+    return element !== null && DISCRETE.has(element[0]) ? element[0] : null
 }
 const resultTypes = new Map() // operator URI -> the type its declaration states
 {
     const note = (uri, declared) => {
         if (uri !== undefined && declared !== undefined && declared !== '' && !resultTypes.has(uri)) {
-            resultTypes.set(uri, declared)
+            // The reading names the type, not the constraint that qualifies it.
+            const at = declared.indexOf(' when ');
+            resultTypes.set(uri, at >= 0 ? declared.slice(0, at) : declared)
         }
     }
     const published = moduleProtocols()
@@ -1513,6 +1564,54 @@ const resultTypes = new Map() // operator URI -> the type its declaration states
         }
     }
 }
+// ---- the keys the transform recognises before it looks a law up -------------------------------
+//
+// Two differences in this file used to be debt no law could ever answer: a member read. The member
+// of `a.0`/`a."x"` is a template the front end builds the operator with, and the transform reads
+// that template off the node and projects the tangent itself -- `transforms/jvp.cpp` asks
+// `memberReadOf` **before** it looks a rule up, and `transforms/node_operator.h#memberReadOf`
+// answers for exactly the URIs it compares against. A key the transform recognises that way is
+// handled by construction: no ruleset law could be the answer, so demanding one is not a defect of
+// the library.
+//
+// The set is **read out of that function**, not written here: the file is opened, the function's
+// body is cut out, and the `:op/` literals it compares the node's URI against are collected. A
+// URI added to the recognition appears here without this file changing, and a URI removed from it
+// leaves this class again -- the list below stays the account of what is *left*.
+//
+// `tensor:idx_take` is deliberately **not** here: the module registers its own `setVjp`
+// (`src/stdlib/tensor/ops/layout_ops.cpp`), which is the engine's machinery answering, not the
+// transform recognising the key before the lookup. That difference stays in `engineOnly` with
+// its exemption row.
+const transformRecognised = (() => {
+    const header = path.join(ROOT, 'src', 'stdlib', 'transforms', 'node_operator.h')
+    let source
+    try {
+        source = fs.readFileSync(header, 'utf8')
+    } catch {
+        return new Set()
+    }
+    const at = source.indexOf('inline std::optional<MemberRead> memberReadOf(')
+    if (at < 0) {
+        return new Set()
+    }
+    let depth = 0
+    let end = at
+    for (let cursor = source.indexOf('{', at); cursor < source.length; cursor += 1) {
+        if (source[cursor] === '{') {
+            depth += 1
+        } else if (source[cursor] === '}') {
+            depth -= 1
+            if (depth === 0) {
+                end = cursor
+                break
+            }
+        }
+    }
+    const body = source.slice(at, end)
+    return new Set([...body.matchAll(/"(:op\/[A-Za-z0-9_]+)"/g)].map((one) => one[1]))
+})()
+
 // Which keys the general step covers, and for the rest, the registrations whose type could not be
 // read -- printed, because an unread key must not look like a covered one.
 const unreadTypes = []
@@ -1534,7 +1633,20 @@ const unreadTypes = []
         row.results = declared
         stays.push(row)
     }
-    rows.engineOnly = stays.sort(byKey)
+    // The keys the transform recognises before it looks a law up: every registration answers a
+    // URI from that set, so every one of them is handled by construction.
+    const handled = []
+    rows.engineOnly = stays.filter((row) => {
+        const recognised = row.registrations.every((registration) =>
+            transformRecognised.has(registration.uri)
+        )
+        if (recognised) {
+            handled.push({ ...row, recognised: row.registrations.map((one) => one.uri) })
+            return false
+        }
+        return true
+    }).sort(byKey)
+    rows.transformHandled = handled.sort(byKey)
     rows.coveredByRule.sort(byKey)
 }
 
@@ -1567,6 +1679,11 @@ if (JSON_MODE) {
                 libraryOnly: rows.libraryOnly,
                 engineOnly: rows.engineOnly,
                 coveredByRule: rows.coveredByRule.map((row) => ({ key: row.key, results: row.results })),
+                transformHandled: rows.transformHandled.map((row) => ({
+                    key: row.key,
+                    recognised: row.recognised,
+                })),
+                transformHandledCount: rows.transformHandled.length,
                 newDebt: newDebt.map((row) => row.key),
                 stale: stale.map((row) => row.marker),
                 staleCount: stale.length,
@@ -1607,6 +1724,16 @@ if (TABLES) {
         console.log('')
     }
     // A key here needs no law: the general step that drops a value with no tangent space covers it.
+    console.log(
+        `handled by the transform before it looks a law up: ${rows.transformHandled.length}`
+    )
+    for (const row of rows.transformHandled) {
+        console.log(`  ${row.key}  recognised as ${row.recognised.join(' / ')}`);
+        for (const registration of row.registrations) {
+            console.log(`      ${registration.uri}: ${at(registration)}`);
+        }
+    }
+    console.log('')
     console.log(`covered by the rule that drops a value with no tangent space: ${rows.coveredByRule.length}`)
     for (const row of rows.coveredByRule) {
         console.log(`  ${row.key}  answers ${row.results.join(' / ')}`);
@@ -1691,6 +1818,7 @@ console.log(
         `reverse-only, ${rows.neitherHalf.length} with a law that is neither half, ` +
         `${rows.libraryOnly.length} past the frozen engine (capability, not debt) and ` +
         `${rows.engineOnly.length} engine-only exempt, ${rows.coveredByRule.length} covered by the ` +
-        `no-tangent step, 0 new, stale=${stale.length}`
+        `no-tangent step, ${rows.transformHandled.length} handled by the transform before it looks ` +
+        `a law up, 0 new, stale=${stale.length}`
 )
 process.exit(0)
