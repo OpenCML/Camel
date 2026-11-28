@@ -2517,6 +2517,43 @@ std::string runPassTarget() {
 
 namespace {
 
+/// The kernel of `std::run`: the step that runs the program, handed to the pass the run's
+/// configuration names (`passes.run`, `setRunPassTarget` above).
+///
+/// The step is a pass like any other -- a declaration in `std.cml`, a kernel here -- and what it
+/// does is hand the program to that pass: the choice is the run's configuration, not a second
+/// table of names and not a branch in the resolution of a written name. Today the core's alias
+/// entry answers `std::run` before a pipeline reaches this kernel; the kernel is what the name
+/// resolves to once that entry goes, so a pipeline that writes `std::run` and one that writes
+/// nothing take the same step here.
+///
+/// It reads no parameters of its own: the parameters belong to the pass it hands the program to,
+/// and are read from that pass's own declaration (`constructPass` below asks them the way every
+/// other written name does). Nothing writes `std::run` with a parameter beside it today, and a
+/// parameter written there would be the one thing this step cannot carry.
+std::unique_ptr<GraphIRPass> makeRunPass(const context_ptr_t &ctx, const PassArgs &) {
+    const std::string target          = runPassTarget();
+    std::unique_ptr<GraphIRPass> pass = constructPass(ctx, target);
+    if (!pass) {
+        // Construction reported its own problem (a refused parameter, a pass that broke while
+        // being built); with nothing to run, the refusal is the run's.
+        throw DiagnosticBuilder::of(RuntimeDiag::InvalidPassParameter)
+            .commit(
+                kRunPassName,
+                std::format("`passes.run` names '{}', which is not a pass", target));
+    }
+    return pass;
+}
+
+/// One kernel, registered where the operator is: the name is `std::run`, and the registry resolves
+/// it to that operator the way it does for every other pass.
+const bool runPassKernelRegistered = []() {
+    PassDescriptor descriptor;
+    descriptor.make = makeRunPass;
+    registerModulePass(kRunPassName, std::move(descriptor));
+    return true;
+}();
+
 /// `std::run` runs the program, so the pass it names has to be a scheduling pass. The value is
 /// the run configuration's (`passes.run`), not the pipeline's, so a wrong one is refused before
 /// anything runs and the diagnostic names the setting: the alias is spelled in the pipeline, and
