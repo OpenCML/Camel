@@ -313,6 +313,21 @@ VAR> "var": false
 **待补**：`var` 形参的**真实写法**本轮没找到（`with <p: var int>` 是我猜的，`exit=1`；`test/cases/**/var_param*.cml` 也没捞到）—— 第 2 刀要用它，**先别猜**，届时 `git grep` 找出来再写。
 
 ## 不做什么
+
+### 3.6a "不平直"的上下文清单（物化点，逐条点名，带现成谓词/字段）
+
+`lane/progen-cut` 直接照这张表写。**判据：读/写一个版本绑定时，上下文在这张表的任何一行成立 ⇒ 先 `materializeCell(name)`，再走老路。**
+
+| # | 上下文 | 现成谓词 / 字段（本枝已核） | 在 `builder.h` 的行 |
+|---|--------|------------------------------|---------------------|
+| 1 | **臂体内**（`if`/`match` 的一支、`sync` 块属于某个臂） | `activeArm() != nullptr`；底层容器 `armStack_`（`buildArm` 里 `armStack_.push_back`） | `:1488`（`activeArm`）、`:1352`（`armStack_`） |
+| 2 | **循环体内** | **本枝没有 `loopStack_` 一类字段** —— 循环携带今天靠 `carriedVersions_`（`builder.h:1123`）与 `builder_control.cpp:2449`（"A write inside a loop is carried state"）、登记点 `:2587 carriedVersions_[variable] = joinNode`、`:2849`。**开工前必须先 grep 出确切的"当前在循环体里"谓词**（本页不臆造字段名） | `:1123` |
+| 3 | **闭包体内 / 被捕获** | 捕获的判据**不在建图当时**：`escapingVariables_`（`builder.h:1107`）由 `builder_calls.cpp:1004` 与 `captures.cpp:188` 在**别的文件、别的时机**填；捕获分析本身在 `captures.cpp:117-129/183-213` ⇒ 物化要挂在**闭包体开始建图**的那一刻（即 `captures.cpp` 那条路的入口），不能等 `escapingVariables_` | `:1107` |
+| 4 | **`var` 形参**（`with <p: …>` 的可变参数） | **真实写法本轮未找到**（`with <p: var int>` 是我猜的、`exit=1`；`test/cases/**/var_param*.cml` 未捞到）。判定谓词同 #3 的入口（形参在函数入口就已经是"要被交回的值"） | 待补 |
+| 5 | **别的函数/图**（跨 `currGraph_`） | `arm->graph != currGraph_.get()` 这种比较在 `activeArm()` 里就有（`:1489`）；`nodeGraphOf(x) != currGraph_.get()` 是通用写法 | `:1489` |
+| 6 | **同一块里两个语句之间出现了分支/循环节点**（不是"块"而是"位置"） | 用纪元计数器：`buildBranch`/循环体/闭包入口各 `++epoch_`，版本绑定时记下当时的 `epoch_`，读/写时 `epoch_ != bound.epoch` ⇒ 物化。**这是本刀新增的唯一字段**（名字待实现时定） | 新增 |
+
+**两条已核的辅助标志**（不是"不平直"，但影响绑定是否允许）：`varied_`（`builder.h:495`）、`declaresVariable_`（`:567`）—— 它们在 `visitVariNode`（`builder_variables.cpp:61-72`）里被置上/还原，**不是**上下文判定。
 ### 3.7 `foreach` / `Range` 这条护栏（每日审查第 2 条的一半）
 
 每日审查（`internal/plans/2026-11-28-daily-review.cn.md`，`fsh-dev@1188fb1b0d`）第 2 条的修法原句：**"`foreach` 对 `Range` 这个例子进回归用例，答案归那一个解析器。"** 另一半（`builder_call.cpp` 的 `withParameterOfSelectedEntry` 在 `signatureForArgumentContext` 之外再扫一遍候选条目）**归"前端类型检查"那件重构**，不在①的范围里，本车道不碰 `builder_call.cpp`。
