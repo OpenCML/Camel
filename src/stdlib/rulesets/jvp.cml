@@ -26,7 +26,7 @@ import { add_tangent, div_tangent, mul_tangent, neg_tangent, stop_gradient, sub_
 // second import of a name does not add an overload to the first, it hides it (with both imported,
 // `pow_tangent`'s `log(x)` stops resolving: "No matching function found for
 // argument types: <> (float)"). So the scalar one is named here instead.
-import { erfc as math_erfc, erf as math_erf, exp as math_exp, log as math_log, max as math_max, min as math_min, pow, sqrt as math_sqrt, tanh as math_tanh } from math
+import { erfc as math_erfc, erf as math_erf, exp as math_exp, log as math_log, max as math_max, min as math_min, pow as math_pow, sqrt as math_sqrt, tanh as math_tanh } from math
 // The `nn` module's primitives, whose forward rules file below. This is the first `import` from a
 // module that is a library into a module that is a ruleset, and it is the direction design
 // principles 10.1 allows (modules may import each other; only a *type* cycle is diagnosed) -- the
@@ -1161,7 +1161,7 @@ export rule jvp_pick_at::<T>(xs: T[], position: int, length: int) when is_float:
 /// @example pow_tangent(2.0, 3.0, 0.0, 1.0)    // 5.545177444479562
 /// @example pow_tangent(-3.0, 2.0, 1.0, 0.0)    // nan
 export func pow_tangent::<T>(x: T, w: T, dx: T, dw: T) => T when is_float::<T>() {
-    return w * pow(x, w - T(1)) * dx + pow(x, w) * math_log(x) * dw
+    return w * math_pow(x, w - T(1)) * dx + math_pow(x, w) * math_log(x) * dw
 }
 
 /// `d(x ^ w) = w * x^(w-1) * dx + x^w * log(x) * dw`, written out **here** rather than called.
@@ -1189,7 +1189,7 @@ export func pow_tangent::<T>(x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 /// lands here instead.
 /// @example 3.0 ^ 2.0    // 9.0
 export rule jvp_pow::<T>(x: T, w: T) when is_float::<T>() { x ^ w => func (dx: T, dw: T) {
-    w * pow(x, w - T(1)) * dx + pow(x, w) * math_log(x) * dw
+    w * math_pow(x, w - T(1)) * dx + math_pow(x, w) * math_log(x) * dw
 } }
 
 // ---- the forward rule of `pow` (`math:pow_d`) ----
@@ -1214,7 +1214,7 @@ export rule jvp_pow::<T>(x: T, w: T) when is_float::<T>() { x ^ w => func (dx: T
 /// `pow(x, w)`: what `math:pow_d` means, and the left side this rule is filed under.
 /// @example pow_d(2.0, 3.0)    // 8.0
 func pow_d(x: float, y: float) => float {
-    return pow(x, y)
+    return math_pow(x, y)
 }
 
 /// `d(pow(x, w)) = w * x^(w-1) * dx + x^w * ln(x) * dw`, both branches. The exponent's branch is
@@ -1222,7 +1222,58 @@ func pow_d(x: float, y: float) => float {
 /// operator spelled `^`. The term is a product of the exponent's tangent and a coefficient, so a
 /// constant exponent's term is omitted where the rule is expanded, exactly as `jvp_pow`'s is.
 export rule jvp_pow_d(x: float, y: float) { pow_d(x, y) => func (dx: float, dy: float) {
-    y * pow(x, y - 1.0) * dx + pow(x, y) * math_log(x) * dy
+    y * math_pow(x, y - 1.0) * dx + math_pow(x, y) * math_log(x) * dy
+} }
+
+// ---- the forward rule of the array power (`tensor:pow`) ----
+//
+// `pow(x, w)` on two arrays is a third operator, not a third spelling of the two above: `^` on two
+// numbers is `:op/pow_d` and `math`'s `pow` is `math:pow_d`, while the elementwise power over arrays
+// is `tensor:pow`, whose record the engine registers with `powVjp`
+// (`lib/tensor/ops/elementwise_ops.cpp`). Its signature is computed from its operands
+// (`TensorOrScalar`, rendered from `/tensor/signatures/tensor.cml`), so no declaration states it and
+// the record stays in C++ -- which is why the call below is a stand-in this file writes, exactly as
+// `pow_d` above stands in for `math:pow_d` and `divide` below stands in for `tensor:divide`.
+//
+// The law is the engine's, in the engine's shape: `d/dlhs = dy * rhs * lhs^(rhs-1)` and
+// `d/drhs = dy * lhs^rhs * ln(lhs)` (`powVjp` reads the same two products; it takes the logarithm of
+// the base broadcast to the result and this side writes `log(x)`, the same value under the same
+// broadcasting). At `x <= 0` the exponent's term is `NaN` for a non-zero `dw`, the value `ln` has
+// there -- the reading `jvp_pow` and `jvp_pow_d` both give, not a guarded zero.
+//
+// Both terms are written in place rather than through a helper: a call in the linear half is a node
+// the backward walk has no transpose for (`skip=call-no-transpose`, the wall `jvp_matmul` records).
+// The terms are products of one tangent and a coefficient, so a constant operand's term is omitted
+// where the rule is expanded and `log` is never asked for a value the program does not need.
+
+/// `pow(x, w)` on two arrays: what `tensor:pow` is, and the name its rule is filed under. A
+/// declaration of this module only: no program imports it, and the operator's own record stays the
+/// one entry point for a caller.
+/// @example pow([2.0, 3.0] as float[], [2.0, 2.0] as float[])    // [4.0, 9.0]
+func pow::<T>(x: T[...], w: T[...]) => T[...] when is_float::<T>() {
+    return x ^ w
+}
+
+/// `d(pow(x, w)) = w * x^(w-1) * dx + x^w * ln(x) * dw` on two arrays, the two branches the
+/// engine's `powVjp` answers.
+///
+/// The two products and the sum joining them are the **stated** forms, for the reason
+/// `jvp_mul_tensor` states at length: on the reverse side both operands are tangents, whose types
+/// state no extents (design principles 5.4), so a bare `+` of the two terms would be a sum whose
+/// operand count the reverse half cannot read. Every list here is `shape(x * w)` -- the product's
+/// extents, which is what both terms have -- and never `shape(dx)`: a list derived from a tangent is
+/// a value the cut cannot put on either side of itself.
+///
+/// The coefficients `x ^ (w - 1.0)` and `x ^ w` are values of the primal half, and `log(x)` with
+/// them; they are the same nodes the engine's `powVjp` builds, and they reach the reverse side as
+/// residuals rather than as tangents.
+export rule jvp_pow_tensor::<T>(x: T[...], w: T[...]) when is_float::<T>() { pow(x, w) => func (dx: T[...], dw: T[...]) {
+    add_stated(
+        mul_stated(mul_stated(dx, w, shape(x), shape(w)), x ^ (w - 1.0), shape(x * w), shape(x * w)),
+        mul_stated(mul_stated(x ^ w, log(x), shape(x * w), shape(x * w)), dw, shape(x * w), shape(w)),
+        shape(x * w),
+        shape(x * w)
+    )
 } }
 
 // ---- the forward rules of the scalar math kernels ----
