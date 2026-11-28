@@ -176,3 +176,38 @@ defer 之后：理由 = 用例 `desc` 要的那条语义事实（`in 'walk'` + l
 the next" + "a Loop carries a state whose shape is the same on every round"），位置 = 22:9（真位置）。
 ⇒ **defer 本身是对的，`located` 没有被它破坏；这条用例剩下的唯一红在过期的列号钉子上**。
 若 Lead 决定重钉，defer（或 defer + 四段）就能让这条用例转绿——但那要 Lead 拍板，不自己改。
+## 已落（两笔）+ 读数
+
+### 第一笔（语义）`2eb792f11d` — `onnx: a closure the export path never calls is deferred, not refused`
+`11 0 src/stdlib/onnx/exporter.cpp`。`evalFill` 的闭包分支之后、原拒绝之前加：
+```cpp
+    if (targetType->code() == TypeCode::Function && closuresWanted_ == 0) {
+        // A closure the aggregate *captures* while nothing on the export path calls it -- the same
+        // shape the element deferral above handles (a branch arm's (value, pullback) tuple whose
+        // pullback is never called on the exported path). ... `closuresWanted_` is raised exactly
+        // where a value is about to be called or probed ..., so 0 here means this path does not call
+        // it, and there is no value to materialise.
+        return Value::constant(NullSlot, targetType);
+    }
+```
+四段**不**放进来（它没把任何红改绿、也没新增红，等它有自己的理由再单独落）。
+
+### 第二笔（期望）`ba4d1ec233` — `onnx tests: the carried-array refusal's column follows the call it now names`
+`1 1 test/plans/feat/modules/onnx.plan.toml`：`expect_diagnostic_column` `81` → `9`（`line` 保持 `22`）。
+提交正文写：列 81 属于一个不再存在的版式（该行 34 字符），钉子曾随四笔版式变更走过 47→73→79→81
+（with-list 默认值、`...` pack 拼写），调用改成独立成行后没有重新测量；现在拒绝报的是那次调用本身。
+
+### 读数
+- **onnx 整文件**：`[SUMMARY] total: 160, pass: 149, fail: 10, known failures: 1`；
+  `[provenance] tip (dirty: 1 files) | binary built 2026-11-28T08:35:25+08:00 | tier fast | jobs 4`；`BUILD_EXIT=0`。
+  红集 = pristine 的 11 条**减** `export_loop_carried_array_field`（该用例 `[PASS] 248.61 ms`），其余 10 条逐名不动。
+- 该用例的 `[PASS]` 原文：`[PASS] export_loop_carried_array_field                      248.61 ms`；
+  诊断原文：`22:9: [Error]: An error value reached the exit of 'main' without being handled:
+  ExportUnsupported: in 'walk': a recursive call changes argument 2 of a recursion whose depth depends on
+  the model input: it is the leaf 'xs', an int array, whose length changes from one round to the next
+  (the body appends to it or concatenates it), and a Loop carries a state whose shape is the same on
+  every round.`
+- **借来的修复的副作用（已归因，不属本笔）**：`feat/modules` 整层第一次跑（带 `cherry-pick -n 616f65b436`）多出一条红
+  `modules.graph_inline a_call_through_a_value_reaches_what_its_type_declares`（期望 `<float> (float) => float pure`，
+  实得 `<w: float> (x: float) => float pure`）。**单独跑 `feat/modules/graph_inline.plan.toml`（不借修复）：3/3 PASS** ⇒
+  这条红是那个借用补丁带来的（它改了函数类型里参数名的记录），与本笔无关。
