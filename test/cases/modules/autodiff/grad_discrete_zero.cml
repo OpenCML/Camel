@@ -1,0 +1,22 @@
+/**
+ * `grad` of a function whose result is a discrete value answers the zero of the weight's gradient.
+ *
+ * `side` compares its `with` weight against its parameter and answers a `bool`, so its derivative
+ * is zero everywhere it is defined (design principles 9.9). The point of the case is the *shape*,
+ * not the number: the reverse pass takes the differential of a discrete result, which is the zero
+ * -- so there is no seed to place -- and every contribution such a value can make is that zero,
+ * which is what the weight's `float` gradient is.
+ *
+ * Red when: `grad` refuses the function, or answers a gradient of another type or a non-zero one.
+ */
+import { grad } from autodiff
+
+with <w: float>
+func side(a: float) => bool {
+    return w > a
+}
+
+func main() => int sync {
+    println(grad(side)<2.0>(1.0))
+    return 0
+}

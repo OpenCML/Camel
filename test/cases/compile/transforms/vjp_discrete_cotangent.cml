@@ -1,0 +1,29 @@
+/**
+ * A discrete result's cotangent is the zero of its own type, and both directions read it that way.
+ *
+ * `gt` answers a `bool`, whose derivative is zero by definition (design principles 9.9). The
+ * forward lift hands back the pair its signature promises, `(true, false)`; the reverse transform
+ * takes a `bool` cotangent and answers the `float` parameter's gradient, `0.0` -- the zero, of the
+ * parameter's own type. The two readings are one statement: a value with no tangent space
+ * contributes no cotangent, and that is the zero, and adding a zero changes nothing.
+ *
+ * Red when: the transform refuses the function, or either half answers a value of a type the
+ * signature does not promise, or the pullback answers anything but the zero.
+ */
+import rulesets.jvp
+import { jvp } from transforms
+import { vjp } from vjp
+
+func gt(a: float) => bool {
+    return a > 0.0
+}
+
+func main() => int sync {
+    let (value, tangent) = jvp(gt)(2.0, 1.0)
+    println(value)
+    println(tangent)
+    let (answer, pullback) = vjp(gt)(2.0)
+    println(answer)
+    println(pullback(true).0)
+    return 0
+}

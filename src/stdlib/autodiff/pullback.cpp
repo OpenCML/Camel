@@ -5333,10 +5333,21 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue, bool hasAux) {
         {},
         rewrite.untapedLoops());
     Type *valueType  = typeOf(*transaction, value);
-    const slot_t one = valueType->code() == TypeCode::Float32
-                           ? toSlot<camel::core::rtdata::Float32>(1.0f)
-                           : toSlot<camel::core::rtdata::Float64>(1.0);
-    backward.seed(value, draft.materializeStaticValue(one, valueType));
+    // The seed is the differential of the value the program returns: one for a float. **A value
+    // whose derivative is zero by definition takes no seed** -- a zero contributes nothing to the
+    // accumulation, and the answer is the zero of the differentiated parameter either way (design
+    // principles 9.9: a number and a boolean are their own gradient, at zero). A seed of the
+    // value's own type would be a cotangent the machinery would then have to carry through a graph
+    // that keeps no arithmetic for it, which is the reverse half of the same law this transform's
+    // gate now reads.
+    const bool valueIsFloat = valueType != nullptr && (valueType->code() == TypeCode::Float32 ||
+                                                       valueType->code() == TypeCode::Float64);
+    if (valueIsFloat) {
+        const slot_t one = valueType->code() == TypeCode::Float32
+                               ? toSlot<camel::core::rtdata::Float32>(1.0f)
+                               : toSlot<camel::core::rtdata::Float64>(1.0);
+        backward.seed(value, draft.materializeStaticValue(one, valueType));
+    }
     backward.run(order);
 
     // The differential form differentiates the first `with` parameter (9.9); the other `with`
@@ -5499,6 +5510,16 @@ std::string differentiationRefusal(FunctionType *function, bool hasAux) {
     }
     if (valueType == nullptr ||
         (valueType->code() != TypeCode::Float64 && valueType->code() != TypeCode::Float32)) {
+        // **A discrete result's derivative is zero by definition** (design principles 9.9): a
+        // number and a boolean are their own gradient, at zero, so `grad` answers the zero of the
+        // differentiated parameter's gradient and takes back the result's own type at zero. That is
+        // the user's answer (`gradientTypeOf`), and refusing it here was the machinery's narrower
+        // one -- which keeps no tangent for a `bool` because it never adds one -- said to the user.
+        // What is refused is a result no answer names: a string, a function, a value nothing states
+        // a gradient for.
+        if (valueType != nullptr && camel::core::gradientTypeOf(valueType) != nullptr) {
+            return {};
+        }
         return std::format(
             "it returns {}, not a float",
             valueType ? valueType->toString() : "nothing");

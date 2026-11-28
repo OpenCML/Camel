@@ -3499,3 +3499,15 @@ expect_exit = 1
 expect_output_contains = ["TRANSPOSE function=halve skip=state node=", "origin=0", "why=this-version-does-not-yet-recompute-the-rounds-of-a-loop-whose-condition-reads-a-state", "transpose has no transpose for this function"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "vjp.cotangent_of_a_discrete_result"
+desc = "A discrete result's cotangent is the zero of its own type (design principles 9.9). `gt` answers a `bool`, so `jvp(gt)(2.0, 1.0)` hands back `(true, false)` and `vjp(gt)(2.0)` takes a `bool` cotangent and answers the `float` parameter's gradient, `0.0`: a value with no tangent space contributes no cotangent, that is the zero, and adding a zero changes nothing. The four lines pin both halves -- a refusal, a tangent of another type, or a pullback that answered anything but the zero reads differently."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_discrete_cotangent.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_exact = "true\nfalse\ntrue\n0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
