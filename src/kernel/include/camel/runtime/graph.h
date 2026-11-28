@@ -211,14 +211,29 @@ bool nodeTakesNoOrder(const GCGraph &graph, gc_node_ref_t ref);
 /// place and no reader needs either type.
 bool graphIsDraft(const camel::graph::Graph &graph);
 
-/// The version of a graph's content, for a reader that holds a graph and not its owner
-/// (`facts::GraphAccess::version`, camel/facts/facts.h): 0 for a frozen graph, whose content
-/// cannot change, and the draft's revision otherwise (`GraphDraft::revision`, which moves whenever
-/// what the draft refers to may have changed -- a node added, erased or rewritten, a payload handed
-/// out for writing -- which is exactly the condition a stored fact has to be dropped on). A fact
-/// stamped with it about a draft is dropped when the draft is edited; a fact about a frozen graph
-/// never is.
-uint64_t graphContentVersion(const camel::graph::Graph &graph);
+/// The identity a graph has on its version line, for a reader that holds a graph and not its owner
+/// (`facts::GraphAccess::identity`, camel/facts/facts.h): `GCGraph::id` for a frozen graph and
+/// `GraphDraft::id` for a draft. Every version of a graph carries the id of the graph it is a
+/// version of, and a graph a rewrite creates gets a new one, so two graphs that answer the same id
+/// are one graph read twice -- which is what a stored fact may be keyed on, and a graph's address
+/// is not. `kInvalidGraphId` for a graph the runtime does not hold.
+GraphId graphIdentity(const camel::graph::Graph &graph);
+
+/// The revision of a graph's content (`GCGraph::revision`, `GraphDraft::revision`), for a reader
+/// that holds a graph and not its owner (`facts::GraphAccess::version`): the number a stored fact
+/// is stamped with, so that a fact is stale when a graph it read moved. Equal revisions of one id
+/// mean equal content. It moves whenever what the graph refers to may have changed -- for a draft,
+/// a node added, erased or rewritten or a payload handed out for writing; for a frozen graph, a
+/// commit that encoded a version of it. 0 for a graph the runtime does not hold.
+uint64_t graphRevision(const camel::graph::Graph &graph);
+
+/// The version of one node's own content (`GCGraph::nodeContentHash`: the hash of its record, of
+/// the nodes it consumes and of its payload), for `facts::GraphAccess::nodeVersion` -- the number a
+/// fact of a kind that reports its reads is checked against, so that it holds while every node it
+/// read is unchanged although the graph's revision moved. A draft has no such number (its revision
+/// is the draft's, and every edit moves it), so a fact about a draft stays on the conservative
+/// rule; 0 for a graph the runtime does not hold.
+uint64_t graphNodeVersion(const camel::graph::Graph &graph, gc_node_ref_t node);
 
 /// Properties a graph has besides its nodes (GCGraph::flags).
 enum GCGraphFlag : uint8_t {

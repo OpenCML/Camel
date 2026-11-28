@@ -80,6 +80,7 @@
 #include <string_view>
 #include <typeindex>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace camel::graph {
@@ -161,7 +162,20 @@ struct Reads {
 struct GraphAccess {
     /// The read-only view of `graph`, or null when the graph is not one this store's owner holds.
     std::function<const graph::GraphView *(const graph::Graph &)> view;
-    /// The version of the graph's content: a stored fact is stale when it changed.
+    /// The graph's identity on its version line: the same number for every version of one graph,
+    /// and a different one for a graph a rewrite created. A fact is keyed on it, not on the graph's
+    /// address, because a fact outlives the object it was computed from: committing an edit encodes
+    /// a *new* graph of the same identity, and the facts about the version before it are still
+    /// about this graph (architecture, core abstractions 1: a node's number is stable on one
+    /// version line). The owner states it (`GCGraph::id`, `GraphDraft::id`, through
+    /// `runtime::graphIdentity`); an access that has no owner has no identity either, and a store
+    /// cannot invent one -- a pointer or a counter of its own would be an identity that changes
+    /// when the graph is re-encoded, which is the defect this hook exists to remove.
+    std::function<std::uint64_t(const graph::Graph &)> identity;
+    /// The version of the graph's content (`runtime::graphRevision`): a stored fact is stale when
+    /// the revision of a graph it read moved. Equal revisions of one identity mean equal content
+    /// (`GCGraph::revision`), so this is the number a fact is stamped with and not the graph's
+    /// address.
     std::function<std::uint64_t(const graph::Graph &)> version;
     /// The version of node `NodeId`'s own content, as the owner states it: the hash of the node's
     /// record, of the nodes it consumes and of its payload (`GCGraph::nodeContentHash`). It is what
@@ -420,14 +434,26 @@ struct Counts {
     size_t puts = 0, hits = 0, misses = 0, stale = 0, revalidated = 0, computed = 0;
 };
 
+/// One graph a fact read, as the stamp carries it: the graph's identity on its version line and the
+/// revision of its content at the time. The identity and not the address, because a fact outlives
+/// the object: a commit encodes another version of the same identity, and the stamp has to compare
+/// against *that* graph when the fact is asked about again. A stamp holding the address of a graph
+/// that has ended would name a dead object, which is the defect the re-key removes.
+struct VersionMark {
+    std::uint64_t identity = 0;
+    std::uint64_t revision = 0;
+
+    bool operator==(const VersionMark &) const = default;
+};
+
 /// One stored fact, as forEach shows it.
 struct StoredFact {
     KindId kind = kNoKind;
     /// The anchors the fact is about.
     std::vector<Anchor> anchors;
     std::shared_ptr<const void> value;
-    /// The version of each anchored graph's content, and what the computation reported.
-    std::vector<std::pair<const graph::Graph *, std::uint64_t>> versions;
+    /// The identity and revision of each graph the fact read, and what the computation reported.
+    std::vector<VersionMark> versions;
     Reads reads;
     std::uint64_t epoch  = 0;
     std::uint64_t target = 0;
@@ -476,10 +502,30 @@ class Store {
     /// are equal. This is the validator of a kind, and what a test asks rather than trusting it.
     std::optional<bool> verify(KindId kind, std::span<const Anchor> anchors);
 
-    /// Drops the fact at `anchors`, every fact anchored on `graph`, or everything.
+    /// Drops the fact at `anchors`, every fact of `graph`'s identity, or everything.
     void invalidate(KindId kind, std::span<const Anchor> anchors);
     void invalidateGraph(const graph::Graph *graph);
     void clear();
+
+    /// Tells the store that `graph` is a live version of the graph it names: the facts of that
+    /// identity may be anchored on it, and it is one more version of the line that has to end
+    /// before the line's facts are void (`graphGone`). Every graph a store can be asked about
+    /// arrives this way (`holdGraph`, or `storeHolding` for a draft).
+    /// `identity` is the number the owner gives the graph (`GraphAccess::identity`), passed rather
+    /// than read: a graph is announced while it is still being made, and asking a graph that is
+    /// not finished what it is would be asking a half-built object. The store keeps the pointer
+    /// only to know when it ends -- it never dereferences it.
+    void noteGraph(const graph::Graph &graph, std::uint64_t identity);
+    /// Tells the store that the version `graph` ended. A fact of that identity is re-anchored on
+    /// another version of the same line that is still alive -- the fact is about the graph, not
+    /// about the object that held it -- and it is cleared only when no version of the line can be
+    /// reached any more. Each cleared slot is cleared while the value is still the store's and
+    /// through a version that is still there, so nothing is dereferenced after its end.
+    void graphGone(const graph::Graph *graph, std::uint64_t identity);
+    /// Whether a live entry of this store names `graph` in an anchor. A graph's end reaches only
+    /// the stores that named it: the sweep in `graphGone` visits every entry, and a store with no
+    /// anchor on the graph has nothing to drop, so asking costs one lookup instead of a sweep.
+    bool names(const graph::Graph *graph) const;
 
     /// Calls `visitor` for every stored fact, without checking a stamp: what is stored.
     void forEach(const std::function<void(const StoredFact &)> &visitor) const;
@@ -531,7 +577,7 @@ class Store {
     struct Entry {
         std::vector<Anchor> anchors;
         std::shared_ptr<const void> value;
-        std::vector<std::pair<const graph::Graph *, std::uint64_t>> versions;
+        std::vector<VersionMark> versions;
         Reads reads;
         std::uint64_t epoch  = 0;
         std::uint64_t target = 0;
@@ -545,9 +591,14 @@ class Store {
         /// read out would call a fact valid on evidence that is not the whole of what it read.
         bool readsCovered = false;
     };
+    /// A fact is keyed on the graph's *identity*, not on the graph object: committing an edit ends
+    /// the object and encodes another version of the same graph, and the facts about the version
+    /// before the commit are still about this graph (architecture, core abstractions 1). The
+    /// identity comes from the owner (`GraphAccess::identity`); a store that has none cannot key a
+    /// fact and says so rather than inventing one.
     struct Key {
         KindId kind;
-        const graph::Graph *graph;
+        std::uint64_t graph;
         NodeId node;
 
         bool operator==(const Key &) const = default;
@@ -558,11 +609,34 @@ class Store {
 
     static void checkType(KindId kind, const std::type_info &type);
     Entry *find(KindId kind, std::span<const Anchor> anchors, std::uint64_t target, Status &status);
+    /// Clears the slot every anchor of `entry` names, through the graphs that are still there:
+    /// an anchor whose graph has ended names nothing to clear, and reaching through it would name
+    /// a dead object. Caller holds `mutex_`.
+    void clearSlotsOfLocked(KindId kind, const Entry &entry);
+    /// Whether the store still believes `graph` is alive. Caller holds `mutex_`.
+    bool aliveLocked(const graph::Graph *graph) const;
+    /// Whether this store was ever told about a graph. A store told about one is told when each
+    /// ends (graphGone) and clears only through the graphs it still knows are alive; a store nobody
+    /// told (a check's own, in 	est/tools/facts) owns the graphs it reads, so it clears as
+    /// it always did. The flag is not live_.empty(): a graph announced while it is still being
+    /// built has no identity to key a line with, and that announcement still means the store is no
+    /// longer alone.
+    bool toldAboutGraphs_ = false;
 
     GraphAccess graphs_;
     bool persistent_;
     mutable std::mutex mutex_;
     std::unordered_map<Key, std::vector<Entry>, KeyHash> entries_;
+    /// The graph objects the store has been told are alive (`noteGraph`), and, for each identity,
+    /// the versions of one line among them: what "the whole version line is unreachable" is
+    /// measured against when one version ends (`graphGone`).
+    std::unordered_map<const graph::Graph *, std::uint64_t> alive_;
+    std::unordered_map<std::uint64_t, std::unordered_set<const graph::Graph *>> lines_;
+    /// The graphs some live entry names in an anchor (`putValue`, `obtainValue`), which is what a
+    /// graph's end asks about first (`forgetGraph` -> `names`). Over-approximated on purpose: a
+    /// graph whose last entry is gone stays until it ends, and an extra sweep costs no more than
+    /// the sweep every store used to pay for every graph. Guarded by `mutex_`.
+    std::unordered_set<const graph::Graph *> named_;
     Counts counts_;
 };
 
@@ -580,9 +654,12 @@ void computeAll(
 
 /**
  * The access a store of a context reads its graphs through: the frozen adapter the graph answers
- * `view()` with, and the constant version 0. A frozen graph's content never changes, so a fact
- * about one cannot be stale for a content reason; what ends it is the graph's lifetime, which is
- * `forgetGraph`.
+ * `view()` with, the graph's identity on its version line (`runtime::graphIdentity`, `GCGraph::id`)
+ * and the revision of its content (`runtime::graphRevision`, `GCGraph::revision`). The address of
+ * the graph object is neither: committing an edit ends the object and encodes another of the same
+ * identity, and a fact about the version before the commit is a fact about this graph -- it is
+ * revalidated rather than dropped when what it read did not change (facts.h,
+ * `Status::Revalidated`).
  *
  * `callee` is the owner's answer to "which graph does this call reach", by identity. The context
  * passes its runtime graph manager's (`Context::programOfRuntimeGraph` + `Program::calleeOf`);
@@ -597,15 +674,18 @@ GraphAccess frozenGraphs(std::function<const graph::Graph *(const graph::Graph &
  * names (`camel/graph/graph.h`). It differs from `frozenGraphs` in the one place the two
  * representations differ for a fact:
  *
- *   - `version` is the draft's revision (`runtime::graphContentVersion`), not the constant 0 a
- *     frozen graph answers: a draft's content changes, so a stored fact about it must be dropped
- *     when an edit makes what it read different. A store that answered 0 here would keep an answer
- *     about a graph that has changed, which is the one failure a stamp exists to prevent.
+ *   - `identity` is the draft's `GraphId` and `version` its revision (`runtime::graphIdentity`,
+ *     `runtime::graphRevision`), not a constant: a draft's content changes with every edit, so a
+ *     stored fact about it must be dropped when an edit makes what it read different, while the
+ *     facts about the version before the edit are still facts about this graph (see the identity
+ *     hook above -- the same identity line every version of a graph lives on). A store that
+ *     answered 0 here would keep an answer about a graph that has changed, which is the one failure
+ *     a stamp exists to prevent.
  *   - `callee` is empty. A draft names its callee by `GraphId` (`GraphDraft::calleeIdOf`), but the
- *     graph that number names is held by a `Program` and a draft being built has none -- the program
- *     answers "no program holds it" for a draft (`Program::calleeOf`), and a draft that decoded a
- *     graph still does not make the draft itself the program's. So a computation that walks across
- *     a call reports that it cannot, rather than answering that the call reaches nothing
+ *     graph that number names is held by a `Program` and a draft being built has none -- the
+ * program answers "no program holds it" for a draft (`Program::calleeOf`), and a draft that decoded
+ * a graph still does not make the draft itself the program's. So a computation that walks across a
+ * call reports that it cannot, rather than answering that the call reaches nothing
  *     (`core.arrangeable` declines for a `Call` and a `Func` for the same reason, and not only this
  *     one).
  *   - the slots are the same writes frozenGraphs makes, and they land nowhere: a draft keeps none
@@ -629,7 +709,7 @@ GraphAccess draftGraphs();
  * the framework makes for it (see `storeHolding`). `holdGraph` still accepts one, so a caller that
  * does keep a store of its own for a draft can say so.
  */
-void holdGraph(Store &store, const graph::Graph &graph);
+void holdGraph(Store &store, const graph::Graph &graph, std::uint64_t identity);
 
 /**
  * The store that holds `graph`; null when the graph is not one any store can answer about.
@@ -657,7 +737,7 @@ Store *storeHolding(const graph::Graph &graph);
  * forgotten: nothing else names it, and a draft that outlived it would otherwise leave a store per
  * draft standing for the rest of the process, each holding an answer about a graph that is gone.
  */
-void forgetGraph(const graph::Graph *graph);
+void forgetGraph(const graph::Graph *graph, std::uint64_t identity);
 
 /**
  * `camel inspect --facts`: one line `FACT {json}` per fact about `root` (the graph the tool

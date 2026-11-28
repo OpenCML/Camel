@@ -244,10 +244,14 @@ OpDef compareDef(std::string_view name, std::vector<std::string_view> exports) {
 template <k::UnaryOp Op>
 OpDef unaryDef(std::string_view name, std::vector<std::string_view> exports) {
     return OpDef{
-        .name      = name,
-        .exports   = std::move(exports),
-        .params    = kUnaryParams,
-        .resultDoc = "float[...]",
+        .name    = name,
+        .exports = std::move(exports),
+        .params  = kUnaryParams,
+        // What the operator gives back, in the words of the same predicate the inference uses:
+        // `neg`, `abs` and `relu` keep the element type of their argument, every other map
+        // computes a float from it. The record said `float[...]` for all of them, which is the
+        // wrong answer for those three whenever the argument is not a float array.
+        .resultDoc = k::unaryProducesFloat(Op) ? "float[...]" : "T[...]",
         .infer     = unaryInfer(k::unaryProducesFloat(Op)),
         .kernel    = &unaryKernel<Op>,
         .traits    = elementwiseTraits(),

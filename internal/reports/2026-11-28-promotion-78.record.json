@@ -1,0 +1,63 @@
+{
+  "kind": "promotion",
+  "promotion": 78,
+  "tip": "9502dfe37daf68d40535c28523177e492dc93add",
+  "measured_tip": "9502dfe37daf68d40535c28523177e492dc93add",
+  "pushed_develop_sha": "9502dfe37daf68d40535c28523177e492dc93add",
+  "landing_tip": "the record is a documentation commit and lands on whatever integration holds at push time. This layer was started in a quiet window: 1m load 17.72 and 5m load 24.10 at the start, the lowest of the day",
+  "note": "the layer was measured at 9502dfe37daf, forty-five commits above the seventy-seventh promotion's measurement. The batch it covers is the first large one of the day: seat/batch11 built and read at 521eb95be74b, fsh-dev at the pin carrying the runner process count and the cancellation page, and work/c1-c2 giving the run pass its own kernel, with forty build paths and twenty-two plan files behind them, the AST golden record among them. None of them changed a verdict",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at 9502dfe37daf; load 1m 17.72 at the start of the run, in the quiet window after the all-tier gate finished",
+  "binary_built": "2026-11-28T14:26:46+08:00",
+  "readings": {
+    "total": 9919,
+    "pass": 9717,
+    "fail": 141,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 0,
+    "re_run": 0,
+    "re_run_passed": 0,
+    "load_before": "1m 17.72, 5m 24.10, 15m 30.23",
+    "load_warning": "[load] WARNING: 1m load 17.72 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth to seventy-seventh layers carried; a promotion does not wait on load, D-1128-36). This layer was nevertheless started in the lowest window of the day: 1m and 5m were both well under 40"
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-77-reds.tsv (the seventy-seventh promotion, 141 names)",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], with the plan aliases transforms/compile.transforms and stated_extents/compile.stated_extents read as the same plan; this reading writes the bare names transforms (8 rows) and stated_extents (1 row), the same spelling the seventy-seventh table holds",
+    "still_red": 141,
+    "turned_green": 0,
+    "turned_green_names": [],
+    "new_reds": 0,
+    "new_reds_names": [],
+    "vanished_reds": 0,
+    "arithmetic": "141 names before: 0 turned green, 0 vanished, 0 appeared, 141 remain red; the two sets are the same set name for name",
+    "total_delta": "minus one: the layer declares 9919 entries against the seventy-seventh layer's 9920, and the case that is no longer declared is compile.type_array/type_array.selftest_alias, which the seventy-seventh layer ran and passed. A plan edit in this batch removes it (its name line is deleted from test/plans/feat/compile/type_array.plan.toml by the batch's pass-rename work, while type_array.selftest stays), so the missing entry is a removed case, not a case that stopped running, went into another layer, or changed its conditions. Nothing else in the declared set differs: no case was added, and no case changed status",
+    "notes": [
+      "the batch's forty build paths include the prl handoff and taskflow, the CLI config and opencmlrc, the debugger's run, the limits header, the big stack thread and the sim module, and none of them moved a verdict in either direction",
+      "the AST golden record test/plans/feat/parse/golden/ast_hashes.txt changed inside this batch and the AST cases stayed as they were, so this layer needed no judgement about whether the record was re-recorded by its owner or broken by the change: there was no AST red to explain",
+      "the five cases the tensor work was expected to turn green are still red because that lane is not in this batch: nothing under src/stdlib/tensor changed between the seventy-seventh and the seventy-eighth measurement",
+      "no case timed out in this layer and none was re-run; fault_deep.prl_off is absent for the twelfth round running because the scheduler root-cause fix holds",
+      "export_loop_carried_array_field stayed green for the seventh reading running"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 0,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [],
+    "how": "the layer reported timed_out 0 and re_run 0, so there was no timeout to run alone"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-78-reds.tsv",
+  "red_table_rows": 141,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-78-reds.tsv",
+  "new_red_names": [],
+  "pushed_as": "develop, fast-forwarded from fd950804d6cd to 9502dfe37daf, the tip this layer measured",
+  "develop_before": "fd950804d6cd08fd40e7cdc22e0ef8d5f13beb4e",
+  "develop_after": "9502dfe37daf68d40535c28523177e492dc93add",
+  "commits_brought_in": 45,
+  "commits_touching_src": 40
+}
