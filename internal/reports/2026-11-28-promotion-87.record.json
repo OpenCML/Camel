@@ -1,0 +1,62 @@
+{
+  "kind": "promotion",
+  "promotion": 87,
+  "tip": "24f5563f1e59142be7634f26663c3a4383d7fc61",
+  "measured_tip": "24f5563f1e59142be7634f26663c3a4383d7fc61",
+  "pushed_develop_sha": "24f5563f1e59142be7634f26663c3a4383d7fc61",
+  "landing_tip": "the record is a documentation commit and lands on whatever integration holds at push time; the tip this layer measured was read twice with git ls-remote before the run and it is the tip the merge seat pushed the forty-fifth batch on",
+  "note": "the layer was measured at 24f5563f1e59: six build paths arrived since the eighty-sixth layer's landing -- the ONNX exporter, two tensor kernels and the shape rules header, plus the neural-network and ONNX plans and the parse golden hashes -- and the layer declares three more cases than the previous one, all three of them new captures of the ONNX exporter's refusals and the batch-norm rank rule. All three pass and the red set did not move",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at 24f5563f1e59; load 1m 52.96 at the start of the run",
+  "binary_built": "2026-11-28T19:20:18+08:00",
+  "readings": {
+    "total": 9936,
+    "pass": 9743,
+    "fail": 132,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 0,
+    "re_run": 0,
+    "re_run_passed": 0,
+    "load_before": "1m 52.96, 5m 55.31, 15m 50.16",
+    "load_warning": "[load] WARNING: 1m load 52.96 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth to eighty-sixth layers carried; a promotion does not wait on load, D-1128-36). The load is the whole shared host's, not this run's: at the same minutes the pool held ten of its twenty-four tokens, the four runs reading were two workers each and every one of them carried CAMEL_TOKEN_DIR, and the CPU aggregate belonged mostly to other users on the machine. This record states the number as the tool printed it and does not call it an environment fault."
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-86-reds.tsv (the eighty-sixth promotion, 132 names)",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], with the plan aliases transforms/compile.transforms and stated_extents/compile.stated_extents read as the same plan; the two summaries were also compared entry by entry, so a case that changed status without entering or leaving the red set would have been seen",
+    "still_red": 132,
+    "turned_green": 0,
+    "turned_green_names": [],
+    "new_reds": 0,
+    "new_reds_names": [],
+    "vanished_reds": 0,
+    "arithmetic": "132 names before: 0 turned green, 0 vanished, 0 appeared, 132 remain red; the two red sets are equal name for name, and the entry-by-entry comparison of the two summaries reports no removed and no changed case",
+    "total_delta": "plus three: 9936 entries against the eighty-sixth layer's 9933, and the three that appeared are modules.nn|batch_norm_rankone_fits_one_axis, modules.nn|batch_norm_rankone_two_axes_refused and modules.onnx|export_collect_reverse_refused_by_name. All three pass, so the addition is three cases captured rather than three verdicts changed",
+    "notes": [
+      "opt.progen|progen_seed_4 stayed green for a third layer, so the eighty-fourth layer's green is stable and the two family-judging lanes that arrived together in that coverage remain its joint explanation, with no bisection needed (D-1128-193)",
+      "the coverage is six build paths of real code -- src/stdlib/onnx/exporter.cpp, src/stdlib/tensor/kernels/conv.cpp, src/stdlib/tensor/kernels/shape_rules.h and three plans -- and no verdict moved; this is the second layer in a row where a batch's code and its reading were taken at the same tip",
+      "no case timed out in this layer and none was re-run; fault_deep.prl_off is absent for the twenty-first round running because the scheduler root-cause fix holds",
+      "the load warning is the tool's line verbatim. The pool reading taken while this layer ran was size 24, held 10, peak 24, with eight test workers in four trees, every one carrying CAMEL_TOKEN_DIR and every run entered through bin/camel-run and host-tokens.sh take-up-to 2; the machine's aggregate CPU was mostly other users'. The reading is therefore not comparable to a quiet-host reading, and the red set is unaffected: the same 132 names are red at load 23.57, 28.95, 29.12 and 52.96"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 0,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [],
+    "how": "the layer reported timed_out 0 and re_run 0, so there was no timeout to run alone"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-87-reds.tsv",
+  "red_table_rows": 132,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-87-reds.tsv (132 names)",
+  "new_red_names": [],
+  "pushed_as": "develop, fast-forwarded from 0fb33bc32f1b to 24f5563f1e59, the tip this layer measured",
+  "develop_before": "0fb33bc32f1b87da3ec1f345638e95230b4c801b",
+  "develop_after": "24f5563f1e59142be7634f26663c3a4383d7fc61",
+  "commits_brought_in": 10,
+  "commits_touching_src": 6
+}
