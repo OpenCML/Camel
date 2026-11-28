@@ -94,13 +94,14 @@ bool deviceCapable(core::OperId oper);
 /// answers them where the value lives and no device program is missing for one
 /// (`graph_regions.cpp`, `compiler.cpp`).
 bool structuralOperator(core::OperId oper);
-/// Whether running the operator touches nothing the device has to leave on the host: it writes no
-/// state and reaches nothing outside the program. The statement of it is the operator record
-/// (`camel/ops/operator_record.h`: `pure` is the empty `uses` clause, `external` the reach it
-/// states), and a record that does not state `uses` is answered from the semantics the operator was
-/// declared with. This is a placement question, not the scheduling one (`core.arrangeable`,
-/// `camel/facts/arrangeable.h`): whether the device can run the operator, not whether a pass may
-/// move it.
+/// Whether running the operator touches nothing the device has to leave on the host: it reaches no
+/// resource and nothing outside the program. Read off the footprint the operator record carries
+/// (`camel/ops/operator_record.h`: `external` the reach the clause states, `ResourceSpec::none` the
+/// reading that no access is declared and nothing is allocated), not off the clause's own promise
+/// `pure`, which answers "the clause states no write" -- the operator's answer about itself, and
+/// not the question a `#gpu` scope asks. This is a placement question, not the scheduling one
+/// (`core.arrangeable`, `camel/facts/arrangeable.h`): whether the device can run the operator, not
+/// whether a pass may move it.
 bool touchesNothing(core::OperId oper);
 /// The reason a `#gpu` scope must refuse `id`, as the diagnostic prints it, or an empty string
 /// when it must not. `id`'s eligibility answer (`analysis.exclusions[id]`) decides: a shape or
