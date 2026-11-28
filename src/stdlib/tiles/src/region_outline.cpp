@@ -834,6 +834,12 @@ const runtime::Program *outlineRegions(
                 break;
             auto fnNode =
                 draft.materializeStaticValue(core::rtdata::toSlot(fn), callee->funcType());
+            // The function constant just written names the callee's graph, so the graph is a
+            // static reference of this one (design 2.5: the reference table is how a program reads
+            // what a graph refers to). A static slot alone holds no reference: without this entry
+            // the call is written against a graph the reference table does not name, and every
+            // reader that walks the table -- the commit's closure first of all -- cannot reach it.
+            draft.addStaticGraphRef(callee->id());
             auto *type = callee->funcType()->exitType();
             std::vector<rt::gc_node_ref_t> args(
                 extracted.parameters.begin(),
@@ -874,6 +880,12 @@ const runtime::Program *outlineRegions(
                 draft.setNormInputs(call, args);
             }
             draft.setWithInputs(call, std::span(&fnNode, 1));
+            // The callee was in no program before this edit: it is delivered because the session
+            // notes it as a graph this edit made, and not because a draft reaches it (design 2.5,
+            // `collectCommitClosure`; the same call `draft_outline.cpp` makes for the graph its
+            // group becomes). Without it the call this line writes refers, by id, to a graph the
+            // program that comes out of this commit does not hold.
+            session.noteMadeGraph(callee);
             // The exec call is the second effect of this region: it reads what the uploads wrote
             // and writes the driver the downloads read, so it takes its place in the chain here and
             // reads no value of the block beside it.
