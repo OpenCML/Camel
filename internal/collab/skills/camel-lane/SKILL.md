@@ -602,3 +602,9 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
 · **跑 `std::cpp` 生成的程序要两件事，缺一就误判成"桥接/导出坏了"**（2026-11-28实测）：① 链接行必须**显式写出 install 自带的 `$LIBSTD/libstdc++.so.6`**（`-L` 顺序提前**不够**，驱动的 `-lstdc++` 仍会挑编译器自带的旧版 ⇒ `GLIBCXX_3.4.35/.36` 未定义）；② 运行要给 `CAMEL_HOME=$TREE/out/latest`（或把二进制放到 install 的 `bin/` 旁），否则运行时从可执行文件目录找模块、抛 `camel::core::error::Diagnostic`。这两条都不是桥接代码或导出表的问题。
 
 · **PowerShell 里 `git grep -A 5 pattern` 会把 `-A` 当成 revision 而失败**：写成 `git grep --after-context=5 pattern`（同理 `--before-context=`），或直接用 grep 工具。同类陷阱：`git log -S` 的 `-S` 正常，但任何单字母选项都可能被 PowerShell 抢参，长选项最稳。
+
+## 读数要说实话：把计划范围写进结论（`D-1128-98`）
+
+写「甲 0」时**必须带上你跑的范围**：`跑的是 <这些计划>，对 <哪张表>，甲 0`。只跑了子集就只对子集下结论 —— 把「我跑的这几层里没有表外红」写成「甲 0」，别人会当整层读，合并位一进整层就露。
+
+整层读数是 `merge-batch` 的活，**不要**为了让交回好看而自己重跑 fast 层（构建机负载已经 30–50，那是把闸门的活复制 N 遍）。交回里写清：跑了什么、对哪张表、结论只覆盖这些。
