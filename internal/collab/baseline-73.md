@@ -23,6 +23,20 @@
 - **跨 tip 的两张表不能直接逐名比**：先当"base 的差"处理（`references/pitfalls.md`「同一个"绿"还必须在同一个尖端上」）。
 - **引用写法**：交回里写"对 72 表 141 名（`2026-11-28-promotion-72-reds.tsv`，tip `0967afd6159a`）"，不要写"对上一版"。
 
+## 逐名比时最容易漏的一处：属主列写裸名
+
+表的属主列（`plan_id`）有两族写的是**裸名**，而计划文件在 `test/plans/feat/compile/`：
+
+| 表里写的 | 行数 | 计划文件 | 按目录拼的写法 |
+|---|---|---|---|
+| `transforms` | **8** | `test/plans/feat/compile/transforms.plan.toml` | `compile.transforms` |
+| `stated_extents` | **1** | `test/plans/feat/compile/stated_extents.plan.toml` | `compile.stated_extents` |
+
+- 66–72 这几张表**都**写裸名（逐张 `grep` 核过：`transforms` 各 8 行、`stated_extents` 各 1 行；`compile.transforms` / `compile.stated_extents` 在表里 **0 行**）。merge 位的逐名比较把两种写法当**同一计划**（`2026-11-28-promotion-72.record.json` 的 `comparison.method` 明写）。
+- ⇒ 按 `^(compile\.|modules\.)` 之类**前缀过滤属主列**，会**正好漏掉这 9 行**，分母少 9。
+- **实例（今天真发生）**：`task-404` 换底后把本层目录内的 72 表行数算成 **31**、实际 **40** —— 31 = `compile.*` 4 行 + `modules.*` 27 行；40 = 31 + 那 9 行裸名。于是写出"31/31 仍红"这种**既对又误导**的话（它自己的 `甲 0` 与"40 条全在表里"本来就互证分母是 40）。
+- **判法**：先按"本层跑到的目录"取表行数，**再套别名**，然后只问一句"这些行是不是全部仍红"——**不去数未跑目录**（数了就会把"没跑"读成"转绿"）。
+
 ## 71→72 的唯一一条"乙"要按过渡重钉读，不是修复
 
 `modules.onnx.export_loop_carried_array_field` 是 71 表里有、72 表里没有的那一条（两张表都已核对）。它**不是被修好的**：
