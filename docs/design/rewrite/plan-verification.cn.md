@@ -60,11 +60,11 @@
 
 三条路径（**全都是采样或"能不能触发"级别的检查，没有一条是证明**）：
 
-1. **值路径**：抽 `samples` 组值，两侧各算一遍，比较。规则无许可时按位；有许可时按 §1.1 的容差。规则带 `when` 时这条路径**走不了**——`checkKernel` 的注释写着"工具没法拿采样值去问条件"。
+1. **值路径**：抽 `samples` 组值，两侧各算一遍，比较。规则无许可时按位；有许可时按 §1.1 的容差。规则带 `when` 时这条路径**仍然跳过**（`!conditional`）：两侧各自抽样的比较不做；但"工具没法拿采样值去问条件"这句今天不成立——引擎路径就在采样值节点上问条件（§1.5），条件放行的样本才被重写、才比较改写前后的值。
 2. **引擎路径**：把规则施加到它自己的左边（最多 8 次，条件规则 64 次），规则必须触发，重写后的函数也要对得上。
 3. **误差路径**：`refine_accuracy` 的规则不走值路径比较相等，而是两侧分别对高精度参照（`RefEvaluator`）算误差，报最坏误差比。
 
-**一个必须说清的后果**：`lib/rules/rules.cml` 的 21 条带许可的规则里有 **16 条同时带 `when` 守卫**（`reassociate` 族正好是那 16 条：7 + 3 + 6），它们因此**完全不走值路径**，只做第 2 条路径——也就是今天这 16 条只被检查了"它能在自己的左边上触发"，两侧的值从来没有在任何一组输入上比较过。容差那条路径今天只被 `test/cases/modules/rules/check_bound.cml` 那类**不带守卫**的规则走到（`rules.check_bound_follows_the_permission` 里 `wrong_reassociate` 的 `FAIL` 就是它）。
+**一个必须说清的后果**：`lib/rules/rules.cml` 的 21 条带许可的规则里有 **16 条同时带 `when` 守卫**（`reassociate` 族正好是那 16 条：7 + 3 + 6），它们因此**不走值路径**（`!conditional`），只做第 2 条路径——也就是今天这 16 条被检查了两件事："它能在自己的左边上触发"，以及引擎在条件放行的样本上重写后前后两个值对得上；**两侧各自抽样的比较从来没有在任何一组输入上跑过**。容差那条路径今天只被 `test/cases/modules/rules/check_bound.cml` 那类**不带守卫**的规则走到（`rules.check_bound_follows_the_permission` 里 `wrong_reassociate` 的 `FAIL` 就是它）。
 
 ### 1.2 今天的报告词汇（逐字，探针实测）
 
@@ -76,7 +76,7 @@ ok finite: 100 samples agree, fired 8 of 8
 FAIL reassoc: the two sides differ at (-inf, 7, -1): -nan and -inf
 FAIL accurate: the rewritten left side is less accurate at (-115.74200000000002): its error 0.0087152 exceeds the original's 0 (ratio 1.96249e+13)
 unchecked anywhere: the permissions it needs have no numeric bound
-ok guarded: the condition selects the instances, fired 2 of 64
+sampled guarded: … fired 1 of 1 admitted
 ok tensor_law: 100 samples agree, fired 8 of 8
 ```
 
@@ -90,7 +90,7 @@ ok wide_mul_div: 200 samples agree, fired 8 of 8
 FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 ```
 
-**读法**：`ok` 覆盖了三种很不一样的处境——真的证不了但采样一致（`plain`）、许可放宽了容差后采样一致（`finite`）、条件规则压根没比较（`guarded`）；`unchecked` 是第四个字，只在两种情形出现（带许可但无界、泛型规则）。任务书要的三个字里，`proved` 与 `sampled` 今天都没有对应物，`refuted` 的对应物是 `FAIL`，而 `FAIL` 今天把"采样撞上反例"与"许可允许的不等"混在一起（`reassoc` 就是后者：它是一条**不带 `when` 守卫**的 `reassociate` 规则，所以走到了值路径，而 `reassociate` 一个位都不含 `no_infs`，样本里就有 `-inf`；标准库的 16 条 `reassociate` 规则都带守卫，走的是"条件选择实例"那一行，见 §1.1 末尾）。这一处冲突是交给作者的第一个问题。
+**读法**：今天的三词裁决里，`sampled` 覆盖了两种很不一样的处境——真的证不了但采样一致（`plain`）、许可放宽了容差后采样一致（`finite`）；条件规则（`guarded`）另算：引擎在条件放行的样本上重写并比较了改写前后的值，但两侧各自抽样的比较没跑，行是 `sampled guarded: … fired k of m admitted`（下一笔把本节引文的 `ok`/`FAIL` 换成今天的三个词）。`unchecked` 是第四个字，只在两种情形出现（带许可但无界、泛型规则）。任务书要的三个字里，`proved` 与 `sampled` 今天都没有对应物，`refuted` 的对应物是 `FAIL`，而 `FAIL` 今天把"采样撞上反例"与"许可允许的不等"混在一起（`reassoc` 就是后者：它是一条**不带 `when` 守卫**的 `reassociate` 规则，所以走到了值路径，而 `reassociate` 一个位都不含 `no_infs`，样本里就有 `-inf`；标准库的 16 条 `reassociate` 规则都带守卫，走的是"条件选择实例"那一行，见 §1.1 末尾）。这一处冲突是交给作者的第一个问题。
 
 ### 1.3 今天有没有求解器接入
 
@@ -125,7 +125,7 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 
 ### 1.5 `when` 与 `fact` 今天的位置
 
-- **`when`**：有实现，编译成第三个函数 `name__when(params)`（`docs/technical/46_rules.md` 第 6 节）。`check` 对它只有一个处置：值路径跳过，只跑引擎路径，报告 `ok name: the condition selects the instances, fired k of m`。**条件从不被当成前提**，因为采样值上无法求值。
+- **`when`**：有实现，编译成第三个函数 `name__when(params)`（`docs/technical/46_rules.md` 第 6 节）。`check` 对它的处置分两层：两侧各自抽样比较的那条值路径仍然跳过条件规则（`!conditional`）；引擎路径则把每个标量参数按抽到的值落成图里的节点，就在这些节点上问条件（`one.when` 拿到的匹配里，参数就是采样值的节点）。条件放行的样本才算实例，引擎在放行样本上重写左边并比较改写前后的值，报告 `sampled name: … fired k of m admitted`（m 是放行数）；条件一条都没成立时报 `sampled` 与 `the condition never held on any of the N samples`。**条件从不被当成前提**——今天没有任何证明路径，条件只用来筛样本。
 - **`fact`**：`lib/rewrite/fact.cpp` 与 `lib/rewrite/module.cpp#factKernel`（注册名 `"fact"`）实现的是设计稿第 7.5 节**之前**的形态；`parse/src/ast/builder.cpp` 里已经把它算出来的东西叫 `fact` 函数（`range__on0_fact`），声明面也已经叫 `fact`。两件第 8 节的事今天都没有：8.1 的"`fact` 的结论作为前提"，以及 8.6 的"没有函数体的 `fact` 是一张由规则填写的关系表"（`fact dominates(a, b): bool join (a: bool, b: bool) => a | b` 那种写法）。`test/plans/feat/modules/rules.plan.toml` 里的 `rules.fact_reads_a_fact_in_when`、`rules.fact_takes_the_parts_of_a_compound`、`rules.node_of_reaches_a_const_parameter` 三条覆盖的就是它的行为，今天全绿。
 
 ### 1.6 `explain` / `why_not` 的报告面
@@ -188,7 +188,7 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 | G6 | `reassociate`/`contract` 只放宽容差；16 条带守卫的走"条件选择实例"，不带守卫的实测在 `-inf` 处 FAIL | 证它们在**实数**上相等 | 翻译器 | 1 文件（实数模型）+ 报告多一列 / 同 G5 的构建 / 串在 G5 后 |
 | G7 | `refine_accuracy` 走误差比路径，措辞是 `FAIL … is less accurate` | "右边不比左边差"的误差界命题 | 报告 + 翻译器 | 与 G5 同文件 / 同上 / 串在 G5 后 |
 | G8 | `nondeterministic` → `checkable=false` → `unchecked`（第四个字） | 只能 `sampled`，且要写明原因 | 报告 | 与 G1 同文件 / 同 G1 / 串在 G1 上 |
-| G9 | `when` 无法在采样值上求值，值路径整条跳过 | `when` 作前提 | 翻译器 | 1 文件（前提与条件图） / 1 次 / 与 G5 并行 |
+| G9 | `when` 不进前提表：条件只筛样本（采样值上能问，问出来的不是假设） | `when` 作前提 | 翻译器 | 1 文件（前提与条件图） / 1 次 / 与 G5 并行 |
 | G10 | `fact` 与判定无关 | `fact` 的结论作前提 | 翻译器 + 声明面 | 1 文件；声明面的更名由另一条工作完成，不在本计划 / 与 G9 同批 / 与 G9 并行 |
 | G11 | 泛型规则在 `check` 里直接 `continue` | 每个实例分别证明 | 翻译器 + 报告 | 1 文件（枚举元组、取实例）+ 报告每行带元组 / 1 次 / 与 G5、G9 并行 |
 | G12 | 报告无格式契约，`FAIL` 混装两种处境 | 反例要可复现、命题种类要显式 | 报告 | 与 G1 同文件 / 同 G1 / 串在 G1 后 |
@@ -263,7 +263,7 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
   - `reassociate`/`contract` → **实数模型**，命题种类 `real equality`（落到选项 A 还是 C，见问题文件 1 的选项 A/C）。
   - `refine_accuracy` → **误差界命题**，命题种类 `error bound`。
 - **红前用例**（两条，覆盖许可的两种处境）：
-  1. **库里的真形状**：`float_combine`（`#requires(reassociate)` **且带** `when combineSameSign(c1, c2)`）今天逐字 `ok float_combine: the condition selects the instances, fired 2 of 64`——一次值比较都没做。计划断言 `proved float_combine, class real equality`——今天红。
+  1. **库里的真形状**：`float_combine`（`#requires(reassociate)` **且带** `when combineSameSign(c1, c2)`）今天逐字 `sampled float_combine<float>: … fired 24 of 24 admitted`——条件就在采样值上问，条件放行的 24 个样本上引擎重写并比较了改写前后的值；两侧各自抽样的比较没跑。计划断言 `proved float_combine, class real equality`——今天红。
   2. **不带守卫的许可规则**（探针形状）：`#requires(reassociate)` 的 `x * c1 + x * c2 => x * (c1 + c2)` 不带 `when` 时今天逐字 `FAIL reassoc: the two sides differ at (-inf, 7, -1): -nan and -inf`（`reassociate` 不含 `no_infs`，所以样本里有 `-inf`）。按 8.1 它应当是"实数上相等"，今天却是 `FAIL`——**同一条规则在"有守卫"与"无守卫"下今天给出两种互不相干的报告**，这本身就是要把许可与 `when` 合成一张前提表（§1.4 末）的理由。计划断言这两条都得到 `proved …, class real equality`——今天两条都红。
 - **验收**：
   ```
@@ -274,8 +274,8 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 
 ### S4 `when` 与 `fact` 作前提
 
-- **产物**：`when` 的函数图（`GenericRuleInstance::when` / `RuleObject::when`）译成**假设**；报告写明"在 `when` 下证明"（今天的措辞是"the condition selects the instances"，不提证明）。`fact` 的结论：能译的当假设；译不了的把该规则降为 `sampled` 并写明是哪一项做不到（8.1："覆盖不到的用 `check` 兜底并在报告里标明"）。
-- **红前用例**：`rule guarded(x: int, const c: int) { x * c => x } when c == 1` 今天逐字 `ok guarded: the condition selects the instances, fired 2 of 64`——完全没有证明路径。库里同形状的两条（`check_when.cml` 的 `double_int` / `double_float`）今天是 `ok double_int: the condition selects the instances, fired 64 of 64`。计划断言 `proved guarded under when`——今天红。
+- **产物**：`when` 的函数图（`GenericRuleInstance::when` / `RuleObject::when`）译成**假设**；报告写明"在 `when` 下证明"（今天的措辞是 `fired k of m admitted`，只说条件放行了多少样本，不提证明）。`fact` 的结论：能译的当假设；译不了的把该规则降为 `sampled` 并写明是哪一项做不到（8.1："覆盖不到的用 `check` 兜底并在报告里标明"）。
+- **红前用例**：`rule guarded(x: int, const c: int) { x * c => x } when c == 1` 今天逐字 `sampled guarded: … fired 1 of 1 admitted`——完全没有证明路径。库里同形状的两条（`check_when.cml` 的 `double_int` / `double_float`）今天是 `sampled double_int: … fired 64 of 64 admitted`。计划断言 `proved guarded under when`——今天红。
 - **验收**：
   ```
   camel test/cases/modules/rules/check_when.cml std::nvm
