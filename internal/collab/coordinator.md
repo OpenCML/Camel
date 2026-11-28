@@ -628,3 +628,10 @@ git worktree add --detach <旧提交>
 PowerShell 的 Set-Location 只改 `$PWD`（PowerShell 自己的位置），不改 `[Environment]::CurrentDirectory`（进程工作目录）；.NET 的 `[System.IO.File]::*` 与按相对路径解析的任何非 PowerShell 代码用的是后者，而进程工作目录是**会话起点**（协调者与车道都继承 D:\Projects\Camel）。
 更隐蔽的后果：**验证也会验证错** —— 我用 `ReadAllBytes("internal\backlog.md")` 数控制字符，读的是主检出那份（刚被我改好的），于是把"已修"当结论、把没修的那份提交了。
 **规矩**：.NET / node / python 一切写文件**只用绝对路径**（先 `$tree = "D:\Projects\Camel-wt\<名>"` 再拼完整路径）；"验证刚才写的那份"也必须用同一个绝对路径；`.NET` 写之前先 `[Environment]::CurrentDirectory = (Get-Location).Path`（第 26 条的断言里已带，别省）。
+
+## 甲 0 只认整层读数（2026-11-28，两条车道的假甲 0）
+
+**交回里写「甲 0」必须同时给三样**：① 整层读数（`total / pass / fail / skip / known`，外加 `timedOut / rerun`）② 跑的是哪一层（哪些 `-Plan`、什么 `-Tier`）③ 对**哪一张**红表逐名比（今天 = `2026-11-28-promotion-72-reds.tsv`，141 名）。缺一样，那个「甲 0」按**未完成**处理。
+
+**为什么**：两条车道（`lane/tensor-pow-law`、`lane/arg-parse-uaf-w`）各自交了「甲 0」，合并位一进整层就各带出**同一组 15 条表外红**（`compile.casts cast_target_type_expression.nvm` 等，根因是 `()` 单位类型被当成 `int`）。隔离实验：只合其中一条 ⇒ 整层 156 红、15 条表外；干净尖端同一计划 17/17 全绿。它们的读数不是造假 —— 是**只跑了自己那几层**，于是表外红根本没进视野。
+
