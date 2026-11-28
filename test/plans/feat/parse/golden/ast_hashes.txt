@@ -560,7 +560,7 @@ a2ca595975c02dee ok src/stdlib/autodiff/signatures/autodiff.cml
 6ae5ad8be3ee4eec ok src/stdlib/ckpt/signatures/ckpt.cml
 c219592077b5b712 no src/stdlib/nn/signatures/nn.cml
 b9b23c3234979dee ok src/stdlib/rulesets/int8.cml
-b2b11698e129aa61 ok src/stdlib/rulesets/jvp.cml
+3ef9ce380143c6de ok src/stdlib/rulesets/jvp.cml
 8375a530eff268c4 ok src/stdlib/rulesets/probe_batch.cml
 7a11798394cc6e2c ok src/stdlib/rulesets/probe_missing.cml
 54be2679c5526d37 ok src/stdlib/rulesets/transpose.cml
