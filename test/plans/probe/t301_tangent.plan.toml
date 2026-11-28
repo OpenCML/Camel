@@ -2,7 +2,7 @@ id = "probe.t301"
 order = 999
 tier = "fast"
 tags = ["probe"]
-desc = "D-1127-217: a discrete result is the user's gradient (design principles 9.9), so jvp lifts it with the zero of its own type; a string result still has none."
+desc = "A discrete result is the user's gradient (design principles 9.9), so jvp lifts it with the zero of its own type; a string result still has none."
 
 [defaults]
 kind = "behavior"

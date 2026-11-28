@@ -1677,7 +1677,7 @@ bool liftGraph(
             }
             if (emptyTangent == rt::kInvalidNodeRef) {
                 // A discrete value is its own tangent space, and its cotangent is the zero of that
-                // type (design principles 9.9 and 7.18, decision D-1128-104): the machinery keeps
+                // type (design principles 9.9 and 7.18): the machinery keeps
                 // no place to accumulate in for such a value, which is its own choice, but the
                 // answer it hands to a reader is a zero, not a refusal and not a value with no
                 // data. Only a type with no tangent space at all -- a `string`, a function -- gets
