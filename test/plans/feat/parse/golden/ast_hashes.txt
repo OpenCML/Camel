@@ -543,7 +543,7 @@ eee0557e2c6bfe61 ok src/stdlib/random.cml
 27fc4f4fd00b5fb6 ok src/stdlib/sim.cml
 c850078b6b50daf1 ok src/stdlib/state.cml
 e065061c9e91b782 ok src/stdlib/statistics.cml
-c6ff696de381eefa ok src/stdlib/std.cml
+97bdd428fd3cdac0 ok src/stdlib/std.cml
 1e853ee4b632ef01 ok src/stdlib/str.cml
 46747b8669c63121 ok src/stdlib/stream.cml
 ed77c186d082145e ok src/stdlib/tensor.cml
