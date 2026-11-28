@@ -148,6 +148,27 @@ const std::unordered_map<std::string_view, OperatorSemantics> &declarations() {
         t.emplace(
             "log",
             bounded(2.0f, {}, "ln x per element, within 2 ulp; NaN, +-inf, +-0 and x < 0 exact"));
+        // The rest of the transcendentals are the C library's, declared at the library target of
+        // 4 ulp for the family (docs/design/op-semantics, the bound `math:` states for the same
+        // functions), with the special values exact.
+        t.emplace(
+            "tanh",
+            bounded(4.0f, {}, "tanh(x) per element, within 4 ulp; NaN, +-inf and +-0 exact"));
+        t.emplace(
+            "erf",
+            bounded(4.0f, {}, "erf(x) per element, within 4 ulp; NaN, +-inf and +-0 exact"));
+        t.emplace(
+            "erfc",
+            bounded(4.0f, {}, "erfc(x) per element, within 4 ulp; NaN and +-inf exact"));
+        // gelu is not one library call: the kernel computes the tanh form of the definition, so
+        // what is stated here is that form, at the same family bound.
+        t.emplace(
+            "gelu",
+            bounded(
+                4.0f,
+                {},
+                "0.5 * x * (1 + tanh(sqrt(2 / pi) * (x + 0.044715 * x * x * x))) per element "
+                "(the tanh form), within 4 ulp; NaN, +-inf and +-0 exact"));
 
         // ---- Reductions ----
         t.emplace(
