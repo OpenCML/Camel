@@ -1,0 +1,63 @@
+{
+  "kind": "promotion",
+  "promotion": 79,
+  "tip": "35c115adbd472f8e307d6d3c3115924770f5874e",
+  "measured_tip": "35c115adbd472f8e307d6d3c3115924770f5874e",
+  "pushed_develop_sha": "35c115adbd472f8e307d6d3c3115924770f5874e",
+  "landing_tip": "the record is a documentation commit and lands on whatever integration holds at push time. Integration was held still by the coordinator for the length of this run and the landing (D-1128-34), so the baseline this record merges onto is the tip this layer measured plus the ledger commits only",
+  "note": "the layer was measured at 35c115adbd47 and it is the reading that covers the code the seventy-eighth layer could not: seat/batch13 built and read at c32de118018b, fsh-dev's collaboration pages and runner readiness, lane/erase-constant-crash (erasing a constant no longer takes the process down) across facts, the graph draft view, the runtime graph and program, the stdlib graph read/resolve/txn and the tensor elementwise ops, lane/modules-baseline-clean, lane/task415-unary, and the two graph_edits cases that batch added. None of it moved a verdict",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at 35c115adbd47; load 1m 36.46 at the start of the run",
+  "binary_built": "2026-11-28T14:52:14+08:00",
+  "readings": {
+    "total": 9921,
+    "pass": 9719,
+    "fail": 141,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 0,
+    "re_run": 0,
+    "re_run_passed": 0,
+    "load_before": "1m 36.46, 5m 30.80, 15m 31.69",
+    "load_warning": "[load] WARNING: 1m load 36.46 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth to seventy-eighth layers carried; a promotion does not wait on load, D-1128-36). The 1m and 5m values were both under the 40 the coordinator set as the start condition"
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-78-reds.tsv (the seventy-eighth promotion, 141 names)",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], with the plan aliases transforms/compile.transforms and stated_extents/compile.stated_extents read as the same plan; this reading writes the bare names transforms (8 rows) and stated_extents (1 row), the same spelling the seventy-eighth table holds",
+    "still_red": 141,
+    "turned_green": 0,
+    "turned_green_names": [],
+    "new_reds": 0,
+    "new_reds_names": [],
+    "vanished_reds": 0,
+    "arithmetic": "141 names before: 0 turned green, 0 vanished, 0 appeared, 141 remain red; the two sets are the same set name for name",
+    "total_delta": "plus two: the layer declares 9921 entries against the seventy-eighth layer's 9919, and the two that appeared are modules.graph_edits/erase_of_a_gone_draft_is_refused and modules.graph_edits/nodes_of_a_gone_draft_is_refused, both declared by the batch that merged lane/erase-constant-crash, and both passing in this layer. Nothing else in the declared set differs",
+    "turned_green_note": "the two onnx loop cases that lane/xfail-onnx-markers marks as expected failures do not appear here as a green pair because they are not fast-layer cases at all: modules.onnx/export_loop_for and modules.onnx/ort_loop_loaded_weights run in the slow layer, which no promotion table reads. The promoted reading therefore keeps fail 141 and known 33 unchanged, and this layer is not evidence about that marker change in either direction; the next all-tier reading is, since that is the table where those two names are red today",
+    "notes": [
+      "the erase-constant-crash lane touches facts, the draft view, the runtime graph and program, the stdlib graph read/resolve/txn and the tensor elementwise ops, and it produced no red: the crash it fixes was not showing as a red case in this layer, and its change broke nothing",
+      "the AST golden record changed inside this batch and the AST cases stayed as they were, so this layer had no AST red to explain; had one appeared, the first step would have been to read whether the commit was a re-record by the record's owner",
+      "no case timed out in this layer and none was re-run; fault_deep.prl_off is absent for the thirteenth round running because the scheduler root-cause fix holds",
+      "export_loop_carried_array_field stayed green for the eighth reading running"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 0,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [],
+    "how": "the layer reported timed_out 0 and re_run 0, so there was no timeout to run alone"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-79-reds.tsv",
+  "red_table_rows": 141,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-79-reds.tsv",
+  "new_red_names": [],
+  "pushed_as": "develop, fast-forwarded from 9502dfe37daf to 35c115adbd47, the tip this layer measured",
+  "develop_before": "9502dfe37daf68d40535c28523177e492dc93add",
+  "develop_after": "35c115adbd472f8e307d6d3c3115924770f5874e",
+  "commits_brought_in": 50,
+  "commits_touching_src": 16
+}
