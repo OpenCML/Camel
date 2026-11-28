@@ -36,6 +36,7 @@ const PassKernel devirtualizeKernel(
         return std::make_unique<DevirtualizeRewritePass>(
             ctx,
             growthBudgetOf(args, "std::cxx::devirtualize"));
-    });
+    },
+    true);
 
 } // namespace

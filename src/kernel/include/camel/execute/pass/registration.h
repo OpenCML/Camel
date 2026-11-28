@@ -24,7 +24,9 @@
 
 #include "params.h"
 
+#include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -45,6 +47,17 @@ void registerPassKernel(const std::string &path, PassMaker make, bool readsTags 
 /// and the implementation are registered the same way as any other kernel.
 void registerPassKernel(const std::string &path, PassMaker make, std::vector<PassParam> params);
 
+/// Registers a pass that refuses some values its declaration's type accepts: the pipeline asks
+/// `checkParams` when it reads a call of the pass, before the pass is built.
+void registerPassKernel(
+    const std::string &path, PassMaker make,
+    std::function<std::optional<ParamRefusal>(const PassArgs &)> checkParams);
+
+/// Registers a pass that both checks its parameters and reads tag facts.
+void registerPassKernel(
+    const std::string &path, PassMaker make,
+    std::function<std::optional<ParamRefusal>(const PassArgs &)> checkParams, bool readsTags);
+
 /// One kernel, registered when the program loads, from the source file that implements the pass.
 /// The object is the whole of what a pass contributes from C++: `path` is the Camel function's
 /// path, `make` builds the implementation from the parameters the declaration resolved, and
@@ -56,6 +69,22 @@ class PassKernel {
     }
     PassKernel(const char *path, PassMaker make, std::vector<PassParam> params) {
         registerPassKernel(path, std::move(make), std::move(params));
+    }
+    /// The pass refuses some values its declaration's type accepts, and says so here, beside the
+    /// implementation: the pipeline asks this while it reads the call, so the refusal lands on the
+    /// parameter word and the pass is never built with a value it refuses (Params.h,
+    /// `ParamRefusal`).
+    PassKernel(
+        const char *path, PassMaker make,
+        std::function<std::optional<ParamRefusal>(const PassArgs &)> checkParams) {
+        registerPassKernel(path, std::move(make), std::move(checkParams));
+    }
+    /// Both facts at once: the pass refuses some values its declaration's type accepts and it reads
+    /// tag facts (see the two constructors above).
+    PassKernel(
+        const char *path, PassMaker make,
+        std::function<std::optional<ParamRefusal>(const PassArgs &)> checkParams, bool readsTags) {
+        registerPassKernel(path, std::move(make), std::move(checkParams), readsTags);
     }
 };
 

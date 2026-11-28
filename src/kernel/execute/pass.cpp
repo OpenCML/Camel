@@ -69,30 +69,6 @@ std::string specName(const std::string &spec) {
     return trimText(end == std::string::npos ? spec : spec.substr(0, end));
 }
 
-/// The core passes that read tag facts: the dumps show a node's attributes and numeric
-/// permissions, and the optimizing pipeline keeps them across rewrites (CSE combines by their
-/// merge rules). A tag's `read_by` names one of these (or a module's pass that registers itself).
-/// Both names of the pipeline are readers: `std::opt` is the default pipeline's name, and
-/// `std::cxx` covers the C++ passes named under the isolation (`std::opt`, `std::cxx::fold`)
-/// by the prefix rule that makes a name cover the passes under it.
-///
-/// This is the tag registry's answer, not the pipeline's: the kernels are registered by the files
-/// that implement them (camel/execute/pass/registration.h), and what the core still has to say
-/// about a pass here is which of its names read tag facts.
-void declareCoreTagReaders() {
-    for (const char *reader :
-         {"std::gir",
-          "std::rgir",
-          "std::gir_regions",
-          "std::rgir_regions",
-          "std::jgir",
-          "std::agir",
-          "std::argir",
-          "std::opt",
-          "std::cxx"}) {
-        camel::core::tag::declareReader(reader);
-    }
-}
 
 /// The scheduling pass `std::run` stands for: "run this program", written by a pipeline that does
 /// not care which back end runs it. The name is the declaration's, like every other pass name;
@@ -122,12 +98,6 @@ PassImplementationRegistry &passImplementations() {
     return registry;
 }
 
-/// Declares the core's tag readers on first resolution, so a run that never resolves a pass pays
-/// nothing for the table.
-void ensureCoreTagReaders() {
-    static std::once_flag once;
-    std::call_once(once, [] { declareCoreTagReaders(); });
-}
 
 
 } // namespace
@@ -345,7 +315,6 @@ std::optional<camel::core::OperId> resolvePassOperator(const std::string &writte
 /// (`resolvePassOperator`) and the table is asked by id (`findPassKernel`); a name the operator
 /// table does not know has no implementation, and this does not add one.
 std::optional<PassDescriptor> findImplementation(const std::string &path) {
-    ensureCoreTagReaders();
     const auto id = resolvePassOperator(path);
     if (!id.has_value()) {
         return std::nullopt;
@@ -653,42 +622,36 @@ ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
         result.paramProblem = std::move(problem);
         return result;
     }
-    // A value the declaration's type accepted but the pass cannot use. This is where it is
-    // reported: the pipeline is still being read, so the diagnostic carries the position of the
-    // word, the way a wrongly typed parameter does -- and the pass is never built, so nothing here
-    // can end up as an exception nothing catches.
-    if (auto problem = valueProblem(parsed.name, args)) {
-        result.paramProblem = std::move(problem);
-        return result;
+    // A value the declaration's type accepted but the pass itself refuses: the rule is the pass's
+    // (`checkParams`, beside its implementation), and the position is the pipeline's -- the word
+    // that carried the value, the way a wrongly typed parameter is pointed at. Reported here, so
+    // the pass is never built with a value it refuses.
+    if (descriptor->descriptor.checkParams) {
+        if (auto refusal = descriptor->descriptor.checkParams(args)) {
+            using camel::execute::detail::ParamProblem;
+            using camel::execute::detail::ParamProblemKind;
+            ParamProblem problem;
+            problem.kind     = ParamProblemKind::OutOfRange;
+            problem.name     = refusal->name;
+            problem.found    = refusal->text;
+            problem.expected = refusal->expected;
+            problem.text     = refusal->reason;
+            for (const auto &written : parsed.params) {
+                if (written.key == refusal->name) {
+                    problem.column = written.column;
+                    problem.length = written.length;
+                    break;
+                }
+            }
+            result.paramProblem = std::move(problem);
+            return result;
+        }
     }
     result.factory = [make = descriptor->descriptor.make,
                       args = std::move(args)](const context_ptr_t &ctx) { return make(ctx, args); };
     return result;
 }
 
-/// A value the declaration's type accepted and the pass cannot use: checked while the pipeline is
-/// read, so the report has a position and the pass is never built with a value it refuses.
-std::optional<camel::execute::detail::ParamProblem>
-valueProblem(const std::string &name, const PassArgs &args) {
-    using camel::execute::detail::ParamProblem;
-    using camel::execute::detail::ParamProblemKind;
-    // `std::opt settle_runs`: the bound the rewrite engine reports at. It is an internal bound
-    // (see settleRunsOf), and 0 is refused rather than read as "never report". The pipeline is
-    // registered as `std::opt` and `std::opt` is the default pipeline's name for it, so the
-    // check is made on the name the specification resolves to: a program that writes either
-    // spelling gets the refusal.
-    if (name == "std::opt" && args.given("settle_runs") && args.getInt("settle_runs") < 1) {
-        ParamProblem problem;
-        problem.kind     = ParamProblemKind::OutOfRange;
-        problem.name     = "settle_runs";
-        problem.found    = args.text("settle_runs");
-        problem.expected = "at least 1";
-        problem.text =
-            std::format("settle_runs must be at least 1, got {}", args.text("settle_runs"));
-        return problem;
-    }
-    return std::nullopt;
-}
 
 /// A parameter written wrongly at a pass call: the language's own diagnostics for a call, at the
 /// place in the pipeline the pass is written (`<pipeline>:<line>:<column>`), in the semantic
@@ -806,7 +769,6 @@ void printPass(
 /// Lists the available passes on stderr. The listing is help text for the command line:
 /// stdout stays reserved for program output and the diagnostics array.
 void listAvailablePasses(const std::string &name, const context_ptr_t &ctx) {
-    ensureCoreTagReaders();
     std::ostream &help = std::cerr;
     help << std::format("Pass <{}> not found, available passes are:\n", name);
     for (const auto &declaration : camel::execute::detail::passDeclarations("std", ctx)) {
@@ -2545,24 +2507,6 @@ passesNeverRunWarning(const std::vector<std::string> &passes, const context_ptr_
     warning.stage = "pass:" + specName(passes[*consumer]);
     return warning;
 }
-std::optional<Diagnostic>
-jitWithoutCodeGeneratorWarning(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
-    (void)ctx;
-#if ENABLE_FASTVM_JIT
-    (void)passes;
-    return std::nullopt;
-#else
-    for (const std::string &spec : passes) {
-        if (specName(spec) != "std::jit") {
-            continue;
-        }
-        auto warning  = DiagnosticBuilder::of(RuntimeDiag::JitWithoutCodeGenerator).commit();
-        warning.stage = "pass:" + specName(spec);
-        return warning;
-    }
-    return std::nullopt;
-#endif
-}
 
 namespace {
 
@@ -2630,14 +2574,6 @@ declaredReadersOf(const std::vector<std::string> &passes, const context_ptr_t &c
 
 } // namespace
 
-bool pipelineNamesProfile(const std::vector<std::string> &passes) {
-    for (const auto &spec : passes) {
-        if (specName(spec) == "std::profile") {
-            return true;
-        }
-    }
-    return false;
-}
 
 std::vector<Diagnostic>
 tagsNeverReadWarnings(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
@@ -2650,10 +2586,6 @@ tagsNeverReadWarnings(const std::vector<std::string> &passes, const context_ptr_
     if (ctx->tagUses().empty()) {
         return warnings;
     }
-    // The registry says which of the core's passes read tag facts, and it is built on first
-    // use. A run whose pipeline never looks a pass up would otherwise find no core reader at
-    // all.
-    ensureCoreTagReaders();
     // The names in the pipeline, as written: a tag's `read_by` may name one of them. A name
     // resolves to itself, so the spelling and its resolution are the same string, and both lists
     // the check reads are filled with it.

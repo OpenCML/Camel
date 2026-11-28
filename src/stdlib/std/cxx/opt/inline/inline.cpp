@@ -49,15 +49,13 @@ PassMaker inlineKernelFor(std::optional<InlineTargetStrategy> strategy, std::str
         };
 }
 
-const PassKernel inlineKernel("std:cxx::inline", inlineKernelFor(std::nullopt, "std::cxx::inline"));
+const PassKernel
+    inlineKernel("std:cxx::inline", inlineKernelFor(std::nullopt, "std::cxx::inline"), true);
 const PassKernel smallInlineKernel(
-    "std::cxx::small",
-    inlineKernelFor(InlineTargetStrategy::Small, "std::cxx::small"));
+    "std::cxx::small", inlineKernelFor(InlineTargetStrategy::Small, "std::cxx::small"), true);
 const PassKernel armInlineKernel(
-    "std::cxx::arm",
-    inlineKernelFor(InlineTargetStrategy::Arm, "std::cxx::arm"));
+    "std::cxx::arm", inlineKernelFor(InlineTargetStrategy::Arm, "std::cxx::arm"), true);
 const PassKernel hybridInlineKernel(
-    "std::cxx::hybrid",
-    inlineKernelFor(InlineTargetStrategy::Hybrid, "std::cxx::hybrid"));
+    "std::cxx::hybrid", inlineKernelFor(InlineTargetStrategy::Hybrid, "std::cxx::hybrid"), true);
 
 } // namespace

@@ -2188,17 +2188,22 @@ using camel::execute::makePass;
 using camel::execute::PassKernel;
 
 const PassKernel constantFoldKernel(
-    "std:cxx::fold", [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+    "std:cxx::fold",
+    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<ConstantFoldPass>(ctx, constantBudgetOf(args));
-    });
+    },
+    true);
 
-const PassKernel commonSubexpressionKernel("std:cxx::cse", makePass<CommonSubexpressionPass>());
+const PassKernel
+    commonSubexpressionKernel("std:cxx::cse", makePass<CommonSubexpressionPass>(), true);
 
 const PassKernel deadCodeKernel(
-    "std:cxx::dce", [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+    "std:cxx::dce",
+    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<DeadCodePass>(ctx, args.getBool("values_only"));
-    });
+    },
+    true);
 
-const PassKernel orderReductionKernel("std:cxx::order", makePass<OrderReductionPass>());
+const PassKernel orderReductionKernel("std:cxx::order", makePass<OrderReductionPass>(), true);
 
 } // namespace

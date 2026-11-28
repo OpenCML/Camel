@@ -942,19 +942,18 @@ using camel::execute::PassKernel;
 /// The six drawings of a program's graphs: `std::gir` and `std::rgir` (compact and rich),
 /// `std::gir_regions` and `std::rgir_regions` (one cluster per region), and `std::agir` and
 /// `std::argir` (with the boundary roles of the node-role registry).
-const PassKernel girKernel("std::gir", makePass<GraphVizDumpPass>(GraphVizDumpConfig{}));
-const PassKernel rgirKernel("std::rgir", makePass<GraphVizDumpPass>(GraphVizDumpConfig{.rich = true}));
+const PassKernel girKernel("std::gir", makePass<GraphVizDumpPass>(GraphVizDumpConfig{}), true);
+const PassKernel
+    rgirKernel("std::rgir", makePass<GraphVizDumpPass>(GraphVizDumpConfig{.rich = true}), true);
 const PassKernel girRegionsKernel(
-    "std::gir_regions",
-    makePass<GraphVizDumpPass>(GraphVizDumpConfig{.regions = true}));
+    "std::gir_regions", makePass<GraphVizDumpPass>(GraphVizDumpConfig{.regions = true}), true);
 const PassKernel rgirRegionsKernel(
     "std::rgir_regions",
-    makePass<GraphVizDumpPass>(GraphVizDumpConfig{.rich = true, .regions = true}));
+    makePass<GraphVizDumpPass>(GraphVizDumpConfig{.rich = true, .regions = true}), true);
 const PassKernel agirKernel(
-    "std::agir",
-    makePass<GraphVizDumpPass>(GraphVizDumpConfig{.annotateRoles = true}));
+    "std::agir", makePass<GraphVizDumpPass>(GraphVizDumpConfig{.annotateRoles = true}), true);
 const PassKernel argirKernel(
     "std::argir",
-    makePass<GraphVizDumpPass>(GraphVizDumpConfig{.rich = true, .annotateRoles = true}));
+    makePass<GraphVizDumpPass>(GraphVizDumpConfig{.rich = true, .annotateRoles = true}), true);
 
 } // namespace

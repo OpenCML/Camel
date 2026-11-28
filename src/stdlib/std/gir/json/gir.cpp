@@ -535,6 +535,6 @@ namespace {
 
 using camel::execute::PassKernel;
 
-const PassKernel jsonGirKernel("std::jgir", jgirPass());
+const PassKernel jsonGirKernel("std::jgir", jgirPass(), true);
 
 } // namespace
