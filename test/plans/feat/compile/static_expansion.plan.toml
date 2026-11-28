@@ -965,7 +965,7 @@ kind = "behavior"
 case = "../../../cases/compile/static_expansion/literal_head_type_variable.cml"
 args = ["${case}", "std::fvm"]
 expect_exit = 0
-expect_stdout_exact = "(0.0, ())\n{ a: 0.0, b: 0.0 }\n"
+expect_stdout_exact = "(0.0, 0)\n{ a: 0.0, b: 0.0 }\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
