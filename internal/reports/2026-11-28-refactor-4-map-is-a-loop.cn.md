@@ -101,3 +101,26 @@
 
 ⇒ 第一刀因此落在 **GIR 的循环构造处**（`builder_control.cpp:3942-3956` 的 `addRegionLoopNode` + `attachLoopParts`，收集槽由 `collectLoopAppends` 在同一处命中），不是改 `prelude.cml`。第二刀（核内联）之外，这是唯一还缺的东西。
 **更正：源级收集循环只在 `Range` 上不是候选，在数组上是线性的。** 上表三组与 `var` 状态形（120k 83.3 s）、元组状态形（120k 96.0 s）**都不是数组迭代**：`for x in 0 .. N` 走的是流循环（`buildStreamLoop`，GIR 里 `value_type=(int.., bool, int[])`），收集槽不在那条路上，所以每轮 `append` 造新数组、二次。换成数组迭代 `loop out = [] for x in xs do out->append<x * k>`（`xs: int[]`）就是线性的：**120k 198 ms、1.2M 1477 ms**（10× 元素 7.5× 时间）。⇒ 第一刀若走 `visitComprehension`，`Range` 源必须先 `to_array`，数组源直接迭代。
+## 6 `D-1128-194`：语义已定，`map` 的 lambda 定型按位置走
+
+决策者判：**不在 unifier 里记"变量→变量"，也不建带未解类型变量的实例**。依据是设计原则里已经写下的这条（原文，`docs/design-principles.cn.md` 5.1 末、第 375 行逐字）：
+
+> **期望类型沿类型变量传进调用**：先把被调函数的返回类型与期望类型对齐，解出类型变量；实参里提到这些类型变量的位置代入后成为该实参的期望类型，字面量据此取类型；已经取好类型的值不转换。字面量一次舍入到目标类型。泛型函数体里的字面量在实例化时取类型，放不下就在实例化处报 `LiteralNotRepresentable`。
+
+以及 lambda 是什么（同文件 4.4、第 335 行逐字）：
+
+> **lambda 写成 `func (参数) { … }`**（负责人 2026-11-23）：lambda 就是去掉名字的函数声明，`func (x) { x * x }`、`func (acc: int, x: int) => int { acc + x }`，与 `func 名字(…) { … }`、`rule 名字(…) { … }`、`edit d = f { … }` 同一个样子，关键字后留空格。花括号永远是函数体，最后一条语句就是它的值；要交出结构体就再套一层（`func (x) { {a: x} }`）。
+
+⇒ `map(xs, f)` 里 `xs` 先定型、`T` 解成 `int`，lambda 再按 `(item: int) => U` 定型：既不需要延迟实例化，也不需要环区构造。（"显式类型实参"是 5.9，本件不涉及。）
+
+### 6.1 量到的那一件（`internal/tools/probe-map-lambda.ps1`，探针程序在 `D:\Temp\bench6`）
+
+把 `prelude.cml` 的 `map` 从 `#op(':mark/map_arr')` 声明改成带函数体的收集循环（`loop out = [] for x in xs do out->append<f(x)>`），`BUILD_EXIT=0`，然后跑三个程序（`std::fvm`，load 23%；驱动第一行自报三个探针的 SHA-256-16）：
+
+| 程序 | SHA-256-16 | 结果 |
+|---|---|---|
+| `xs->map<func (x) { x * 2 }>`（不写类型，`xs: int[]`） | `456813FC8E985387` | **不能**：`SemanticDiag::ImportNameNotExported` —— `Reference 'map' is declared as imported but is not exported by its module.`，位置 `main.cml:3:18` |
+| `xs->map<func (x: int) { x * 2 }>`（写了类型） | `1AF62945E8EA24E4` | **同上**（同一条诊断、同一位置） |
+| `[x * 2 for x in 0 .. 3]`（推导式对照） | `073B0F9BA4FC148F` | **不能**：`SemanticDiag::GenericFunctionAsValue`，`type variable(s) $element0 cannot be determined`，位置 `main.cml:2:19`，签名 `(x: $element0) => <null>` |
+
+读法：**去掉 `#op` 之后 `map` 连导出都没了**（两条手写调用在同一条诊断上失败，与 lambda 写不写类型无关），所以"手写不写类型 lambda 能不能定型"这一问在这棵树上还问不到——前置问题变成"`map` 去掉算子声明后为什么不导出"。推导式那条则仍然报 `$element0`：**推导式的降低确实给 lambda 造了自己的 `$element0` 类型变量**（`builder_data.cpp:382-401`），与手写调用无关。
