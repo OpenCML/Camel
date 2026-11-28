@@ -580,3 +580,5 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
 · **借补丁会在树上留下暂存区残留**（2026-11-28）：`cherry-pick -n` 之后即使 `git restore` 了工作区，`git add` 过的内容仍可能在别人的 `git status` 里显示成"有人在改这个文件"——实例：`mm-capacity` 的 `staged.patch` 就是 `cherry-pick -n 616f65b436` 的残留，被当成了"第三个人的重复实现"。所以借补丁的正确收尾是**三件**：`git restore --staged` 撤暂存、`git restore` 撤工作区、`git status --porcelain` 必须为空；并把借用的提交号写进交回。
 
 · **提速类派工要先读那个类型的契约再写改法**（2026-11-28）：我曾在 `task-401` 的卡面写"把 `nodesOfTopo()` 的表存进 `ExecPlan` 一份"，而 `src/kernel/include/camel/runtime/exec_plan.h:16-19`/`:165-168` 明确写着"plan 是值、不持有读者填的表；后端自己的状态放后端（`fvm/version_state.h` 按 plan 键）"⇒ 那个改法会造**第二份真相**、违反契约。正确形状永远是**读者侧缓存**（后端自己的状态，keyed by plan）。教训：写"缓存/共享一张表"这类改法前，先读该类型头文件里的契约段与既有样板（`fvm/version_state.h`），并把"收益上限"写清（例如"只有两个调用点、每次一张表的一次性复制，不在节点循环里"⇒ 上限是每次进入一次，不是每节点）。
+
+· **浮点文本的参考实现是"最短可回读"，不是字面 `%g`**（2026-11-28）：判"打印对不对"时，参考是 `repr`/Ryu/`std::to_chars` shortest（设计原则 7.7 的可回读要求）；字面 C `%g` 会丢数字（`1.0→1`、`-0.0→-0`、`1.0+ulp→1`），拿它当参考等于要求破坏可回读。读数实例：Camel 与 Python `repr` 十值逐字相同、与字面 `%g` 有 4/10 不同 —— 那 4 处不是缺陷。
