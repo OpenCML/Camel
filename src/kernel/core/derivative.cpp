@@ -182,7 +182,8 @@ Type *computeTangent(Type *primal, Audience audience) {
         const bool isStruct = primal->code() == TypeCode::Struct;
         StructTypeFactory factory;
         std::vector<Type *> elements;
-        size_t kept = 0;
+        size_t kept        = 0;
+        bool everyKeptSame = true;
         for (size_t i = 0; i < aggregateSize(primal); ++i) {
             Type *member = elementAt(primal, i);
             Type *answer = computeTangent(member, audience);
@@ -193,7 +194,11 @@ Type *computeTangent(Type *primal, Audience audience) {
                     return nullptr;
                 }
                 // The machinery drops it: the member carries no gradient, so nothing is lost.
+                everyKeptSame = false;
                 continue;
+            }
+            if (answer != member) {
+                everyKeptSame = false;
             }
             if (isStruct) {
                 factory.add(
@@ -207,6 +212,14 @@ Type *computeTangent(Type *primal, Audience audience) {
             // An aggregate with no member left carries nothing. (A struct with no field at all,
             // and a machinery aggregate whose every member is discrete, are both this.)
             return nullptr;
+        }
+        if (everyKeptSame) {
+            // Every member's tangent is the member itself, in its own place, so the aggregate's
+            // tangent *is* the aggregate -- the named struct a caller holds, and not a second type
+            // with the same fields. The same reading an array takes below when its element's answer
+            // is the element: a tangent space has the shape of the space it differentiates, and a
+            // gradient of a struct is the struct (principle 9.9).
+            return primal;
         }
         return isStruct ? static_cast<Type *>(factory.build())
                         : static_cast<Type *>(TupleType::create(std::move(elements)));
@@ -306,6 +319,24 @@ std::optional<slot_t> zeroTangentConstantOf(const type::Type *type) {
         return std::nullopt;
     }
     return space->zero;
+}
+
+std::optional<slot_t> discreteZeroSlot(const type::Type *type) {
+    if (type == nullptr) {
+        return std::nullopt;
+    }
+    // The builtin scalar codes, and only the ones a constant can state: a module type's discrete
+    // zero is its own operator's, of the value's shape, and this function has no value to give.
+    switch (type->code()) {
+    case type::TypeCode::Int32:
+        return rtdata::toSlot<int32_t>(0);
+    case type::TypeCode::Int64:
+        return rtdata::toSlot<int64_t>(0);
+    case type::TypeCode::Bool:
+        return rtdata::toSlot<bool>(false);
+    default:
+        return std::nullopt;
+    }
 }
 
 Type *gradientTypeOf(Type *parameter) {

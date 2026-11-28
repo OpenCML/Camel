@@ -2234,23 +2234,11 @@ Type *tangentNodeType(Type *primal) {
     return tangent != nullptr ? tangent : primal;
 }
 
-/// The zero of a discrete scalar: an integer or a boolean has derivative zero by definition
-/// (design principles 9.9), and the user's gradient keeps such a member at its own type
-/// (`gradientTypeOf`: a number is its own gradient, at zero). A discrete value a module holds (an
-/// integer tensor) is not answered here: the tangent space of its kind gives the zero operator that
-/// builds a zero of the value's own shape and element type (`tensor:zeros_like`).
-std::optional<slot_t> discreteZeroSlot(Type *type) {
-    switch (type->code()) {
-    case TypeCode::Int32:
-        return toSlot<int32_t>(0);
-    case TypeCode::Int64:
-        return toSlot<int64_t>(0);
-    case TypeCode::Bool:
-        return toSlot<bool>(false);
-    default:
-        return std::nullopt;
-    }
-}
+/// The zero of a discrete scalar is the core's answer, not a table kept here: the forward lift
+/// writes the same zero for a result the walk could not give a tangent to, and two tables that can
+/// disagree is worse than one that is missing (`camel::core::discreteZeroSlot`,
+/// `camel/core/derivative.h`).
+using camel::core::discreteZeroSlot;
 
 /// The zero of `primal`'s tangent; `primalValue` is the primal value (a tensor's zero is taken
 /// from it).
@@ -5345,10 +5333,21 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue, bool hasAux) {
         {},
         rewrite.untapedLoops());
     Type *valueType  = typeOf(*transaction, value);
-    const slot_t one = valueType->code() == TypeCode::Float32
-                           ? toSlot<camel::core::rtdata::Float32>(1.0f)
-                           : toSlot<camel::core::rtdata::Float64>(1.0);
-    backward.seed(value, draft.materializeStaticValue(one, valueType));
+    // The seed is the differential of the value the program returns: one for a float. **A value
+    // whose derivative is zero by definition takes no seed** -- a zero contributes nothing to the
+    // accumulation, and the answer is the zero of the differentiated parameter either way (design
+    // principles 9.9: a number and a boolean are their own gradient, at zero). A seed of the
+    // value's own type would be a cotangent the machinery would then have to carry through a graph
+    // that keeps no arithmetic for it, which is the reverse half of the same law this transform's
+    // gate now reads.
+    const bool valueIsFloat = valueType != nullptr && (valueType->code() == TypeCode::Float32 ||
+                                                       valueType->code() == TypeCode::Float64);
+    if (valueIsFloat) {
+        const slot_t one = valueType->code() == TypeCode::Float32
+                               ? toSlot<camel::core::rtdata::Float32>(1.0f)
+                               : toSlot<camel::core::rtdata::Float64>(1.0);
+        backward.seed(value, draft.materializeStaticValue(one, valueType));
+    }
     backward.run(order);
 
     // The differential form differentiates the first `with` parameter (9.9); the other `with`
@@ -5511,6 +5510,21 @@ std::string differentiationRefusal(FunctionType *function, bool hasAux) {
     }
     if (valueType == nullptr ||
         (valueType->code() != TypeCode::Float64 && valueType->code() != TypeCode::Float32)) {
+        // **A discrete scalar's derivative is zero by definition** (design principles 9.9): a
+        // number and a boolean are their own gradient, at zero, so `grad` answers the zero of the
+        // differentiated parameter's gradient and takes back the result's own type at zero. That is
+        // the user's answer, and refusing it here was the machinery's narrower one -- which keeps
+        // no tangent for a `bool` because it never adds one -- said to the user.
+        //
+        // The question is not whether the result has a gradient type: `gradientTypeOf` answers for
+        // a pair, a struct and an array as well, member by member, and a pair is not a value a
+        // gradient is taken of as a whole -- what the author writes instead is the split at the
+        // call, and the refusal below is the one that tells them so. It is whether the result's
+        // gradient is the zero of its own type with no cotangent to carry, which is the question
+        // the forward lift answers when it writes that zero (`camel::core::discreteZeroSlot`).
+        if (camel::core::discreteZeroSlot(valueType) != std::nullopt) {
+            return {};
+        }
         return std::format(
             "it returns {}, not a float",
             valueType ? valueType->toString() : "nothing");

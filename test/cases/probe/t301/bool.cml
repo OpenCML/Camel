@@ -1,0 +1,12 @@
+import rulesets.jvp
+import { jvp } from transforms
+
+func f(a: float) => bool {
+    return a > 0.0
+}
+
+func main() sync {
+    let (value, tangent) = jvp(f)(2.0, 1.0)
+    println(value)
+    println(tangent)
+}

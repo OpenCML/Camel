@@ -26,11 +26,11 @@ func element_value::<P>(p: P[]) => P {
 }
 
 func tangent_pair::<P, Q>(p: P, q: Q) => bool {
-    return is_same::<Tangent<Pair<P, typeof (q)>>, { first: Tangent<P>, second: float }>()
+    return is_same::<Tangent<Pair<P, typeof (q)>>, Pair<Tangent<P>, float>>()
 }
 
 func tangent_signature::<P, Q>(p: P, q: Q) => Tangent<Pair<P, typeof (q)>> {
-    return { first: (), second: q }
+    return { first: 0, second: q }
 }
 
 func main() sync {
@@ -39,5 +39,9 @@ func main() sync {
     println(element_value([6, 7]))
     println(tangent_pair(9, 10.0))
     println(tangent_pair(13.0, 14.0))
+    // The same tangent space, the same shape, a different identity: the tangent of a named struct
+    // is that struct itself (design principles 9.9, `derivative.cpp#computeTangent`), so it is not
+    // the anonymous struct with the same fields -- `is_same` asks identity, not shape.
+    println(is_same::<Tangent<Pair<int, float>>, { first: int, second: float }>())
     println(tangent_signature(11, 12.0).second)
 }

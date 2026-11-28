@@ -114,7 +114,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_exact = "true\ntrue\nfalse\ntrue\ntrue\ntrue\ntrue\nfalse\n"
+expect_stdout_exact = "true\ntrue\ntrue\nfalse\ntrue\ntrue\ntrue\ntrue\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

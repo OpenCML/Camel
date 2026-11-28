@@ -1,0 +1,33 @@
+/**
+ * The forward derivative of `zeros_like(xs)` is zero: the array it answers does not read its
+ * argument's value.
+ *
+ * `zeros_like` carries the argument's shape and element type and none of its value, so as a
+ * function of what it was made from it is constant (design principles 9.9), and the derivative of
+ * a constant is the zero of the tangent type. The lift reads that as: the tangent of the sum is
+ * the argument's own tangent, `[0.5, 0.25, 0.125]`, because the constant term adds nothing to it,
+ * and the value is the argument's own, `[1.0, 2.0, 3.0]`.
+ *
+ * The case reads the **forward** half alone. The reverse half of the same function does not build
+ * today: `split`, which the reverse path is built on, refuses a lifted graph that holds a
+ * `tensor:zeros_like` node (`a node whose input was not copied`), and that refusal is a property of
+ * the cut and not of this law -- it is the same for `take`, while `add`, `mul` and `sum` over
+ * constants and over intermediate values all cut. A case that read `vjp` here would be red for a
+ * reason this file does not claim, so the reverse reading waits for the cut.
+ *
+ * Red when: `jvp` refuses `tensor:zeros_like`, or the pair it answers is anything but the
+ * argument's own value and tangent.
+ */
+import rulesets.jvp
+import { jvp } from transforms
+import { zeros_like } from tensor
+
+func plus_zeroes(xs: float[...]) => float[...] {
+    return xs + zeros_like(xs)
+}
+
+func main() sync {
+    let (value, tangent) = jvp(plus_zeroes)([1.0, 2.0, 3.0], [0.5, 0.25, 0.125])
+    println(value)
+    println(tangent)
+}

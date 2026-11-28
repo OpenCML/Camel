@@ -151,13 +151,17 @@ export type RestOf<P>
 export type ResultOf<F>
 
 /// The tangent space of `T` (design principles 9.9): the type a tangent of a value of `T` has. A
-/// float and a tensor of floats are their own tangent space; a tuple and a struct take the tangent
-/// space of each member in that member's own place; every other type -- an integer, a `bool`, a
-/// `string`, a function -- takes the empty tuple, the value that carries no data and that a rule
-/// ignores (JAX's `float0`).
+/// number and a `bool` are their own tangent space -- a discrete value's gradient is the zero of
+/// its own shape and element type, so a tangent of an `int` is an `int` -- and a tensor of numbers
+/// is its own. A tuple and a struct take the tangent space of each member in that member's own
+/// place, when every member has one. A `string` and a function have no tangent space, and the
+/// empty tuple is how a type with no gradient is written: it carries no data, so a rule ignores
+/// it.
 /// @example is_same::<Tangent<float>, float>()    // true
 /// @example is_same::<Tangent<f32[2, 3]>, f32[2, 3]>()    // true
-/// @example is_same::<Tangent<(int, float)>, ((), float)>()    // true
+/// @example is_same::<Tangent<int>, int>()    // true
+/// @example is_same::<Tangent<bool>, bool>()    // true
+/// @example is_same::<Tangent<(int, float)>, (int, float)>()    // true
 /// @example is_same::<Tangent<string>, ()>()    // true
 export type Tangent<T>
 

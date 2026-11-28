@@ -293,14 +293,14 @@ timeout_ms = 20000
 # the same list `buildSplitGraph` numbers the backward ports from.
 [[tests]]
 name = "split_int_parameter_slot"
-desc = "`split` of a lift whose body calls a function with an `int` parameter (`widen(n: int, x: float)`), so the callee's lifted list has the `()` slot `Tangent<int> = ()` writes. The reading is the cut's own numbers -- 7.0 for `widen(2, 2) + 1.0` and 3.0 for its tangent -- and the backward half's type `((), float) => float`: the slot stays in the *type* (the halves keep their places position by position) and is not an argument anyone takes."
+desc = "`split` of a lift whose body calls a function with an `int` parameter (`widen(n: int, x: float)`), so the callee's lifted list is `(int, float, int, float)`: `Tangent<int>` is `int` (a discrete value is its own tangent space, design principles 9.9), so the tangent of the `int` is a zero of that type. The reading is the cut's own numbers -- 7.0 for `widen(2, 2) + 1.0` and 3.0 for its tangent -- and the backward half's type `(int, float) => float`: the place stays in the *type* and the argument the caller supplies is the zero of the discrete type."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_int_parameter_slot.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_output_contains = ["lift value= 7.0  tangent= 3.0", "g y= 7.0", "g d= 3.0", "type=(int, float) => (float, ((), float) => float pure) pure residuals=2"]
+expect_output_contains = ["lift value= 7.0  tangent= 3.0", "g y= 7.0", "g d= 3.0", "type=(int, float) => (float, (int, float) => float pure) pure residuals=2"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

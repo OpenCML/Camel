@@ -18,6 +18,7 @@
 #include "transpose_operator.h"
 
 #include "camel/core/context/context.h"
+#include "camel/core/derivative.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/operator_table.h"
@@ -136,14 +137,19 @@ class JvpResolver final : public FuncTypeResolver {
                     parameter->toString());
             }
         }
-        const camel::core::TangentSpaceAnswer resultSpace =
-            camel::core::tangentSpaceOf(function->exitType());
-        if (!resultSpace.hasSpace()) {
+        // The result is a value the caller receives, so its tangent is the one a user's
+        // gradient question gets (`gradientTypeOf`, design principles 9.9): a number or a
+        // boolean is its own tangent, with the value zero, and only a type nothing can
+        // differentiate (`string`, a function) has none. The machinery keeps its own
+        // narrower answer; that one is the transform's business, not the caller's.
+        if (function->exitType() != nullptr &&
+            camel::core::gradientTypeOf(
+                const_cast<camel::core::type::Type *>(function->exitType())) == nullptr) {
             return std::format(
                 "`jvp` takes a function whose result has a tangent space, and this one's result "
                 "is a `{}`, which has none: the lifted signature answers the pair "
                 "(value, tangent)",
-                function->exitType() != nullptr ? function->exitType()->toString() : "()");
+                function->exitType()->toString());
         }
         return std::nullopt;
     }

@@ -4,6 +4,9 @@
 #include "node_operator.h"
 #include "refusal_readings.h"
 #include "split_internal.h"
+#include "transpose/signature.h"
+
+#include "camel/core/derivative.h"
 
 namespace camel::transforms {
 
@@ -213,13 +216,19 @@ std::vector<size_t> valuePortsOf(const camel::core::type::FunctionType *liftedTy
         if (value == nullptr || tangent == nullptr) {
             return {};
         }
-        const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(value);
-        if (space.hasSpace()) {
-            if (tangent != space.space) {
-                return {};
+        // The second half is the value's **user** tangent (`gradientTypeOf`, principle 9.9): a
+        // discrete parameter's slot holds that parameter's own type, not the empty slot the
+        // machinery's space would give it, because `Lift<T>` is `(T, Tangent<T>)`.
+        Type *const chosen = camel::core::gradientTypeOf(const_cast<Type *>(value));
+        if (chosen != nullptr) {
+            const auto *chosenTuple = tt::as_ptr<TupleType>(chosen);
+            if (!(chosenTuple != nullptr && chosenTuple->size() == 0)) {
+                if (tangent != chosen) {
+                    return {};
+                }
+                values.push_back(i);
+                continue;
             }
-            values.push_back(i);
-            continue;
         }
         // A parameter with no tangent space takes the `()` slot: the tangent half keeps its place
         // so that the halves line up position by position.
@@ -417,8 +426,17 @@ tangentArgumentsOf(const rt::GCGraph &graph, const rt::Program *program, gc_node
     for (size_t i = half; i < ordinary; ++i) {
         if (calleeType != nullptr && i < calleeType->normTypesCount()) {
             const Type *tangentType = calleeType->normTypeAt(i);
-            if (tangentType == nullptr || !camel::core::tangentSpaceOf(tangentType).hasSpace()) {
-                continue; // the `()` slot of a parameter with no tangent space
+            // Whether the slot is handed on is the **user's** question (`gradientTypeOf`,
+            // principle 9.9), the one the callee's own list answered: `Tangent<int>` is `int`, so
+            // the zero a discrete value's slot carries is an argument like any other, while a
+            // `string` or a function answers `()` and is not an argument anyone takes. Asking the
+            // machinery here dropped the discrete slot and left the callee a port short.
+            Type *const userTangent = camel::core::gradientTypeOf(const_cast<Type *>(tangentType));
+            const auto *const userTuple = tt::as_ptr<TupleType>(userTangent);
+            const bool typedSlot        = tangentType != nullptr && userTangent != nullptr &&
+                                          !(userTuple != nullptr && userTuple->size() == 0);
+            if (!typedSlot) {
+                continue; // the `()` slot of a type with no tangent space
             }
         }
         tangents.push_back(all[i]);
@@ -1216,9 +1234,21 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
         // makes the half take an argument nobody passes; the other way makes it answer fewer than
         // it declares.
         Type *tangentOfParameter = function->normTypeAt(i + half);
+        // The slot is the **user's** tangent of the parameter (`gradientTypeOf`, principle 9.9),
+        // not the machinery's space of the lifted slot: `Tangent<int>` is `int`, so a discrete
+        // parameter's place in the tangent half is that parameter's own type, and the half declares
+        // what the declaration declares. A space that exists is not the same statement as a space
+        // with a place to accumulate in; asking the second here wrote `()` in an `int`'s place.
+        Type *const userTangent =
+            camel::core::gradientTypeOf(const_cast<Type *>(function->normTypeAt(i)));
+        const auto *userTuple = tt::as_ptr<TupleType>(userTangent);
+        const bool typedSlot =
+            userTangent != nullptr && !(userTuple != nullptr && userTuple->size() == 0);
         if (tangentOfParameter != nullptr &&
             camel::core::tangentSpaceOf(tangentOfParameter).hasSpace()) {
             tangentParams.emplace_back(tangentOfParameter, false);
+        } else if (typedSlot) {
+            tangentParams.emplace_back(userTangent, false);
         } else {
             // The parameter's tangent is `()`: an **answer** the half gives, not an argument it
             // takes. It keeps its place in the half's type so that the transposed half answers one
@@ -1560,12 +1590,26 @@ SplitGraph cutBranchGraph(
         draft.setFuncType(branchHalves.backward);
         Half backward(draft, function, program, true, &cuts, &residualIndexOf);
         addResidualCaptures(draft, cuts, backward);
-        for (size_t i = sourcePorts.size() / 2; i < sourcePorts.size(); ++i) {
-            Type *type = function->funcType()->normTypeAt(i);
-            if (type == nullptr || !camel::core::tangentSpaceOf(type).hasSpace()) {
+        // Which parameters take a port is **read, not decided here**: `portParametersOf`
+        // (`transpose/signature.h`) is the one place the rule is written, and the half's type --
+        // the same `tangentParams` `splitHalvesWith` wrote for every split half -- is the list it is
+        // asked about. The loop walks the lifted table from its middle, so its index is a
+        // index; `i - half` only names the parameter the rule is asked about, and it is always in
+        // range because the lifted table states a value slot and a tangent slot per parameter.
+        const std::vector<size_t> backwardPorts = portParametersOf(branchHalves.backward);
+        const size_t half                       = sourcePorts.size() / 2;
+        std::vector<char> takesBackwardPort(branchHalves.backward->normTypesCount(), 0);
+        for (size_t parameter : backwardPorts) {
+            if (parameter < takesBackwardPort.size()) {
+                takesBackwardPort[parameter] = 1;
+            }
+        }
+        for (size_t i = half; i < sourcePorts.size(); ++i) {
+            if (takesBackwardPort[i - half] == 0) {
                 // A () slot is an answer this half gives, never an argument it takes.
                 continue;
             }
+            Type *type = function->funcType()->normTypeAt(i);
             const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
             draft.appendNormPort(port);
             backward.portOf[i] = port;
@@ -2590,14 +2634,30 @@ SplitGraph buildSplitGraph(
                 isValuePort[i] = 1;
             }
         }
+        // Which parameters take a port is **read, not decided here**: `portParametersOf`
+        // (`transpose/signature.h`) is the one place that rule is written, and the half's own type
+        // is the list it is asked about (`tangentParams`, one entry per parameter, `()` for a place
+        // the half answers rather than takes).
+        const std::vector<size_t> backwardPorts = portParametersOf(halves.backward);
+        const size_t half                       = sourcePorts.size() / 2;
+        std::vector<char> takesBackwardPort(halves.backward->normTypesCount(), 0);
+        for (size_t parameter : backwardPorts) {
+            if (parameter < takesBackwardPort.size()) {
+                takesBackwardPort[parameter] = 1;
+            }
+        }
         for (size_t i = 0; i < sourcePorts.size(); ++i) {
             if (isValuePort[i] != 0) {
                 continue;
             }
-            Type *type = function->funcType()->normTypeAt(i);
-            if (type == nullptr || !camel::core::tangentSpaceOf(type).hasSpace()) {
+            // The lifted index `i` counts from the middle of the lifted port table; the rule itself
+            // is `portParametersOf`, and `i - half` only names the parameter it is asking about.
+            // The lifted table states a value slot and a tangent slot per parameter, so
+            // `i in [half, 2*half)` and the parameter index is always in range.
+            if (i < half || takesBackwardPort[i - half] == 0) {
                 continue;
             }
+            Type *type               = function->funcType()->normTypeAt(i);
             const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
             draft.appendNormPort(port);
             backward.portOf[i] = port;

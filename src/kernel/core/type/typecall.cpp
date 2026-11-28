@@ -45,37 +45,23 @@ constexpr std::string_view kExpandName    = "$expand";
 constexpr std::string_view kLengthsTag    = "$lengths:";
 constexpr std::string_view kTypeApplyName = "$type_function";
 
-/// The tangent space of a value (design principles 9.9): a float and a tensor of floats are their
-/// own tangent space; a tuple and a struct are the tangent space of each member in the member's
-/// own place; every other type is the empty tuple, the value that carries no data and that a rule
-/// ignores -- an integer, a `bool` and a `string` have no derivative, and neither has a function.
+/// The tangent space of a value, as the **user** reads it (design principles 9.9): a number and a
+/// boolean are their own tangent space, at the value zero -- their derivative is zero by definition
+/// and the gradient of such a parameter is the zero of that parameter's own type -- a tensor takes
+/// its own shape, and a tuple and a struct take each member's tangent in that member's own place.
 ///
-/// The empty tuple is what the answer is for a type the derivative machinery has no space for, so
+/// A type with no gradient at all -- a `string`, a function -- takes the empty tuple: the value
+/// that carries no data and that a rule ignores. The empty tuple is the answer for such a type, so
 /// a tangent type is always a type a program can write: a parameter the user differentiates never
-/// meets a "no tangent" hole, it meets a value of no data. Which member is a continuous quantity
-/// is not this function's question; it is the same one `machineryTangentTypeOf` answers.
+/// meets a "no tangent" hole, it meets a value of no data.
+///
+/// One law, two readers: this is `gradientTypeOf`'s answer, and the machinery's
+/// (`machineryTangentTypeOf`) is a different question -- where a *cotangent accumulates*, which a
+/// discrete value needs no place for. The type a program writes as `Tangent<T>` is the user's, and
+/// a space that exists is not the same statement as a space with a place to accumulate in.
 Type *tangentSpaceOf(Type *type) {
-    if (type->code() == TypeCode::Struct || type->code() == TypeCode::Tuple) {
-        const bool structure = type->code() == TypeCode::Struct;
-        const size_t size =
-            structure ? tt::as_ptr<StructType>(type)->size() : tt::as_ptr<TupleType>(type)->size();
-        StructTypeFactory factory;
-        std::vector<Type *> elements;
-        for (size_t i = 0; i < size; ++i) {
-            Type *member = structure ? tt::as_ptr<StructType>(type)->typeAt(i)
-                                     : tt::as_ptr<TupleType>(type)->typeAt(i);
-            Type *space  = tangentSpaceOf(member);
-            if (structure) {
-                factory.add(std::string(tt::as_ptr<StructType>(type)->fieldName(i)), space);
-            } else {
-                elements.push_back(space);
-            }
-        }
-        return structure ? static_cast<Type *>(factory.build())
-                         : static_cast<Type *>(TupleType::create(std::move(elements)));
-    }
-    if (Type *space = camel::core::machineryTangentTypeOf(type); space != nullptr) {
-        return space;
+    if (Type *const gradient = camel::core::gradientTypeOf(type)) {
+        return gradient;
     }
     return TupleType::create(std::vector<Type *>{});
 }

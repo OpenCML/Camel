@@ -322,6 +322,20 @@ class DerivativeRegistry {
 /// `:tangent/zeros_arr` of a value) answers nothing, because there is no value here to write.
 std::optional<slot_t> zeroTangentConstantOf(const type::Type *type);
 
+/// The zero of a **discrete scalar's** gradient, written at its own type: the `0` of an `int`, the
+/// `false` of a `bool`. A discrete value's derivative is zero by definition (design principles
+/// 9.9), and the user's gradient keeps such a member in its own place, at its own type
+/// (`gradientTypeOf` answers the parameter's own type for it) -- so a reader that has to *write*
+/// that gradient needs this zero as a constant.
+///
+/// Nothing for any other type. A type with a tangent space of its own writes its zero from that
+/// space (`zeroTangentConstantOf`); a module type that registered a discrete predicate builds its
+/// zero with its own operator, of the value's shape (an integer tensor's `tensor:zeros_like`),
+/// which is not a constant; and a type with no gradient at all (`string`) has no zero here. Both
+/// directions of a transform ask this -- the reverse one for a member of a tape, the forward one
+/// for a result the walk could not give a tangent to -- so the answer is filed once.
+std::optional<slot_t> discreteZeroSlot(const type::Type *type);
+
 /// The gradient type of the parameter `P` a user differentiates: what `grad` and `with_grad` hand
 /// back, and what `grad of P` names. A number and a boolean are their own gradient, with the value
 /// zero; a `string` and a function have none; and a struct or a tuple has one exactly when every

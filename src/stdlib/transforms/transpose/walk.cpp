@@ -291,25 +291,24 @@ bool buildTransposeMember(
     std::vector<uint32_t> armRegionsBuilt;
     // Which parameter a normal port of this function stands for, and which port a parameter asks
     // for.
-    // **One walk, and every reader below asks it**: `normPorts()` position `i` is
+    // **One walk, and every reader below asks it**, and the walk itself asks the one function that
+    // owns the rule (`signature.h#portParametersOf`): `normPorts()` position `i` is
     // `portParameter[i]`, and a parameter asks `portOfParameter[at]`. A `()` place is an answer and
-    // not a parameter, so it is the one thing skipped: a graph that declares a port for every other
-    // parameter -- a plain function, an `int` included -- degenerates to the identity, while a
-    // half's graph declares a port only for a parameter that has a tangent space
-    // (`buildSplitGraph`: "a () slot is an answer this half gives, never an argument it takes") and
-    // its type keeps the place as
-    // `()`, so its port `i` is the parameter index among the non-`()` places and **not** the `i`-th
-    // parameter: `f(n: int, xs: float[])`'s backward half is `((), float[])` with one port, `dxs`,
-    // which is parameter 1. Reading a port index as a parameter index is the arithmetic this
-    // replaces, and it is wrong exactly when a `()` place stands before a parameter with a port.
-    std::vector<size_t> portParameter;
+    // not a parameter, so it is the one thing with no port; every other parameter has one -- a
+    // plain function, whose every parameter is an argument, degenerates to the identity, and a
+    // half's graph declares a port for a parameter by the same list (`buildSplitGraph` reads it
+    // too: "a () slot is an answer this half gives, never an argument it takes").
+    //
+    // A discrete place is an argument like any other: its type is its own tangent space (design
+    // principles 9.9), so the half declares it as `int` and the caller passes the zero of that
+    // type. Reading it as "no port" -- the older rule -- made a port's position and its parameter's
+    // position differ by one wherever a discrete place stood before a parameter with a port:
+    // `f(n: int, xs: float[])`'s backward half is `(int, float[])` with ports `dn` and `dxs`, which
+    // are parameters 0 and 1, and the walk read `dn`'s cotangent into `dxs`'s member.
+    const std::vector<size_t> portParameter = portParametersOf(function->funcType());
     std::vector<size_t> portOfParameter(paramCount, paramCount);
-    for (size_t at = 0; at < paramCount; ++at) {
-        if (isUnitType(function->funcType()->normTypeAt(at))) {
-            continue;
-        }
-        portOfParameter[at] = portParameter.size();
-        portParameter.push_back(at);
+    for (size_t port = 0; port < portParameter.size(); ++port) {
+        portOfParameter[portParameter[port]] = port;
     }
     // Nothing records "this member wants a value": there is no channel for a parameter's index per
     // member, handed to the call site so it could forward the value from the closure; a rule that
@@ -369,8 +368,16 @@ bool buildTransposeMember(
                 Type *const portType = function->funcType()->normTypeAt(i);
                 if (isUnitType(portType)) {
                     // `()` is a member of the answer and not a parameter: nobody can pass a value
-                    // where there is none, so it takes no port. An `int` parameter is a value the
-                    // caller still fills and is not this (`isUnitType`).
+                    // where there is none, so it takes no port.
+                    continue;
+                }
+                // A **discrete** place is the same shape, and the signature says so: its answer
+                // member is the zero of its own type ("a space with no reader is still a space"),
+                // and the value its body reads rides in the residual -- a discrete parameter's
+                // value rides in the residual, so the member does not capture it. Handing it a port
+                // here made the transposed member one parameter longer than the operator promised
+                // (`ports=2 promised=1`), and the call site had nothing to fill that port with.
+                if (camel::core::discreteZeroSlot(portType).has_value()) {
                     continue;
                 }
                 const gc_node_ref_t port =
@@ -4660,6 +4667,22 @@ bool buildTransposeMember(
             // this builds the same length and the same order.
             Type *const unitType = camel::core::type::TupleType::create(std::vector<Type *>{});
             const auto unit      = [&]() { return unitMemberOf(walkCtx, unitType); };
+            // The type a member of the answer has: the parameter's own **user** tangent
+            // (`gradientTypeOf`, principle 9.9) where it exists, and the machinery's space
+            // otherwise. A space that exists is not the same statement as a space with a place to
+            // accumulate in, and the answer says the first (`Tangent<T>`), not the second.
+            const auto answerTypeOf = [](const Type *portType, Type *spaceType) -> Type * {
+                if (portType != nullptr) {
+                    if (Type *const gradient =
+                            camel::core::gradientTypeOf(const_cast<Type *>(portType))) {
+                        const auto *asTuple = tt::as_ptr<camel::core::type::TupleType>(gradient);
+                        if (!(asTuple != nullptr && asTuple->size() == 0)) {
+                            return gradient;
+                        }
+                    }
+                }
+                return spaceType;
+            };
             std::vector<Type *> partTypes;
             // The **parameters**, not the ports: the walk above says which port a parameter asks
             // for, and a `()` place has no port at all. Iterating `ports` was the same reading of a
@@ -4672,6 +4695,20 @@ bool buildTransposeMember(
                     // all. The two are told apart by the type (`isUnitType`), the same query the
                     // signature answered with.
                     Type *const parameterType = function->funcType()->normTypeAt(at);
+                    if (const std::optional<slot_t> discrete =
+                            camel::core::discreteZeroSlot(parameterType)) {
+                        // The tangent space exists and the answer says so: the member is the
+                        // parameter's own type, at its zero. No cotangent lands in it -- "a space
+                        // with no reader is still a space" -- and nothing is passed for it, so it
+                        // takes no port: the zero is written here, where the answer is.
+                        Type *const answerType = answerTypeOf(parameterType, nullptr);
+                        parts.push_back(draft.materializeStaticValue(
+                            *discrete,
+                            answerType,
+                            rt::kGCNodeFlagConstant));
+                        partTypes.push_back(answerType);
+                        continue;
+                    }
                     if (isUnitType(parameterType)) {
                         parts.push_back(unit());
                         partTypes.push_back(unitType);
@@ -4726,16 +4763,19 @@ bool buildTransposeMember(
                         const Type *const answeredType =
                             answeredNode != nullptr ? answeredNode->dataType : nullptr;
                         ASSERT(
-                            !statedShapeDisagreement(answeredType, space.space).has_value(),
+                            !statedShapeDisagreement(
+                                 answeredType,
+                                 answerTypeOf(portType, space.space))
+                                 .has_value(),
                             ("the pullback's exit for parameter " + std::to_string(at) +
                              " answers the type " + camel::core::type::typeToString(answeredType) +
                              " where the signature's cotangent space is " +
-                             camel::core::type::typeToString(space.space) +
+                             camel::core::type::typeToString(answerTypeOf(portType, space.space)) +
                              "; a law's answer and the parameter's own shape disagree")
                                 .c_str());
                     }
 #endif
-                    partTypes.push_back(space.space);
+                    partTypes.push_back(answerTypeOf(portType, space.space));
                     continue;
                 }
                 // The zero is the parameter's own cotangent space's (`zeroOfSpaceOf`), built from
@@ -4748,6 +4788,16 @@ bool buildTransposeMember(
                 // space here is a signature that admitted a parameter nothing can answer for: a
                 // refusal by name, not a `float` member the signature never promised.
                 if (space.space == nullptr) {
+                    if (const std::optional<slot_t> discrete =
+                            camel::core::discreteZeroSlot(portType)) {
+                        Type *const answerType = answerTypeOf(portType, nullptr);
+                        parts.push_back(draft.materializeStaticValue(
+                            *discrete,
+                            answerType,
+                            rt::kGCNodeFlagConstant));
+                        partTypes.push_back(answerType);
+                        continue;
+                    }
                     refuse(TransposeRefusalCause::UnreadParameter);
                     os << " port=" << ports[port] << " at=" << at << " no-cotangent-space\n";
                     return false;
@@ -4802,7 +4852,7 @@ bool buildTransposeMember(
                     return false;
                 }
                 parts.push_back(zero);
-                partTypes.push_back(space.space);
+                partTypes.push_back(answerTypeOf(portType, space.space));
             }
             if (!parts.empty()) {
                 std::vector<size_t> slots;
