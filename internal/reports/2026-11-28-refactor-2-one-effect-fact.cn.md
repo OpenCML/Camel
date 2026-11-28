@@ -334,3 +334,29 @@ bool Record::accessesOutsideProgram() const {
     > "读数收到，而且它**证伪了我的同族猜测** —— 这两条不是'图没进提交'，是**期望把 id 的具体数值钉死了**……这与'提交把新图收进新程序'**不同族**，那条修完这两条**不会**变绿。"
   - 第 1 刀后照旧**逐名比**：这两条仍红、名字不变就**照实报、不解释**；若它们的 `new_id` 从 `82` 变成别的数（说明有别的位移），**单独点名**报负责人。
 - **注意**：这组底不是最新 integration（`c4-round-source` 未落地；取这组读数时 integration 到了 `a5b8663744`，随后又到 `0fb33bc32f`）；换底后按 §7 的规矩**重取**一遍再把行号/读数改掉。
+
+## 11 `rt::fact::Anchor` 带 `Program`：一条**钉子**，不是红→绿（决策 `D-1128-205` 批的 (A)）
+
+**先看现场，再定判据。** 这条教训写在这里给下一个接这条的人：写用例**之前**先量"改前"的现场——否则很容易造出一条"改前就绿"的用例冒充红→绿。本次正是这样：决策者给判据时假设它会红，量出来它已经是绿的，于是**不做 (B)、不编红**。
+
+**决策者更正（原文，要害）**：
+
+> "我上一条说'换一个 `Program` 就看丢没改的图上的事实'是错的：`Stamp` 按闭包里每张图的 `(id, revision)` 算，提交又保 id 与 revision，所以看不丢；**`Program` 进键只是设计上多余**。"
+
+⇒ 页里与所有后续报告**不再写"会看丢事实"**；这一项的性质是**设计上多余的一份身份**，是**清理**。
+
+**改前现场（探针读数，`origin/integration@0fb33bc32f`，插桩跑完已复原、临时枝已删）**：
+
+```
+[SUMMARY] total: 12, pass: 11, fail: 1        ← 唯一 fail 是故意 assert(false) 打印读数的探针条目
+FACTS probe third_f_id kept ; FACTS probe third_f_revision kept ; FACTS probe third_main_revision new
+>>> FACTS probe_two_commits_f valid ; FACTS probe_old_program_f valid ; FACTS probe_same_program_f valid
+```
+
+机制（所以绿）：`Stamp` = `closureRevision` 的哈希（根 id + 闭包里每张图的 `(id, revision)`，`reachable.cpp:43-56`），提交复制图但保 id、保 revision（`draft_session.cpp:1935` → `inheritRevision`，`graph_build.h:177-181`）⇒ 换一个 `Program` 算出同一个哈希。
+
+**钉子落在哪**：`test/plans/feat/modules/graph_facts.plan.toml` 的新条目 **`two_commits_keep_a_fact`** + `test::facts`（`src/stdlib/test/facts.cpp`）。**不落 `tools/facts`**：那里跑的是新框架 `camel::facts`，它的 `Anchor` 从来只有 `{graph, node}`；病在 `camel::runtime::fact::FactStore`，它的自有计划就是 `modules/graph_facts`、自有 pass 就是 `test::facts`。条目与代码注释里**逐字写明"这是钉子，不是红→绿"**，并把上面那行探针原文当来由记着（`graph_facts.plan.toml` 条目上方注释、`facts.cpp` 该段落注释）。
+
+**判据（改 `Anchor` 那次才算全）**：`git grep 'Anchor{.*program()' src` = 0（**改前实测 2 处**：`src/stdlib/graph/facts.cpp:65`、`src/stdlib/tiles/src/compiled_scope.cpp:37`）+ 钉子绿 + `facts` 11/11 + `facts_compare` 2/2 不变 + `BUILD_EXIT=0` / `dirty 0` / `numstat`。
+
+**钉子自己的读数**（branch `lane/fact-anchor-pin`，基 `0fb33bc32f`，tip `30521fbe3f`）：`graph_facts.plan.toml` `[SUMMARY] total: 12, pass: 12, fail: 0`；`facts` `total: 11, pass: 11, fail: 0`；`facts_compare` `total: 2, pass: 2, fail: 0`；`BUILD_EXIT=0`。
