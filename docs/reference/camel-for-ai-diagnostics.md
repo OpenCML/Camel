@@ -58,7 +58,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 239
+**Semantic — errors** (`SemanticDiag`) — 240
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -299,6 +299,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `UnorderedOverwritingResource` | The resource '{0}' is declared both 'unordered' and 'overwriting'. |
 | `ReadonlyWriteModifier` | The resource '{0}' is declared 'readonly' and '{1}'. |
 | `ObservedReadonlyResource` | The resource '{0}' is declared both 'observed' and 'readonly'. |
+| `IndexAxisOutOfRange` | The axis {0} is out of range for a value of rank {1}. |
 
 **Semantic — warnings** (`SemanticDiag`) — 15
 

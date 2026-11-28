@@ -495,6 +495,7 @@ enum class SemanticDiag : uint32_t {
     UnorderedOverwritingResource                   = 0x00021B,
     ReadonlyWriteModifier                          = 0x00021C,
     ObservedReadonlyResource                       = 0x00021D,
+    IndexAxisOutOfRange                            = 0x00021E,
 
     // Warnings
     IgnoredSideEffect = 0x100002,

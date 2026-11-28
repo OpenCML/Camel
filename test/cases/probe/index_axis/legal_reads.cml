@@ -1,0 +1,13 @@
+// The reads the check must leave alone: a plain multi-dimensional read, a whole-dimension read,
+// and an inner subscript whose own axis is 0.
+func main() => int sync {
+    let m: float[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+    let xs: float[3] = [1.0, 2.0, 3.0]
+    let a = m[1, 0]
+    let b = m[.., 0]
+    let c = xs[[0, 1]]
+    println(a)
+    println(b[0] + b[1])
+    println(c[0] + c[1])
+    return 0
+}

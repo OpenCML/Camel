@@ -1269,6 +1269,42 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
         }
     }
 
+    // A subscript names one dimension of the value it reads, and that name is a constant the
+    // subscript itself wrote, so the axis and the value's rank can be compared: the rank is what
+    // the type of the value says, the axis is the node the subscript wrote. Two things are let
+    // past on purpose -- an axis that is not a constant, and a value whose rank the type does not
+    // state. Writing a dimension whole (`t[.., 0]`) keeps that dimension and writes the axis of
+    // the one after it, and `t[i]` writes no axis at all, so counting the dimensions a subscript
+    // wrote instead of reading the axis it wrote would refuse both.
+    bool indexAxisChecked     = false;
+    const auto checkIndexAxis = [&] {
+        if (indexAxisChecked || normInputs.size() < 3 || normInputTypes.size() < 3 ||
+            gct->at(0) == nullptr || gct->at(0)->type() != GCT::NodeKind::DREF ||
+            gct->at(0)->name() != "__idx__") {
+            return;
+        }
+        const StaticArg axisArg = staticArgOf(normInputs[2].node);
+        if (!axisArg.value.has_value()) {
+            return;
+        }
+        Type *baseType = normInputTypes[0];
+        if (baseType == nullptr || baseType->code() != TypeCode::Array) {
+            return;
+        }
+        const auto *array = tt::as_ptr<ArrayType>(baseType);
+        if (array == nullptr || array->anyRank()) {
+            return;
+        }
+        indexAxisChecked = true;
+        const auto axis  = static_cast<size_t>(*axisArg.value);
+        if (axis < array->rank()) {
+            return;
+        }
+        diags_->of(SemanticDiag::IndexAxisOutOfRange)
+            .atOrigin(gct->origin())
+            .commit(std::to_string(axis), std::to_string(array->rank()));
+    };
+
     // An operator with overloads of the program: one of them, or the built-in group below.
     // `a != b` by an overload of `==` is the negation of that call (`negateResult`).
     compile_graph_ptr_t operatorOverload = nullptr;
@@ -1298,6 +1334,7 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
             accepts);
     }
     if (operatorOverload != nullptr) {
+        checkIndexAxis();
         negateResult = negatedEqualities_.contains(targetNode);
         targetGraph  = operatorOverload;
         currGraph_->addDependencyGraph(targetGraph);
@@ -1829,6 +1866,7 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
                 &ambiguousConditions,
                 &withInputs);
             if (res.has_value()) {
+                checkIndexAxis();
                 // The with arguments the rule took are the ones it completes (design principles
                 // 4.4: a parameter with a default may be left out).
                 for (const auto &[ruleUri, rule] : ops->resolvers()) {
