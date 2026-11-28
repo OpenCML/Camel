@@ -1,0 +1,20 @@
+# Instrument, not a test: one entry, read once, pasted into the stage-fault reading beside it.
+# It belongs to no layer. The entry is a NEGATIVE reading -- it asserts that the archive's stage
+# spelling is refused -- so its PASS is the finding, not a green test.
+id = "cc-eval-prelim.C-archive-stage-refused"
+order = 995
+tier = "fast"
+tags = ["probe", "refused"]
+desc = "The stage spelling the archived evaluation harness uses, refused by this tip: the isolation of the C++ passes keeps no alias for the pre-isolation names."
+
+[defaults]
+kind = "behavior"
+timeout_ms = 20000
+
+[[tests]]
+name = "archive_stage_name.refused"
+desc = "The archive's e9 harness runs each stage as a pass under the old integrated name; the run must be refused as an unknown pass and the refusal must name it."
+case = "../../../../test/cases/opt/camel_passes/fold_subject.cml"
+args = ["${case}", "std::opt::fold", "std::nvm"]
+expect_exit = 1
+expect_stderr_contains = ["std::opt::fold"]

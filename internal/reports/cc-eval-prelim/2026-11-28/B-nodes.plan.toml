@@ -1,0 +1,103 @@
+# Instrument, not a test: the entries below deliberately throw to print the GRAPH_STATS node count,
+# so this file must never be selected by a layer or run as a test. Read once and paste the counts
+# into the reading it belongs to.
+id = "cc-eval-prelim.B-nodes"
+order = 998
+tier = "fast"
+tags = ["probe"]
+desc = "Node counts for the rewrite-quality reading: each of the four rewrites, the C++ implementation and the Camel one, on one program per rewrite, read from `std::stats`'s GRAPH_STATS `nodes` rather than from the canonical document (which expands graph references)."
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_origins"]
+
+[[tests]]
+name = "B_nodes.fold.by_cpp"
+case = "../../../../test/cases/opt/cxx_isolation/subject.cml"
+args = ["${case}", "std::cxx::fold", "std::stats", "std::nop"]
+verify_script = """
+const m = input.stdout.match(/GRAPH_STATS (\{[^}]*\})/)
+if (!m) throw new Error("NODES=none (no GRAPH_STATS line)")
+const s = JSON.parse(m[1])
+throw new Error("NODES=" + JSON.stringify({ nodes: s.nodes, graphs: s.graphs, operators: s.operators, calls: s.calls }))
+"""
+
+[[tests]]
+name = "B_nodes.fold.by_camel"
+case = "../../../../test/cases/opt/cxx_isolation/subject.cml"
+args = ["${case}", "opt::fold", "std::stats", "std::nop"]
+verify_script = """
+const m = input.stdout.match(/GRAPH_STATS (\{[^}]*\})/)
+if (!m) throw new Error("NODES=none (no GRAPH_STATS line)")
+const s = JSON.parse(m[1])
+throw new Error("NODES=" + JSON.stringify({ nodes: s.nodes, graphs: s.graphs, operators: s.operators, calls: s.calls }))
+"""
+
+[[tests]]
+name = "B_nodes.cse.by_cpp"
+case = "../../../../test/cases/opt/cxx_isolation/subject.cml"
+args = ["${case}", "std::cxx::cse", "std::stats", "std::nop"]
+verify_script = """
+const m = input.stdout.match(/GRAPH_STATS (\{[^}]*\})/)
+if (!m) throw new Error("NODES=none (no GRAPH_STATS line)")
+const s = JSON.parse(m[1])
+throw new Error("NODES=" + JSON.stringify({ nodes: s.nodes, graphs: s.graphs, operators: s.operators, calls: s.calls }))
+"""
+
+[[tests]]
+name = "B_nodes.cse.by_camel"
+case = "../../../../test/cases/opt/cxx_isolation/subject.cml"
+args = ["${case}", "opt::cse", "std::stats", "std::nop"]
+verify_script = """
+const m = input.stdout.match(/GRAPH_STATS (\{[^}]*\})/)
+if (!m) throw new Error("NODES=none (no GRAPH_STATS line)")
+const s = JSON.parse(m[1])
+throw new Error("NODES=" + JSON.stringify({ nodes: s.nodes, graphs: s.graphs, operators: s.operators, calls: s.calls }))
+"""
+
+[[tests]]
+name = "B_nodes.inline.by_cpp"
+case = "../../../../test/cases/opt/cxx_isolation/inline_figure1.cml"
+args = ["${case}", "std::cxx::inline", "std::stats", "std::nop"]
+verify_script = """
+const m = input.stdout.match(/GRAPH_STATS (\{[^}]*\})/)
+if (!m) throw new Error("NODES=none (no GRAPH_STATS line)")
+const s = JSON.parse(m[1])
+throw new Error("NODES=" + JSON.stringify({ nodes: s.nodes, graphs: s.graphs, operators: s.operators, calls: s.calls }))
+"""
+
+[[tests]]
+name = "B_nodes.inline.by_camel"
+case = "../../../../test/cases/opt/cxx_isolation/inline_figure1.cml"
+args = ["${case}", "opt::inline", "std::stats", "std::nop"]
+verify_script = """
+const m = input.stdout.match(/GRAPH_STATS (\{[^}]*\})/)
+if (!m) throw new Error("NODES=none (no GRAPH_STATS line)")
+const s = JSON.parse(m[1])
+throw new Error("NODES=" + JSON.stringify({ nodes: s.nodes, graphs: s.graphs, operators: s.operators, calls: s.calls }))
+"""
+
+[[tests]]
+name = "B_nodes.dce.by_cpp"
+case = "../../../../test/cases/opt/camel_passes/dce_subject.cml"
+args = ["${case}", "std::cxx::inline", "std::cxx::dce values_only=true", "std::stats", "std::nop"]
+verify_script = """
+const m = input.stdout.match(/GRAPH_STATS (\{[^}]*\})/)
+if (!m) throw new Error("NODES=none (no GRAPH_STATS line)")
+const s = JSON.parse(m[1])
+throw new Error("NODES=" + JSON.stringify({ nodes: s.nodes, graphs: s.graphs, operators: s.operators, calls: s.calls }))
+"""
+
+[[tests]]
+name = "B_nodes.dce.by_camel"
+case = "../../../../test/cases/opt/camel_passes/dce_subject.cml"
+args = ["${case}", "std::cxx::inline", "opt::dce", "std::stats", "std::nop"]
+verify_script = """
+const m = input.stdout.match(/GRAPH_STATS (\{[^}]*\})/)
+if (!m) throw new Error("NODES=none (no GRAPH_STATS line)")
+const s = JSON.parse(m[1])
+throw new Error("NODES=" + JSON.stringify({ nodes: s.nodes, graphs: s.graphs, operators: s.operators, calls: s.calls }))
+"""
+
