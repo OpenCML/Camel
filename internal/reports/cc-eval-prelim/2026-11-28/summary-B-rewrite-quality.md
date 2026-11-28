@@ -67,14 +67,14 @@ magnitudes on a shared host, not timings for the paper.**
 | side | what | files | lines |
 |---|---|---|---|
 | Camel | `src/stdlib/opt.cml` (`fold`, `cse`, `inline`, `dce`) | 1 | 552 |
-| C++ | `src/stdlib/std/cxx/opt/**` | 27 | 8771 |
+| C++ | `src/stdlib/std/cxx/opt/**` | 27 | **8768** (8771 by `(Get-Content).Count`, +3: three of the 27 files have no final newline; `wc -l` is the number to use) |
 | C++ | of which the four rewrites' implementation surface (`generic/*`, `inline/engine.cpp`, `constant_bytes.cpp`) | 7 | 5504 |
 
 ## Against the design
 
 Consistent with `DESIGN.md` §8.2 item 3: the Lang-written optimizers are the same optimizers on this corpus —
 every paired entry compares equal byte for byte, and the graphs they leave have the same node count. The two
-things the design asked to also report are the cost of writing them (552 lines against 8771/5504) and the
+things the design asked to also report are the cost of writing them (552 lines against 8768/5504) and the
 optimizer's own time, where the Camel side pays for loading and compiling its own library.
 
 **Unexpected.** (a) The Camel-side run is not just slightly slower but 1.5–2.5× the C++ one on every pair,

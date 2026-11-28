@@ -6,12 +6,14 @@
 
 ## Instruments, named
 
-- **`lines` = `wc -l`**: the number of newline bytes in the file, i.e. physical lines, comments and blank
-  lines included. Measured per file with `[regex]::Matches((ReadAllText $f), "`n").Count`.
+- **`lines` = `wc -l` = 物理行（含空行）**: the number of newline bytes in the file — physical lines, blank
+  lines and comments included. This is the number a paper reports when it says how many lines a library has.
+  Measured per file with `[regex]::Matches((ReadAllText $f), "`n").Count`.
 - The first reading of this table used **`Get-Content $f | Measure-Object -Line`**, which counts **non-empty**
-  lines (an empty string contributes 0). Both figures are in `A-libraries.csv`, so the difference is visible
-  rather than argued: the gap per category is exactly its blank lines (399 autodiff, 369 rulesets, 705 ONNX,
-  326 rewrite, 464 `std/cxx`, 68 `opt.cml`).
+  lines (an empty string contributes 0). Both figures are in `A-libraries.csv` — `lines_wc_l` and
+  `lines_measure_object_line` — so the difference is visible rather than argued: the gap per category is
+  exactly its blank lines (399 autodiff, 369 the three rule sets, 705 ONNX, 326 rewrite, 464 `std/cxx`,
+  68 `opt.cml`). **When the two disagree, `wc -l` is the number to use.**
 - **Declarations**: `git grep -c '^export rule'` and `git grep -c '^export func'`, reported **in two columns**.
   They are not one number: `int8.cml` declares 1 `export rule` and 0 `export func`, so a single
   "43 export func" column could not have covered it — and 43 is the count for the three autodiff rule sets
@@ -41,7 +43,11 @@ old number was wrong.
 
 ## What changed against the first reading, and why
 
-| category | old (`fd950804d6`) | new | the difference is |
+The old value is kept in its own column (`lines_prev_fd950804d6`, with the instrument that produced it) and the
+explanation is in `correction`, so a reader sees what changed and why rather than a table that silently differs
+from the one they read last week.
+
+| category | old (`fd950804d6`) | new (physical lines) | the difference is |
 |---|---|---|---|
 | `autodiff_cpp` | 12131 | 12530 | **instrument**: 399 blank lines (the old tool skipped them) |
 | `autodiff_rulesets_cml` | 4071 with "43 export func" | **4329** (three files) | **scope**: 4071 covered 6 files including the two probes (48) and `int8.cml` (71), so 4071 ≈ 4448 − 377 blanks; the category now holds the three autodiff rule sets only |
@@ -54,6 +60,32 @@ old number was wrong.
 **No line of `src/` changed between the two readings** (`git diff --name-only fd950804d6 353d36e3d1 -- src`
 is empty), so every difference above is either an instrument or a scope error in the first reading — none of
 them is a change in the code.
+
+## Retractions, for the merge report
+
+**Two dashes are retracted: `quant` and `opt_cml`. The reason is the instrument / the way the files were
+looked for, not a change in content** — the quantization rule set is `src/stdlib/rulesets/int8.cml` (71 physical
+lines, 1 `export rule`, 0 `export func`), and the Lang-side rewrite is `src/stdlib/opt.cml` (552 physical lines,
+6 functions). Neither file is new; both were there when the first reading was taken, and both were unreachable
+by the globs it used (`**quant**` cannot match `int8.cml`; `std/cxx/**/*.cml` does not contain `opt.cml`).
+
+## Instrument audit: which numbers in this batch were measured with `Measure-Object -Line`
+
+`git grep -rn 'Measure-Object -Line' -- internal/` (and `-- scripts test/tools`, which is empty) finds five
+places; each one, and whether its numbers are affected:
+
+| page | status |
+|---|---|
+| this reading's `A-libraries.csv` (first version) | **affected**, all five line counts — corrected here, old values kept in `lines_prev_fd950804d6` |
+| `internal/reports/the-instrument-discipline.md` | not affected: the page already states that `Measure-Object -Line` skips blank lines (it reports 1896 against 1922 elsewhere), i.e. it is the warning, not a victim |
+| `internal/reviews/questions-2026-10-29.md` | not affected: it reports both readings ("1661 行（换行数）… `Measure-Object -Line` 读作 1610") and draws its conclusion from the physical one |
+| `internal/reports/cc-eval-prelim/2026-11-28/summary-A-libraries.md` | this page: it names the instrument, so a reader can convert |
+| `internal/reports/cc-eval-prelim/2026-11-28/make-A-files.ps1` | the instrument itself; it measures `wc -l` and only mentions the other in a comment |
+
+**One more number in this batch used a third instrument and is corrected with it:** the B reading counted with
+`(Get-Content $f).Count`, which equals `wc -l` except for files without a final newline. `std/cxx/opt/**` was
+reported as 8771 there and is **8768** by `wc -l` (three of its 27 files have no final newline); the four
+rewrites' surface (5504) and `opt.cml` (552) are the same under both.
 
 ## Direction against the design
 
