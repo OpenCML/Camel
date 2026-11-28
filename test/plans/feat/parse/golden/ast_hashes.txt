@@ -435,7 +435,7 @@ c913b87fac0a0591 ok docs/tutorial/examples/17_rule.cml
 f023cd6395d01cd4 ok examples/hello.cml
 539626dedbc8eb5c ok examples/algorithms/binary_search.cml
 f2902ac597c39dbc ok examples/algorithms/merge_sort.cml
-8aa5ca2f4cbd941d ok examples/case-study/edits.cml
+d3c9f72423eead46 ok examples/case-study/edits.cml
 e157747315101ece ok examples/case-study/train.cml
 ea8b0c6222b24c89 ok examples/case-study/writings/moved.cml
 c2822f654bc941d6 ok examples/case-study/writings/renamed.cml
@@ -520,7 +520,7 @@ ff143e01e0e4dbb0 ok src/stdlib/bytes.cml
 a5076fc3f00f63eb ok src/stdlib/ckpt.cml
 091e49283aec1438 ok src/stdlib/env.cml
 0797036114bc4a4c ok src/stdlib/fs.cml
-d212a4f761e59cd2 ok src/stdlib/graph.cml
+6fc6d3a548865115 ok src/stdlib/graph.cml
 c653d7d211aed8b2 ok src/stdlib/hash.cml
 cb32c9dd5cb81d91 ok src/stdlib/io.cml
 70530f2be80f49bf ok src/stdlib/json.cml
@@ -528,7 +528,7 @@ cb32c9dd5cb81d91 ok src/stdlib/io.cml
 ff9eee9cbc6a4008 ok src/stdlib/math.cml
 4bd3189fe34a101a ok src/stdlib/nn.cml
 109cb1c3af0c4f8a ok src/stdlib/onnx.cml
-8e30555972565f0c ok src/stdlib/opt.cml
+564dc3104925f334 ok src/stdlib/opt.cml
 49015cbc4407a506 ok src/stdlib/optim.cml
 cfd1905583789732 ok src/stdlib/para.cml
 a82098797df46210 ok src/stdlib/perf.cml
@@ -568,9 +568,6 @@ aa0941df5af401ba ok src/stdlib/rulesets/vmap.cml
 0c368faaef090af5 no src/stdlib/tensor/signatures/tensor.cml
 aa2ab77afb6218d5 ok src/stdlib/tiles/signatures/tiles.cml
 e4210adf416a6f2c no src/stdlib/transforms/signatures/transforms.cml
-1c3fad0be82cbf71 ok test/cases/compile/access_const/at_runtime.cml
-8ec3dc3a2c122257 ok test/cases/compile/access_const/key_runtime.cml
-1248d91fd7116c6f ok test/cases/compile/access_const/literal.cml
 2c8a06ba0fe2f3e6 ok test/cases/compile/broadcast_like_spreads_rank_zero.cml
 dc71e2d3ab7cd429 ok test/cases/compile/closed_rank_rejects_rank_zero.cml
 176c9efddaac8e32 ok test/cases/compile/err_lambda_tuple_arity.cml
@@ -594,6 +591,9 @@ c48ca5e9baebde9a ok test/cases/compile/nullable_argument.cml
 22d989cc53bfb01c ok test/cases/compile/sum_to_refuses_a_shape_it_cannot_reach.cml
 e9eb101da6eeb9ad ok test/cases/compile/sum_to_refuses_a_target_longer_than_its_operand.cml
 852c9c381bdc37ab ok test/cases/compile/utf8_escape_bytes.cml
+1c3fad0be82cbf71 ok test/cases/compile/access_const/at_runtime.cml
+8ec3dc3a2c122257 ok test/cases/compile/access_const/key_runtime.cml
+1248d91fd7116c6f ok test/cases/compile/access_const/literal.cml
 165a8ccca6bd2cdf ok test/cases/compile/any_typing/array_literal.cml
 a5c58bafc92d97ad ok test/cases/compile/any_typing/array_literal_string.cml
 64ad6cd68b7f2a74 ok test/cases/compile/any_typing/cast_out.cml
@@ -3225,7 +3225,7 @@ c15309f03549f973 ok test/cases/modules/graph_pass/imports_unparsable.cml
 6ea03a29f9d0ec39 ok test/cases/modules/graph_pass/innerlib.cml
 f37b55c6117610df ok test/cases/modules/graph_pass/libvals.cml
 dcd35cafcfd7ff96 ok test/cases/modules/graph_pass/monomorphic.cml
-934f7612d5b56c2a ok test/cases/modules/graph_pass/neutral.cml
+ed247d5adb9b0127 ok test/cases/modules/graph_pass/neutral.cml
 e034f271fe51e352 ok test/cases/modules/graph_pass/neutral_identities.cml
 353ae8b4ca743cc6 ok test/cases/modules/graph_pass/neutral_kept.cml
 905e43b8a21e365b ok test/cases/modules/graph_pass/neutral_target.cml
@@ -3244,7 +3244,7 @@ a9b60fb9aca13d0e ok test/cases/modules/graph_pass/tiny.cml
 1e976f838a6cd395 ok test/cases/modules/graph_pass/typed_target.cml
 167f5101502eaaab no test/cases/modules/graph_pass/unparsable_pass.cml
 e6704f3f915eaf57 no test/cases/modules/graph_pass/unparsable_pass_lib.cml
-0d9ea4761e7eb003 ok test/cases/modules/graph_pass/unused.cml
+928e104dfdbeee31 ok test/cases/modules/graph_pass/unused.cml
 06a1f319960c2a6e ok test/cases/modules/graph_pass/unused_target.cml
 3f7311c80d527aab ok test/cases/modules/graph_pass/valuelib.cml
 78c57c20b14705d4 ok test/cases/modules/graph_pass/valuereader.cml
@@ -4394,9 +4394,14 @@ f25c15ccece763f9 ok test/cases/probe/editview/sec2_fold.cml
 6ac021df26b03660 ok test/cases/probe/editview/view_value.cml
 fd602427f6ebc3a4 ok test/cases/probe/editview/view_value_is_a_plain_value.cml
 45c24411f3aa8b00 ok test/cases/probe/editview/view_value_is_not_an_int.cml
+6c1299cf82ee81d5 ok test/cases/probe/editview_b/a_pure_position_refuses_an_impure_value.cml
 c4ac49eab470f893 ok test/cases/probe/editview_b/design_view_min.cml
+65b01d5f038c16af ok test/cases/probe/editview_b/draft_carries_no_effect_qualifier.cml
+6ebb70bbc91f9700 ok test/cases/probe/editview_b/draft_commits_as_its_own_type.cml
 10bf3ec93ed55652 ok test/cases/probe/editview_b/draft_handle_leaves.cml
+0c250343126ae393 ok test/cases/probe/editview_b/draft_of_one_type_is_not_another.cml
 6d383191e1331425 ok test/cases/probe/editview_b/escapes_accepted.cml
+9fcff0b61b92d5e1 ok test/cases/probe/editview_b/graph_is_not_a_draft.cml
 04e8d92c70aba20f ok test/cases/probe/foreach_lambda/array_filter.cml
 fbc5a22ed39c760c ok test/cases/probe/foreach_lambda/array_form.cml
 98082b4d0948dc5c ok test/cases/probe/foreach_lambda/array_map.cml
