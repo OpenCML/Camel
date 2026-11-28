@@ -105,6 +105,26 @@
 > "var 的降低在目标里只有一处（架构第 8 节第 4 步，类型完整的树→图时直接降成 SSA），生成器层的 `CellDecl`/`HoistedCell`/`readCell`/`writeCell` 和 gir 层的格子与三处抹除是同一套机制的两半，先删一半，另一半还得把格子喂进来。"
 
 ⇒ **撤回**本页上一版"先删 `gir` 侧、`gct` 侧排在其后"的排法：那个排法正是"先删一半"，会把另一半的喂料问题留到以后。**两层格子一起删**，与三处抹除同一笔收尾（§四 比齐之后）。
+### 1.6 终点：没有一类留格子
+
+`D-1128-186` ①：顺序照旧，但**终点写死** —— **没有一类留格子**。决策者原话（逐条照抄）：
+
+- **原则 3.5**：`var` 是**会被重新绑定的名字**，值本身不可变；这条**取代了"闭包对变量的捕获也是引用"**。
+- 因此**闭包捕获的是捕获时的值**、**`var` 形参是调用交回新值**，**"逃逸"这个类别本身会消失**。
+- 最后**一起删**：`escapingVariables_`、`collapseNonEscapingVariableReads`、`dropCarriedVariableUnits`、`knownCellUsers_`/`writesOf_`，以及 `gct` 的 `CellDecl`/`HoistedCell`。
+- **语料里若有程序靠闭包共享修改一个 `var`，它违背的是原则** ⇒ **用例改写成 `Ref`，不为它留格子**。
+
+**要点名的用例（`test/` 里靠"闭包/逃逸共享修改 `var`"这一套写的）**：
+
+| 用例 | 现状 | 改成什么形状 |
+|------|------|--------------|
+| `test/cases/compile/var_closure/err_captured_var_put_into_an_array.cml` | 反例（期待诊断） | **不改成 `Ref`**：它验的就是"把捕获的 `var` 塞进容器"被拒；诊断在，用例照旧 |
+| `test/cases/compile/state_escape/err_escape_into_closure.cml` | 反例（期待诊断） | 同上：逃逸反例，保留为诊断用例 |
+| `test/cases/compile/state_escape/err_escape_array.cml`、`err_escape_field.cml`、`err_escape_return.cml`、`err_escape_stored_by_callee.cml` | 反例（期待诊断） | 同上，保留 |
+| `test/cases/consistency/new_values/peek_loop.cml`、`rebinding_loop.cml` | **正例**：靠"重新绑定 = 新值"写 | **不改写成 `Ref`**：它们正是原则 3.5 的形状，应在新路径下**保持绿**；它们是"新值"语义的验收例 |
+
+**结论**：这一族里**没有"正例靠共享修改"的用例**——共享可变状态在语言里只有 `Ref` 一条路（`import { Ref, ref, get, set } from state`），`var` 只能是"重新绑定"。所以 §1.6 不产生"把正例改写成 `Ref`"的清单，只产生两个动作：**(a) 反例保持为诊断用例；(b) 正例（`peek_loop`/`rebinding_loop`）作为新值语义的验收例必须保持绿**。
+
 ## 二、替换后的形状（`var` 只降低成 SSA）
 
 **一句话**：每次赋值是一个**新值**；分支与循环在**汇合处**交出各自的版本；建图**不产出"什么都不等的关卡"**，因为不建格子就没人需要事后抹。
@@ -241,6 +261,17 @@ Get-ChildItem out/migrate/corpus/*.cml | ForEach-Object {
 # 3) diff + 归因表
 #   见 3.3 / 3.4；结果写 out/migrate/differing.txt 与本节表格
 ```
+### 3.6 分刀表（顺序照旧，每一刀都要新的最小程序与逐字节比）
+
+| 刀 | 覆盖 | 每类的**新最小程序**（进 §二·三 语料） | 比对 |
+|----|------|------------------------------------------|------|
+| 1 | **平直**（既不平直也不需要第二刀的那一小块） | 一条：`var x = e; x = f; println(x)`（无分支/循环/闭包） | 新旧 canonical **逐字节比** |
+| 2 | **臂** | 一条：`if c then sync { var x = 1; x = 2; null; } else sync { null; }; let n = 0`（即 seed 71 的最小形状） | 同上 |
+| 3 | **循环携带** | 一条：`var x = 0; let i = while i < 3 { x = x + 1 };` 一类（循环体里写、循环后读） | 同上 |
+| 4 | **捕获与 `var` 形参** | 两条：闭包捕获 `var`（捕获时的值）＋ `with <p: var int>` 形参（调用交回新值） | 同上 |
+
+**规矩不变**：每类的差异**逐个归因**（§3.4），**归不了因的一律算新路径的错**。
+
 ## 不做什么
 
 - **不打第三轮打印**（定位到行不产出修法）。
