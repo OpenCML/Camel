@@ -473,6 +473,23 @@ does not run cse.
 - The remaining failing programs of the batches were grouped by which pipelines fail
   (`triage.py --patterns`: 56 groups in batch A) but only one program of the larger groups was
   reduced. The 189 failing programs are therefore not known to be covered by the 33 findings.
+- **A pass hands on a runtime graph whose edges break its own invariants** (F43). Seed 11 of
+  `generate.VERSION` 9, 18 cells of the batch: `simplify@{nvm,fvm,jit,prl}`,
+  `opt@{nvm,fvm,jit,prl}`, `macro+opt@{nvm,fvm,jit,prl}`, `inline+simplify@nvm`,
+  `macro+simplify@nvm`, `simplify+simplify@nvm`, `opt+opt@nvm` and `inline+opt@nvm` decline with
+  `Pass 'std::opt' failed with an internal error: Runtime graph '__root__' breaks its edge
+  invariants (1 violation(s)): graph '__root__': sync edge 9 -> 105 joins two blocks: 9 is in the
+  block of region 0 and 105 in region 20.` (`REFUSED_UNLOCATED`, no position), and
+  `inline+fold@nvm` with the same shape from `std::cxx::fold` on graph `main`
+  (`sync edge 7 -> 106`, regions 0 and 19). Not reduced:
+  `python test/tools/progen/progen.py show --seed 11` prints the program.
+- **A string is passed where an `int` parameter is expected** (F44). Seed 25 of
+  `generate.VERSION` 9, 17 cells (every pipeline that runs `std::opt`):
+  `Pass 'std::opt' failed with an internal error: Runtime graph 'w34$spec19' breaks its edge
+  invariants (1 violation(s)): graph 'w34$spec19' node 3 (10): passes a string as ordinary
+  argument 0 of 'r1$spec40', which takes a int.` (`REFUSED_UNLOCATED`, no position); two of the 17
+  name another instance of it (`w34$spec3` -> `r1$spec16`). Not reduced:
+  `python test/tools/progen/progen.py show --seed 25` prints the program.
 
 To look at a seed: `python test/tools/progen/progen.py show --seed 716` prints the program and
 its reference output (batches B, C and D need their `--features`, as in the table above).
