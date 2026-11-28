@@ -1590,23 +1590,26 @@ SplitGraph cutBranchGraph(
         draft.setFuncType(branchHalves.backward);
         Half backward(draft, function, program, true, &cuts, &residualIndexOf);
         addResidualCaptures(draft, cuts, backward);
-        for (size_t i = sourcePorts.size() / 2; i < sourcePorts.size(); ++i) {
-            Type *type = function->funcType()->normTypeAt(i);
-            // Whether the parameter gets a port is the **user's** question (`gradientTypeOf`,
-            // principle 9.9), the one the half's type already answered above: `Tangent<int>` is
-            // `int`, so a discrete parameter's place in the half is that parameter's own type and
-            // the port it needs is a real one. A space that exists is not the same statement as a
-            // space with a place to accumulate in, and asking the second here left the type naming
-            // an `int` while the graph declared no port for it -- two arguments at the call, one
-            // port at the callee.
-            Type *const userTangent     = camel::core::gradientTypeOf(const_cast<Type *>(type));
-            const auto *const userTuple = tt::as_ptr<TupleType>(userTangent);
-            const bool typedSlot        = type != nullptr && userTangent != nullptr &&
-                                          !(userTuple != nullptr && userTuple->size() == 0);
-            if (!typedSlot) {
+        // Which parameters take a port is **read, not decided here**: `portParametersOf`
+        // (`transpose/signature.h`) is the one place the rule is written, and the half's type --
+        // the same `tangentParams` `splitHalvesWith` wrote for every split half -- is the list it is
+        // asked about. The loop walks the lifted table from its middle, so its index is a
+        // index; `i - half` only names the parameter the rule is asked about, and it is always in
+        // range because the lifted table states a value slot and a tangent slot per parameter.
+        const std::vector<size_t> backwardPorts = portParametersOf(branchHalves.backward);
+        const size_t half                       = sourcePorts.size() / 2;
+        std::vector<char> takesBackwardPort(branchHalves.backward->normTypesCount(), 0);
+        for (size_t parameter : backwardPorts) {
+            if (parameter < takesBackwardPort.size()) {
+                takesBackwardPort[parameter] = 1;
+            }
+        }
+        for (size_t i = half; i < sourcePorts.size(); ++i) {
+            if (takesBackwardPort[i - half] == 0) {
                 // A () slot is an answer this half gives, never an argument it takes.
                 continue;
             }
+            Type *type = function->funcType()->normTypeAt(i);
             const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
             draft.appendNormPort(port);
             backward.portOf[i] = port;
