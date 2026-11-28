@@ -189,6 +189,12 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
   ⇒ 要把这个等待也变成可配的，属元层（`internal/tools`），由决策者那边改，我们不碰。
 · 读数要带 provenance（`tip`、binary 的构建时刻、`tree`、`tier`、`jobs`）与 `[TREE] clean`。
   没有 `[load]` 行的读数（本机跑的）**只能当名字集用**，不能当时间基线。
+· **把一个用例移出快层（`tier = "slow"`）时，提交说明必须点名它带走的红**
+  （`moves X to slow; X is red: <判词原文首段>`，样例在 `c3f87277a7d` 与 `a5cd47367c9` 的正文）。理由：
+  快层红表是唯一逐名台账，"移层"本身合理（成本型用例不该占快层预算），
+  但**红不会跟着弃权** —— 不点名，下一次读快层的人会看到一条红"消失"，
+  而真正看 slow 层的是每日全量闸门（`-Tier all`），它的红表才是那一层的账。
+  ⇒ 移层**不禁止**，只是**不许静默**；判断"这条红是不是新出现的"，永远按**同一层的前一天**逐名比。
 · **不要用 `Select-String` / `Where-Object` 把判词行滤掉。** 判词行
   （`[camel-remote] <plan> exit N (transfer …, wait …, build …, plan …, load …; total …)`，wait 是在宿主上等这棵检出的锁的时间，不算传输）
   是相位读数的唯一来源：24 小时 1679 次调用里只有 82 次保留到它，**其中 911 次是调用方自己滤掉的**。
