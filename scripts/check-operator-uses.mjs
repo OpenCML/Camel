@@ -112,7 +112,8 @@ if (process.argv.includes('--dump')) {
     const ordered = Object.fromEntries(Object.keys(row).sort().map((field) => [field, row[field]]))
     console.log(`OPERATOR ${JSON.stringify(ordered)}`)
   }
-  console.log(`[${NAME}] ${rows.length} operator row(s) from ${PROGRAM}`)
+  // The count is a line of the reading, not a log line: camel-remote drops lines that open with `[`.
+  console.log(`${NAME}: ${rows.length} operator row(s) from ${PROGRAM}`)
   process.exit(0)
 }
 
