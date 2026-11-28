@@ -63,6 +63,8 @@ struct Term {
         Divide,
         Remainder,
         Negate,
+        Abs, ///< `abs(x) = x < 0 ? -x : x`, the negation wrapping like every other integer
+             ///< overflow; `abs(INT_MIN)` is `INT_MIN`
     };
 
     Kind kind    = Kind::Constant;
