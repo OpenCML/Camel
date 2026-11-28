@@ -478,8 +478,30 @@ struct Record {
     /// record's implementation.
     sem::Effect effect() const;
 
-    /// The operator touches no resource at all: its clause is stated and empty.
-    bool pure() const { return uses.stated() && uses.value.none(); }
+    /// The clause states that the operator writes no resource: it is stated, it declares no access
+    /// that writes, and it states none of the ways a body writes without naming an access -- an
+    /// external effect, the accesses of a function value it runs, a resource it allocates. Reading
+    /// is not writing: an operator whose only declared accesses are reads of a resource nothing
+    /// writes is pure, which is the difference from `uses.value.none()` -- "no access at all" is a
+    /// different question, and the one the footprint answers.
+    bool pure() const {
+        return uses.stated() && !uses.value.externalEffect && !uses.value.functionOperand &&
+               !uses.value.allocates && !declaresWrite();
+    }
+
+    /// The clause declares an access that writes (`mode != Read`): to `of` when a resource is
+    /// named, to any resource otherwise. A clause nobody stated declares nothing and answers false:
+    /// the absence of a clause is the conservative reading `effect()` makes, not a statement of a
+    /// write. The only place the question is answered -- `OperatorTable::mayBeWritten` asks this
+    /// for one resource rather than spelling the rule again.
+    bool declaresWrite(const sem::Resource *of = nullptr) const;
+
+    /// One of the resources this operator's own clause declares an access to is a resource some
+    /// declaration writes: the footprint's answer. Read from the declared accesses and from
+    /// `mayBeWritten`, so a read of a resource nothing writes answers false and the class of a
+    /// resource decides nothing. A clause nobody stated declares no access and answers false;
+    /// `effect()` is the reading that treats that silence conservatively.
+    bool accessesWritableResource() const;
 
     /// A call of it may fail: `panic` is stated true, or nobody stated it.
     bool mayFault() const { return !panic.stated() || panic.value; }

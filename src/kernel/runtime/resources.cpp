@@ -1471,7 +1471,7 @@ std::string accessUseText(const sem::ResourceAccess &access) {
     const std::string name = !access.resource.name.empty()
                                  ? sem::resourceDisplayName(access.resource.name)
                                  : std::string(sem::resourceClassName(access.resource.cls));
-    return std::format("{} {}", access.mode == sem::AccessMode::Read ? "read" : "write", name);
+    return std::format("{} {}", sem::writes(access.mode) ? "write" : "read", name);
 }
 
 /// What a footprint does beyond a declaration, and whether any of it is a reading the analysis
@@ -1862,7 +1862,7 @@ std::string nodeAccessText(const NodeAccess &access) {
     const std::string name = !access.resource.name.empty()
                                  ? sem::resourceDisplayName(access.resource.name)
                                  : std::string(sem::resourceClassName(access.resource.cls));
-    return std::format("{} {}", access.mode == sem::AccessMode::Read ? "read" : "write", name);
+    return std::format("{} {}", sem::writes(access.mode) ? "write" : "read", name);
 }
 
 /// The accesses of every node of one graph, resolved at most once each. The commit checks ask for a
