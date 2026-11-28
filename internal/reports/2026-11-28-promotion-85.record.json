@@ -1,0 +1,62 @@
+{
+  "kind": "promotion",
+  "promotion": 85,
+  "tip": "cf730bf232dc430ad89f8e97099b12735598545f",
+  "measured_tip": "cf730bf232dc430ad89f8e97099b12735598545f",
+  "pushed_develop_sha": "cf730bf232dc430ad89f8e97099b12735598545f",
+  "landing_tip": "the record is a documentation commit and lands on whatever integration holds at push time; the tip this layer measured was read with git rev-parse at the instant the run started, and the commits that arrived in integration afterwards are listed in the coverage note",
+  "note": "the layer was measured at cf730bf232dc, the tip that carries lane/deriv-rules (both legs of three derivative rules written down as cases), lane/progen with the generator's VERSION 9 and its two remaining failures recorded as defects, the twenty-eighth batch built and read at 2f9850aae5f7, and the coordinator's documentation commit that brings the three collab records of the commit-of lane into the tree. It declares three more cases than the eighty-fourth layer, all of them derivative-rule cases, and all three pass",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at cf730bf232dc; load 1m 28.95 at the start of the run",
+  "binary_built": "2026-11-28T17:53:15+08:00",
+  "readings": {
+    "total": 9933,
+    "pass": 9740,
+    "fail": 132,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 0,
+    "re_run": 0,
+    "re_run_passed": 0,
+    "load_before": "1m 28.95, 5m 32.34, 15m 31.96",
+    "load_warning": "[load] WARNING: 1m load 28.95 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth to eighty-fourth layers carried; a promotion does not wait on load, D-1128-36)."
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-84-reds.tsv (the eighty-fourth promotion, 132 names)",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], with the plan aliases transforms/compile.transforms and stated_extents/compile.stated_extents read as the same plan",
+    "still_red": 132,
+    "turned_green": 0,
+    "turned_green_names": [],
+    "new_reds": 0,
+    "new_reds_names": [],
+    "vanished_reds": 0,
+    "arithmetic": "132 names before: 0 turned green, 0 vanished, 0 appeared, 132 remain red; the two sets are the same set name for name",
+    "total_delta": "plus three: the layer declares 9933 entries against the eighty-fourth layer's 9930, and the three that appeared are transforms/pow_forward_both_legs.nvm, transforms/idx_take_forward_both_legs.nvm and transforms/add_gradient_both_legs.nvm, the two-leg cases lane/deriv-rules wrote down, and all three pass. No case was removed and no case changed status",
+    "notes": [
+      "opt.progen|progen_seed_4, the name that turned green in the eighty-fourth layer, stayed green here, so the two family-judging lanes that arrived together in that coverage remain the joint explanation and no bisection was needed",
+      "lane/progen's own reading recorded its two remaining failures as defects rather than as red cases; neither name appears in this layer's red set, so nothing about that lane is being counted as a new red here",
+      "the gap between the tip this layer measured and the integration tip at report time held twenty-two commits and ten files: internal/backlog.md, internal/plans/2026-11-28-daily-review.cn.md, internal/reports/2026-11-28-refactor-1-graph-in-one-pass.cn.md, internal/tools/camel-oversight/measure.js, internal/tools/camel-oversight/rules.js, scripts/merge-batch.mjs, scripts/promote.mjs, test/tools/merge-batch.test.mjs, test/tools/promote.test.mjs and test/tools/run-tests.mjs. None of them is a src file and none is a plan file, so the reading still describes a tree whose behaviour is the one measured; the tool files among them are the merge seat's own tooling, and a change to scripts/merge-batch.mjs or scripts/promote.mjs cannot move a case verdict",
+      "no case timed out in this layer and none was re-run; fault_deep.prl_off is absent for the nineteenth round running because the scheduler root-cause fix holds"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 0,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [],
+    "how": "the layer reported timed_out 0 and re_run 0, so there was no timeout to run alone"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-85-reds.tsv",
+  "red_table_rows": 132,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-85-reds.tsv (132 names)",
+  "new_red_names": [],
+  "pushed_as": "develop, fast-forwarded from 02208fe542d0 to cf730bf232dc, the tip this layer measured",
+  "develop_before": "02208fe542d0da0b4fb7f8079d7525efc31a1fd4",
+  "develop_after": "cf730bf232dc430ad89f8e97099b12735598545f",
+  "commits_brought_in": 50,
+  "commits_touching_src": 3
+}
