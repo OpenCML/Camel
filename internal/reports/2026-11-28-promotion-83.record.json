@@ -1,0 +1,62 @@
+{
+  "kind": "promotion",
+  "promotion": 83,
+  "tip": "36f7b2adf59ec216f57d025ec6c7963041ef0f70",
+  "measured_tip": "36f7b2adf59ec216f57d025ec6c7963041ef0f70",
+  "pushed_develop_sha": null,
+  "landing_tip": "the record is a documentation commit and lands on whatever integration holds at push time. develop was not moved by this layer: the coordinator asked that a layer carrying no verdict change not promote, and while that request was made on the reading that only documents had arrived since the eighty-second layer, this layer's coverage does hold one plan change, recorded below",
+  "note": "this layer is the control the eighty-second layer needed: taken at 36f7b2adf59e, seventy-two commits after the eighty-second measurement, and it reports the same total, the same pass count, the same 133 red names. What arrived in between is worth stating precisely rather than summarised as nothing: the coordinator's backlog documents, and lane/cores-4, which added cores = 4 to the plans whose cases keep four cores busy (mm/gc, mm/gc_collections, mm/gc_elder_exhaustion and modules/autodiff). A scheduling declaration is not a case, so the declared entry count is unchanged at 9930 and no verdict moved",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at 36f7b2adf59e; load 1m 37.37 at the start of the run",
+  "binary_built": "2026-11-28T17:01:01+08:00",
+  "readings": {
+    "total": 9930,
+    "pass": 9736,
+    "fail": 133,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 0,
+    "re_run": 0,
+    "re_run_passed": 0,
+    "load_before": "1m 37.37, 5m 36.62, 15m 31.57",
+    "load_warning": "[load] WARNING: 1m load 37.37 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth to eighty-second layers carried; a promotion does not wait on load, D-1128-36)."
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-82-reds.tsv (the eighty-second promotion, 133 names)",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], with the plan aliases transforms/compile.transforms and stated_extents/compile.stated_extents read as the same plan",
+    "still_red": 133,
+    "turned_green": 0,
+    "turned_green_names": [],
+    "new_reds": 0,
+    "new_reds_names": [],
+    "vanished_reds": 0,
+    "arithmetic": "133 names before: 0 turned green, 0 vanished, 0 appeared, 133 remain red; the two sets are the same set name for name",
+    "total_delta": "zero: 9930 declared entries, the same count the eighty-second layer declared. No case was added, removed or moved, because the one plan change in this coverage adds a cores declaration to existing cases rather than a case",
+    "notes": [
+      "this layer exists because it was already running when the coordinator observed that nothing but documents had arrived since the eighty-second layer; rather than kill it, the reading was kept, since a zero-change reading is the only way to show that 133 red in this tree is a property of the tree and not of the hour",
+      "the red set is now identical at load 23.76, 37.37 and 40.15, which is three readings of the same 133 names: the case for calling none of them load-sensitive is as strong as three points can make it",
+      "no case timed out in this layer and none was re-run; fault_deep.prl_off is absent for the seventeenth round running because the scheduler root-cause fix holds",
+      "the plans lane/cores-4 touched are exactly the ones whose cases hold four cores busy, and declaring that changed no schedule outcome in this layer"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 0,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [],
+    "how": "the layer reported timed_out 0 and re_run 0, so there was no timeout to run alone"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-83-reds.tsv",
+  "red_table_rows": 133,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-83-reds.tsv (133 names). Note that this record has no pushed_develop_sha, so a tool that selects the newest table by a landed promotion falls back to the eighty-second table; the two tables hold the same 133 names, so either baseline decides the next layer the same way",
+  "new_red_names": [],
+  "pushed_as": "not pushed: the coordinator asked that a layer carrying no verdict change not promote, and develop stayed at 0cffdccda2a59a19741503cec47fbac53455b4f4",
+  "develop_before": "0cffdccda2a59a19741503cec47fbac53455b4f4",
+  "develop_after": "0cffdccda2a59a19741503cec47fbac53455b4f4",
+  "commits_brought_in": 72,
+  "commits_touching_src": 4
+}
