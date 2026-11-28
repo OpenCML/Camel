@@ -1,0 +1,9 @@
+tip=fd950804d6 (origin/develop); machine=build host (zjwei@camel-work); load=~40 (1m) at read time; date=2026-11-28; PRELIMINARY, not final
+category,files_glob,lines,rule_count,note
+autodiff_cpp,src/stdlib/autodiff/** + transforms/jvp.cpp + transforms/split.cpp,12131,—,pullback.cpp 5435 + jvp.cpp 3468 + split.cpp 2625 dominate
+autodiff_rulesets_cml,src/stdlib/rulesets/**,4071,43 export func,43 xport func declarations across the rulesets .cml files
+onnx_export,src/stdlib/onnx/** + onnx.cml,12880,—,exporter.cpp 5738 is the largest single file in the library
+rules_rewrite,src/stdlib/rewrite/**,6399,—,module.cpp 4852
+cxx_opt_lang,src/stdlib/std/cxx/**,8304,—,generic.cpp 2140 + defunctionalize.cpp 1967
+quant,src/stdlib/**quant**,—,—,no path matched quant in this tree; recorded as — rather than 0 (nothing to measure, not measured zero)
+opt_cml,src/stdlib/std/cxx/**/*.cml,—,—,no .cml files under std/cxx in this tree; the Lang-side rewrite lives in rewrite/ (counted above)

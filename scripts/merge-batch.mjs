@@ -59,6 +59,12 @@
  *                                   {seat}/test/results/fetched/summary.json (the runner's summary)
  *        [--read-timeout <s>]       the same limit for the plan run (default 5400)
  *        [--remote origin] [--integration integration] [--base <ref>] [--no-fetch] [--push]
+ *        [--stack-on <commit> [--stack-from <seat>] [--stack-wait <s>] [--stack-poll <s>]]
+ *                                   build and read on top of another batch's tip that has not landed
+ *                                   yet (fetched from that batch's seat when it is not here), so the
+ *                                   next batch is read while that one pushes; with --push it waits
+ *                                   until integration contains that tip (default 3600 s, polling every
+ *                                   30 s) and pushes then, and pushes nothing (exit 6) if it never does
  *
  * The default build command runs `internal/tools/camel-remote.ps1` on the seat with no plan, which
  * builds on the host and runs nothing else. The default plan run is the same script with `-Plan` and
@@ -117,6 +123,10 @@ function parseArgs(argv) {
         base: null,
         fetch: true,
         push: false,
+        stackOn: null,
+        stackFrom: null,
+        stackWait: 3600,
+        stackPoll: 30,
     }
     for (let i = 0; i < argv.length; i += 1) {
         const name = argv[i]
@@ -141,6 +151,10 @@ function parseArgs(argv) {
         else if (name === '--integration') out.integration = value()
         else if (name === '--base') out.base = value()
         else if (name === '--no-fetch') out.fetch = false
+        else if (name === '--stack-on') out.stackOn = value()
+        else if (name === '--stack-from') out.stackFrom = value()
+        else if (name === '--stack-wait') out.stackWait = Number(value())
+        else if (name === '--stack-poll') out.stackPoll = Number(value())
         else if (name === '--push') out.push = true
         else fail(2, `unknown argument '${name}'`)
     }
@@ -225,6 +239,39 @@ function mergeOne(lane, laneSha, intoName) {
 
 let buildTimeout = 5400
 
+/**
+ * The holder record camel-remote leaves in the seat when it exits 4 (`test/results/log/<run>/HELD`):
+ * the merge seat's exit 4 is the one message a program reads, and the checkout's holder -- its host,
+ * pid, start time and run id, and the command that ends it -- has to be in that message rather than
+ * left for a person to find in the stream. The newest record wins; a run that left none is said to
+ * have left none, which is not the same as "nothing held it".
+ */
+function newestHeldRecord() {
+    const root = path.join(seat, 'test', 'results', 'log')
+    let entries = []
+    try {
+        entries = fs.readdirSync(root, { withFileTypes: true })
+    } catch {
+        return null
+    }
+    let newest = null
+    for (const entry of entries) {
+        if (!entry.isDirectory()) continue
+        const file = path.join(root, entry.name, 'HELD')
+        try {
+            const stat = fs.statSync(file)
+            if (newest === null || stat.mtimeMs > newest.mtimeMs) newest = { file, mtimeMs: stat.mtimeMs }
+        } catch {
+            // no HELD in this run: a normal end
+        }
+    }
+    try {
+        return newest ? fs.readFileSync(newest.file, 'utf8').trim() : null
+    } catch {
+        return null
+    }
+}
+
 function runBuild(command, label) {
     const started = Date.now()
     process.stdout.write(`merge-batch: build (${label}) ...\n`)
@@ -235,6 +282,22 @@ function runBuild(command, label) {
             ? `merge-batch: build (${label}) ran past its limit of ${buildTimeout} s and was ended with its process tree\n`
             : `merge-batch: build (${label}) exit ${run.code} in ${seconds.toFixed(1)} s\n`,
     )
+    // Exit 4 is this tool's own answer too, and it is read by a program rather than a person: the
+    // holder record the run left in the seat goes into the message, so "the seat is held" always
+    // arrives with the facts that end it.
+    if (run.code === 4) {
+        const held = newestHeldRecord()
+        process.stdout.write("merge-batch: the seat's checkout was held by another run\n")
+        if (held) {
+            for (const line of held.split(/\r?\n/)) if (line.trim()) process.stdout.write(`  ${line}\n`)
+        } else {
+            process.stdout.write('  (the run left no HELD record under test/results/log; read the lines above)\n')
+        }
+        // The run's own code is kept: 4 means "this checkout has an owner already" for camel-remote,
+        // and a batch that reported it as "the sources do not build" would send its reader to the wrong
+        // problem. The record above says which of the two this was.
+        fail(4, "the seat's checkout was held by another run; the record above names the holder and the command that ends it")
+    }
     return { code: run.code ?? -1, seconds, timedOut: run.timedOut }
 }
 
@@ -444,7 +507,13 @@ function main() {
     if (args.fetch) {
         git(['fetch', '--quiet', args.remote])
     }
-    const baseSha = git(['rev-parse', '--verify', `${args.base}^{commit}`]).out
+    // A stacked batch starts from the tip of a batch that has not landed yet, so it is built and read
+    // while that one pushes: the commit is fetched from the seat that holds it when it is not here.
+    if (args.stackOn && args.stackFrom) git(['fetch', '--quiet', args.stackFrom, 'HEAD'], { allowFailure: true })
+    if (args.stackOn && git(['cat-file', '-e', `${args.stackOn}^{commit}`], { allowFailure: true }).code !== 0) {
+        fail(2, `--stack-on ${args.stackOn} is not a commit in this seat${args.stackFrom ? ` (fetched ${args.stackFrom} HEAD)` : ''}; give --stack-from <the seat that holds it>`)
+    }
+    const baseSha = git(['rev-parse', '--verify', `${args.stackOn ?? args.base}^{commit}`]).out
     git(['checkout', '--quiet', '--detach', baseSha])
 
     const skipped = []
@@ -550,7 +619,32 @@ function main() {
 
     let pushed = false
     let pushCode = 0
-    if (args.push && merged.length > 0 && !held) {
+    // A stacked batch pushes only once the batch under it is on integration: its build and its
+    // reading are of a tree that holds that batch, and pushed before it they would put that batch
+    // on integration under this one's reading. It waits for integration to contain the commit it
+    // stacked on (landed as it is, or merged onto later arrivals by its own retry), and stops when
+    // that does not happen within --stack-wait: the batch under it was held or refused, and this
+    // reading includes what kept it off.
+    let stackLost = false
+    if (args.push && merged.length > 0 && !held && args.stackOn) {
+        const deadline = Date.now() + args.stackWait * 1000
+        const pause = new Int32Array(new SharedArrayBuffer(4))
+        for (;;) {
+            const fetched = git(['fetch', '--quiet', args.remote, args.integration], { allowFailure: true })
+            const landed = fetched.code === 0 && git(['merge-base', '--is-ancestor', baseSha, 'FETCH_HEAD'], { allowFailure: true }).code === 0
+            if (landed) {
+                process.stdout.write(`merge-batch: the batch this one stacks on (${baseSha.slice(0, 12)}) is on ${args.integration}; pushing\n`)
+                break
+            }
+            if (Date.now() >= deadline) {
+                stackLost = true
+                process.stdout.write(`merge-batch: the batch this one stacks on (${baseSha.slice(0, 12)}) did not reach ${args.integration} within ${args.stackWait} s; nothing is pushed\n`)
+                break
+            }
+            Atomics.wait(pause, 0, 0, Math.max(1, args.stackPoll) * 1000)
+        }
+    }
+    if (args.push && merged.length > 0 && !held && !stackLost) {
         // A batch builds and reads for minutes, and integration may move meanwhile. When what arrived
         // touches nothing the build reads (a page, a backlog row), the batch is merged onto the new tip
         // as one merge: its first parent is the tip integration now has, as the hook asks of every
@@ -612,10 +706,11 @@ function main() {
         `  reading   ${reading.skipped ? 'not needed (no path the build reads)' : `${reading.plans.length} plan(s), ${reading.reds} red, ${reading.newReds.length} new against ${reading.baseline}`}\n`,
     )
     for (const one of reading.newReds) process.stdout.write(`    new red  ${one.plan}  ${one.case}\n`)
-    process.stdout.write(`  pushed    ${held ? 'no (new reds)' : args.push ? (merged.length === 0 ? 'nothing to push' : pushed ? 'yes' : `REFUSED (exit ${pushCode})`) : 'no (--push not given)'}\n`)
+    process.stdout.write(`  pushed    ${held ? 'no (new reds)' : stackLost ? 'no (the batch it stacks on did not land)' : args.push ? (merged.length === 0 ? 'nothing to push' : pushed ? 'yes' : `REFUSED (exit ${pushCode})`) : 'no (--push not given)'}\n`)
     process.stdout.write(
         `MERGE_BATCH_RESULT ${JSON.stringify({
             base: baseSha,
+            stackedOn: args.stackOn ?? null,
             tip,
             merged: merged.map((one) => ({ branch: one.lane.branch, sha: one.sha })),
             skipped: skipped.map((one) => ({ branch: one.branch, reason: one.reason })),
@@ -628,6 +723,9 @@ function main() {
     )
     if (held) {
         fail(5, `the plans the batch touched have ${reading.newReds.length} red(s) that ${reading.baseline} does not list; nothing was pushed (the seat decides which lane brought them)`)
+    }
+    if (stackLost) {
+        fail(6, `the batch this one stacks on (${baseSha.slice(0, 12)}) did not land; nothing was pushed -- run the batch again from integration's tip`)
     }
     if (args.push && merged.length > 0 && !pushed) {
         fail(3, 'the push was refused (the integration tip may have moved, or a hook refused it); run the batch again from the new tip')
