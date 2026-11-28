@@ -1,0 +1,48 @@
+// `xs[[2, 0]]` (`:op/idx_take`) through both legs, on one program: the forward transform's
+// `jvp_idx_take` (`src/stdlib/rulesets/jvp.cml`, the tangent taken at the positions in the order
+// written) and the engine's own walk over the scalar `total`, with the array as the `with` parameter.
+//
+// The two legs answer in different currencies, so the case prints both and bridges them with the
+// tangent: the forward leg hands back the tangent of every position it read (`[3.0, 1.0]`, which is
+// `dxs[2]` then `dxs[0]`), and the engine hands back the gradient of the whole array
+// (`[1.0, 0.0, 1.0]`: the two positions the read names, position 1 untouched). What must agree is
+// the scalar's derivative along `dxs`:
+//
+//     forward:  3.0 + 1.0 = 4.0                      (the tangent's two lanes summed)
+//     engine:   1.0*1.0 + 0.0*2.0 + 1.0*3.0 = 4.0    (the gradient against the same tangent)
+//
+// The numbers separate the wrong laws: a take that sorted its positions answers `[1.0, 3.0]`, a take
+// that answered the value's own order answers `[1.0, 3.0]` as well, and a take whose reverse handed
+// every position the cotangent answers `[1.0, 1.0, 1.0]` -- 5.0 along `dxs`, not 4.0. Every number
+// is exact in binary floating point (`same` is `abs(...) == 0.0`, the reading
+// `neg_gradient_both_legs.cml` takes).
+import { with_grad } from autodiff
+import { abs } from math
+import rulesets.jvp
+import { sum } from tensor
+import { jvp } from transforms
+
+/// The forward leg: the read itself, answering `T[]` because the result's extent is a fact about the
+/// array of positions and not about the value's type.
+func reversed(xs: float[3]) => float[...] {
+    return xs[[2, 0]]
+}
+
+/// The engine's spelling: the same read on the way to a scalar, the array as the `with` parameter.
+with <xs: float[3]>
+func total_with() => float {
+    return float(sum(xs[[2, 0]]))
+}
+
+func main() sync {
+    let xs: float[3] = [1.0, 2.0, 3.0]
+    let dxs: float[3] = [1.0, 2.0, 3.0]
+    let (value, tangent) = jvp(reversed)(xs, dxs)
+    let (engineValue, engine) = with_grad(total_with)<xs>()
+    `idx_take forward value={} tangent={}`->format<value, tangent>->println
+    `idx_take engine value={} gradient={}`->format<engineValue, engine>->println
+    let tangentSum = tangent[0] + tangent[1]
+    let along = engine[0] * dxs[0] + engine[1] * dxs[1] + engine[2] * dxs[2]
+    let same = abs(tangentSum - along) == 0.0
+    `idx_take: forward={} engine={} same={}`->format<tangentSum, along, same>->println
+}

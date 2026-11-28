@@ -3545,3 +3545,15 @@ expect_exit = 0
 expect_output_contains = ["pow p value=9.0 tangent=6.0", "pow p engine value=9.0 tangent=6.0", "pow p: forward=6.0 engine=6.0 same=true library=6.0 same_library=true", "pow s value=27.0 tangent=56.66253179403897", "pow s: forward=56.66253179403897 library=56.66253179403897 same=true"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+[[tests]]
+name = "idx_take_forward_both_legs"
+desc = "`xs[[2, 0]]` (`:op/idx_take`) through both legs on one program. The forward route takes the tangent at the positions in the order written -- `[3.0, 1.0]` for `xs = [1, 2, 3]` with `dxs = [1, 2, 3]`, which is `dxs[2]` then `dxs[0]` -- and the engine's `with_grad` answers the gradient of the whole array, `[1.0, 0.0, 1.0]`. The two currencies are bridged by the tangent itself: the forward tangent's lanes summed is 4.0, and the gradient taken along the same tangent is 4.0. A take that sorted its positions answers `[1.0, 3.0]`, and a reverse that handed every position the cotangent answers `[1.0, 1.0, 1.0]` -- 5.0 along the tangent, not 4.0. The comparison is `abs(...) == 0.0` and every number is exact in binary floating point."
+kind = "behavior"
+case = "../../../cases/compile/transforms/idx_take_forward_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["idx_take forward value=[3.0, 1.0] tangent=[3.0, 1.0]", "idx_take engine value=4.0 gradient=[1.0, 0.0, 1.0]", "idx_take: forward=4.0 engine=4.0 same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
