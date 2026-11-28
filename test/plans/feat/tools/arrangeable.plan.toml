@@ -68,8 +68,8 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["ARRANGEABLE_SWEEP files=", "ARRANGEABLE_KIND node_kind=oper", "ARRANGEABLE_ROW node_kind=oper oper=:op/cast", "every node the sweep read was answered by the fact"]
 # One `camel` per case, plus `std::gir` for each (the stopper that keeps a case from being executed:
-# the comparison pass hands the program on, and the next fallback would run it). The reading is 3,056
-# of 4,133 cases at 260,538 nodes, 55 s of wall clock over six workers on the gate host; 2,400,000 ms
-# is far over that, so the bound is a bound and not the work's own time. A host that runs it slower
-# spends wall clock and no CPU, and CPU is what the runner reads.
+# the comparison pass hands the program on, and the next fallback would run it). What the sweep reads
+# is a fraction of the corpus (the script's `READ_FRACTION`), so no count belongs here: the bound is
+# a bound and not the work's own time, and a host that runs it slower spends wall clock and no CPU,
+# which is the resource the runner reads.
 timeout_ms = 2400000
