@@ -91,14 +91,14 @@ expect_output_contains = ["name=SemanticDiag::ComprehensionSourceRefused", "has 
 
 [[tests]]
 name = "comprehension.err_condition_type"
-desc = "A condition that is not a bool is refused: the element function the filter is given returns int where the declaration of filter wants bool."
+desc = "A condition that is not a bool is refused: the element function the filter is given returns int where the declaration of filter wants bool. The report is a ReturnTypeMismatch at the condition expression, which says what the filter wants, '(x: int) => bool', and what the condition returns, int; the earlier text was a GenericFunctionAsValue report, the shape used for a generic function standing where a value is wanted, borrowed to say the same thing and less precisely."
 kind = "negative"
 case = "../../../cases/consistency/comprehension/err_condition_type.cml"
 args = ["--diag-format", "short", "${case}"]
 backends = ["nvm"]
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "live DREF"]
-expect_output_contains = ["name=SemanticDiag::GenericFunctionAsValue", "it returns 'int', and the function expected here is '(item: int) => bool'"]
+expect_output_contains = ["name=SemanticDiag::ReturnTypeMismatch", "err_condition_type.cml:2:39", "Return type 'int' does not match the function's declared return type 'bool'"]
 
 [[tests]]
 name = "comprehension.err_element_type"
