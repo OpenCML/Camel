@@ -5510,14 +5510,19 @@ std::string differentiationRefusal(FunctionType *function, bool hasAux) {
     }
     if (valueType == nullptr ||
         (valueType->code() != TypeCode::Float64 && valueType->code() != TypeCode::Float32)) {
-        // **A discrete result's derivative is zero by definition** (design principles 9.9): a
+        // **A discrete scalar's derivative is zero by definition** (design principles 9.9): a
         // number and a boolean are their own gradient, at zero, so `grad` answers the zero of the
         // differentiated parameter's gradient and takes back the result's own type at zero. That is
-        // the user's answer (`gradientTypeOf`), and refusing it here was the machinery's narrower
-        // one -- which keeps no tangent for a `bool` because it never adds one -- said to the user.
-        // What is refused is a result no answer names: a string, a function, a value nothing states
-        // a gradient for.
-        if (valueType != nullptr && camel::core::gradientTypeOf(valueType) != nullptr) {
+        // the user's answer, and refusing it here was the machinery's narrower one -- which keeps
+        // no tangent for a `bool` because it never adds one -- said to the user.
+        //
+        // The question is not whether the result has a gradient type: `gradientTypeOf` answers for
+        // a pair, a struct and an array as well, member by member, and a pair is not a value a
+        // gradient is taken of as a whole -- what the author writes instead is the split at the
+        // call, and the refusal below is the one that tells them so. It is whether the result's
+        // gradient is the zero of its own type with no cotangent to carry, which is the question
+        // the forward lift answers when it writes that zero (`camel::core::discreteZeroSlot`).
+        if (camel::core::discreteZeroSlot(valueType) != std::nullopt) {
             return {};
         }
         return std::format(
