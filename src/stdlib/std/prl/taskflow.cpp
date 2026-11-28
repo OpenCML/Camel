@@ -267,7 +267,7 @@ struct PlanMismatch {
 
 namespace {
 
-// std::tf gc_stats=2: one line per collection, and per time the collector gave up. Set by the
+// std::prl gc_stats=2: one line per collection, and per time the collector gave up. Set by the
 // run in progress; the collector's gate is one per process.
 std::atomic<bool> &gcTraceFlag() {
     static std::atomic<bool> flag{false};
@@ -1297,7 +1297,7 @@ TaskflowExecSchedPass::apply(const camel::runtime::Program *program, std::ostrea
     auto *graph = program->root();
     GUARD(graph != nullptr, "Taskflow requires a non-null runtime root graph.");
     if (camel::profile::enabled()) {
-        camel::profile::setBackend("std::taskflow");
+        camel::profile::setBackend("std::prl");
     }
     camel::execute::RunScope runScope(programs_, *context_, program);
 
@@ -3270,10 +3270,10 @@ namespace {
 
 using camel::execute::PassKernel;
 
-/// `std::taskflow`: the execution of `std::nvm` on a task graph, with the parameters the scheduler
+/// `std::prl`: the execution of `std::nvm` on a task graph, with the parameters the scheduler
 /// declares in stdlib/std.cml.
 const PassKernel taskflowKernel(
-    "std::taskflow", [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+    "std::prl", [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
         TaskflowOptions options;
         options.linear         = args.getBool("linear");
         options.fanOutAll      = args.getBool("fanout_all");

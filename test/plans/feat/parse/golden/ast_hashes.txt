@@ -543,7 +543,7 @@ eee0557e2c6bfe61 ok src/stdlib/random.cml
 27fc4f4fd00b5fb6 ok src/stdlib/sim.cml
 c850078b6b50daf1 ok src/stdlib/state.cml
 e065061c9e91b782 ok src/stdlib/statistics.cml
-9377d87dcf46ea44 ok src/stdlib/std.cml
+c6ff696de381eefa ok src/stdlib/std.cml
 1e853ee4b632ef01 ok src/stdlib/str.cml
 46747b8669c63121 ok src/stdlib/stream.cml
 ed77c186d082145e ok src/stdlib/tensor.cml
@@ -2169,7 +2169,7 @@ c4d64025e5f917f1 ok test/cases/compile/transforms/vmap_whole_reduction.cml
 ccf309385ee64f25 ok test/cases/compile/transforms/with_value_call_is_not_lifted.cml
 9649bec449f1a803 ok test/cases/compile/transforms/law_answer_shape/transpose_refuses_a_law_that_answers_the_wrong_shape.cml
 fc3b7b65100876ba ok test/cases/compile/transforms/law_answer_shape/rulesets/transpose.cml
-bc40b0168d9ca838 ok test/cases/compile/type_array/selftest.cml
+00c4ba6babd77d3a ok test/cases/compile/type_array/selftest.cml
 c0d45b80d0861a2b ok test/cases/compile/type_identity/branch_unify.cml
 d5d97dada8287446 no test/cases/compile/type_identity/sync_in_type.cml
 a1f6ed6148159d35 ok test/cases/compile/type_identity/void_member.cml

@@ -89,7 +89,7 @@ asked for helpers).
 
 #### 4.3.2 What the parallel scheduler costs, and what it is for (开销模型)
 
-`std::prl` (`std::tf`) evaluates a graph with its own node-by-node evaluator
+`std::prl` (`std::prl`) evaluates a graph with its own node-by-node evaluator
 (`src/passes/sched/taskflow/`), on the thread that reached the graph, and hands work to other
 workers in two places only: a scope with two unordered heavy items (4.3.1), and the elements of
 an unordered higher-order operator. The number of workers is `-t` / `--threads`, by default the
@@ -226,7 +226,7 @@ settings, where the stress asks for a collection at every safepoint -- says so w
 skipped 3,525 of the 3,532 polls of the `_prl` arms of
 `test/plans/feat/mm/gc_collections.plan.toml` and left them with 12 collections against the
 3,538 the same case made on `std::fvm`. Every other run keeps the pacing, which is what the
-`std::tf` arms of `test/plans/feat/mm/gc_elder_exhaustion.plan.toml` are sized against.
+`std::prl` arms of `test/plans/feat/mm/gc_elder_exhaustion.plan.toml` are sized against.
 
 **The stack of a worker thread, and a dependency on the inside of Taskflow.** The evaluator nests
 on the native stack, and the default recursion limit is measured against 8 MiB (section 4.4).
@@ -387,15 +387,15 @@ Linux x86-64 with a release build; nothing here has been run on Windows or macOS
 | `std::nvm` | a nested activation of `NodeVMSchedPass::call` on the native stack, for a direct call (`FUNC`), a call through a function value (`CALL`) and every element call of a higher-order operator alike | rebinds graph and frame inside the same activation (`goto loop_start`) | `FramePool`, a bump allocator over one block |
 | `std::fvm` | a direct call pushes its return pc and frame on the interpreter's own stack (`pcStack_` / `frameStack_`, vectors that grow up to the limit) and jumps: no native stack. A call through a function value and an element call of a higher-order operator run in a nested `callBorrowed` on the native stack | the `TAIL` bytecode: releases the frame, takes the callee's, jumps | `FramePool` |
 | `std::jit` | the interpreter of `std::fvm` for every graph the JIT does not compile (any graph with an operator, or that calls another graph). A compiled self-recursion nests on the native stack through the trampolines, uncounted | compiled as a jump | `FramePool` |
-| `std::tf` | `executeCallNode` -> `evalGraph` on the native stack of the thread that runs the call; a scope with independent heavy items becomes a task graph, whose tasks may run on other threads. A call of a serial graph runs on the thread's bytecode interpreter instead, with the calls of `std::fvm` from there on (4.3.3) | the `for (;;)` loop of `evalGraph`; `TAIL` in the interpreter | `TaskflowFramePool`: per graph, grown in chunks; the interpreter's `FramePool` per thread |
+| `std::prl` | `executeCallNode` -> `evalGraph` on the native stack of the thread that runs the call; a scope with independent heavy items becomes a task graph, whose tasks may run on other threads. A call of a serial graph runs on the thread's bytecode interpreter instead, with the calls of `std::fvm` from there on (4.3.3) | the `for (;;)` loop of `evalGraph`; `TAIL` in the interpreter | `TaskflowFramePool`: per graph, grown in chunks; the interpreter's `FramePool` per thread |
 | macro evaluator (`std::macro`) | `executeFunction` -> `executeGraph` on the native stack; no tail calls, every call nests | none | its own `FramePool` |
 
 Measured cost of one open call of `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)`:
 `std::nvm` about 545 bytes of native stack and 100 bytes of frame; `std::fvm` about 100 bytes of
-heap for a direct call and about 1.7 KiB of native stack for a nested activation; `std::tf`
+heap for a direct call and about 1.7 KiB of native stack for a nested activation; `std::prl`
 about 520 bytes of native stack; the macro evaluator about 630 bytes of native stack a frame
 (two frames a level). On an 8 MiB stack the native stack ends near 15400 open calls on
-`std::nvm`, 4890 nested activations on `std::fvm`, 15860 calls on `std::tf` and 13400 frames in
+`std::nvm`, 4890 nested activations on `std::fvm`, 15860 calls on `std::prl` and 13400 frames in
 the macro evaluator.
 
 #### 4.4.2 The recursion limit
@@ -408,7 +408,7 @@ higher-order operator; the entry graph's call of `main` is not counted (`kEntryC
 - `std::fvm` counts the entries of its call stack plus its nested activations
   (`stackDepth_ + nestedCalls_`). Before, nested activations were not counted: a recursion
   through a function value was unbounded and overflowed the native stack.
-- `std::tf` counts per thread (`ThreadState::callDepth`), and a task continues from the count of
+- `std::prl` counts per thread (`ThreadState::callDepth`), and a task continues from the count of
   the thread that started it (`InheritedDepth`), so the count follows a recursion across
   workers. The limit is the same as on the other back ends (1000 by default). A serial graph
   it hands to the bytecode interpreter (4.3.3) is counted by the interpreter on top of the
@@ -431,7 +431,7 @@ located diagnostic.
   catches it knows the node (or the bytecode pc) that was running and reports it there
   (`reportRuntimeFault`), which gives the diagnostic its source position; the report is thrown
   on as a `Diagnostic` and ends the pass.
-- `std::tf` reports the first fault of a run and no other (`TaskflowExecSchedPass::raiseFault`):
+- `std::prl` reports the first fault of a run and no other (`TaskflowExecSchedPass::raiseFault`):
   element functions that run concurrently can fault together, and each used to add its own
   diagnostic (a different number of them from run to run). Which of several concurrent faults
   is "the first" is whichever thread reports first; it is not defined. When a task fails,
@@ -448,7 +448,7 @@ located diagnostic.
   like the other integer arithmetic (`camel/utils/int_div.h`); it used to be a hardware trap
   (SIGFPE) on every back end.
 - `==` / `!=` on floats compare values (IEEE), in the operator as in the bytecode `std::fvm`
-  compiles them to; the operator used to compare bit patterns, so `std::nvm` and `std::tf` had
+  compiles them to; the operator used to compare bit patterns, so `std::nvm` and `std::prl` had
   `nan == nan` true and `-0.0 == 0.0` false.
 
 #### 4.4.4 How a program ends

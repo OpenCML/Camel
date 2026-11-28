@@ -55,7 +55,14 @@ FACT {"library":"facts","kind":"core.arrangeable",...,"anchors":[{"graph":"root"
 ```
 理由串**只有**这一项 —— 若 ① 承诺为假，`toString` 会先打 `not pure`（逐个列出不成立者），所以这一行同时是"`pure` 仍为真"的读数；同一用例四个后端全绿（`loops.edges.nvm/.fvm/.jit/.prl` PASS）⇒ **"不可摆"不妨碍它被丢弃、被重算**。
 
-**缺口（"读只读资源仍可摆"：**无实例**）**：把 `test/cases` 全 4200 个 `.cml` 用 `camel inspect --fact core.arrangeable` 扫过，只得到上一条"仅第五项不成立"的节点；`camel inspect --ops` 显示**当前标准库被声明的可写资源只有 `graph::draft`（`class: handle`，`mode: rmw`：`graph::erase`/`add_constant`/`add_param`/`commit`）与 `profiler`（`class: ambient`）**，语料里**没有"读一个没人写的 `handle` / `graph` / `spelling`"的算子**（`src/stdlib/graph.cml:72 resource spelling readonly` 这类只读资源**有声明、没有算子读它**）。⇒ 第五项**目前只会因为"读草稿"而为假**；"读只读资源仍可摆"这条**等有人写出那样的算子**，取第一例的现成命令：
+**读只读资源仍可摆：语料里无实例；一条临时探针给出答案后已撤，不进仓库。** 探针读数（模型格，临时声明 `graph:probe_reads_graph` / `graph:probe_reads_draft`，跑完即撤）：
+```
+PROBE graph:probe_reads_graph pure=true  awr=false writes=false outside=false n=1 accesses=[ambient/graph read]
+PROBE graph:probe_reads_draft pure=true  awr=true  writes=false outside=false n=1 accesses=[handle/graph::draft read]
+```
+⇒ **同一类资源的两个实例给出不同答案**（`awr=false` vs `awr=true`），答案来自**声明**（`mayBeWritten`）而不是资源类。
+
+**以下是"语料里为什么没有实例"的现场（扫过一遍，成立）**：把 `test/cases` 全 4200 个 `.cml` 用 `camel inspect --fact core.arrangeable` 扫过，只得到上一条"仅第五项不成立"的节点；`camel inspect --ops` 显示**当前标准库被声明的可写资源只有 `graph::draft`（`class: handle`，`mode: rmw`：`graph::erase`/`add_constant`/`add_param`/`commit`）与 `profiler`（`class: ambient`）**，语料里**没有"读一个没人写的 `handle` / `graph` / `spelling`"的算子**（`src/stdlib/graph.cml:72 resource spelling readonly` 这类只读资源**有声明、没有算子读它**）。⇒ 第五项**目前只会因为"读草稿"而为假**；"读只读资源仍可摆"这条**等有人写出那样的算子**，取第一例的现成命令：
 ```
 camel inspect --fact core.arrangeable <case>
 ```
@@ -73,4 +80,4 @@ camel inspect --fact core.arrangeable <case>
 
 `2026-11-28` **第五项接线**（`lane/arrangeable-two-bits@85101c529b`，底 `origin/integration@97755d51e8`，两笔：`c8ae83150f` 模型格 cherry-pick + `85101c529b` 第五项）：`arrangeable.h` 五项齐全（`noAccessToWrittenResource`），`facts.cpp` 的 `terms.pure = record->pure()` **原样未动**、新增 `terms.noAccessToWrittenResource = !record->accessesWritableResource()`，`andTerms` 跟着加、`toString` 打 `reads a resource a write reaches`。`BUILD_EXIT=0`、`dirty 0`；capacity 18/18、compile 2734/2718/13、modules 2093/2057/**28**（基线 27，+1）。对 75 表 141 名：**甲 1 / 丙 40 / 乙 0 / 未跑 101**，覆盖 4845 条（`feat/compile` 114 计划 + `feat/modules` 85 计划 + `feat/mm/capacity`）。**甲那 1 条 = `resident_cpu_block`，真回归，修在消费者**（见 §2 末）。
 
-`2026-11-28` **另一条同族教训（读数口径）**：poison 族的基线**只能取同一棵树上的"整份跑"**（点名计划文件，`--tier` 不参与）；141 表里那几行是快层的**风险抽样**（每源计划 1–3 条），**抽样是整份跑的子集**（表里 3 条在整份跑 42 条里 3/3 命中），`-Tier milestone` 只跑未抽样那一半、不能当这条基线。
+`2026-11-28` **一条通用的读数规则（`D-1128-132`，不针对某一族）**：**一张红表只是同一选法的基线**。晋级表是"全快层"那个选法（含计划自己声明的风险抽样）；**点名计划文件**会把那份计划**整份跑**（`--tier` 不参与），`-Tier all` 与 `daily-all` 那张表是整份跑的选法 ⇒ **选法不同就不能相比**。**比红之前先确认两边选法相同**：同层同目标对晋级表，点名计划文件对 `daily-all` 表或同树基线。已写进 lane skill 的读数那节。apply 到现场：`mm.gc_poison_sweep` 在晋级表里 3 条红（抽样）、整份跑 42 条（`57838d1f3c`），两个数并存不矛盾；"多出来的 35/38 条"因此不是新红。

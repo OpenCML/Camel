@@ -30,7 +30,7 @@
  *     (`skip_unless`), names a `benchmark`, or carries `--timeit`: its command line is not "this
  *     program on this back end". This also rules out a program whose standard output is a clock
  *     rather than a value, which cannot agree with itself and would be misread as a disagreement;
- *   - a block whose last scheduling pass is neither side (`std::jit`, `std::prl`, `std::tf`) or is a
+ *   - a block whose last scheduling pass is neither side (`std::jit`, `std::prl`) or is a
  *     rewriting pass -- the run then falls through to `std::run`, which is a third program this
  *     tool does not measure; a scheduling pass that carries `with` parameters, because a parameter
  *     is not necessarily one both sides accept, so the two halves would no longer be one program;
@@ -163,14 +163,13 @@ const SIDES = [
     { name: 'fvm', pass: 'std::fvm' }
 ]
 /// The passes that mean one of the two sides, so that a terminal scheduling pass can be replaced by
-/// the side's pass: `std::linear` is `std::nvm`, `std::fastvm` is `std::fvm` (`docs/cli.md`,
+/// the side's pass: `std::linear` is `std::nvm` (`docs/cli.md`,
 /// "Default pipeline").
 const SIDE_OF_PASS = new Map([
     ['std::nvm', 'nvm'],
     ['std::nodevm', 'nvm'],
     ['std::linear', 'nvm'],
     ['std::fvm', 'fvm'],
-    ['std::fastvm', 'fvm'],
     ['std::run', 'run']
 ])
 /// A pass whose whole job is to write the graph out: a program that ends in one, or that runs one

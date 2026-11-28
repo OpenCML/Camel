@@ -1,4 +1,4 @@
-// The array type's dims self-test runs from the pass `std::type::array`; the program itself
+// The array type's dims self-test runs from the pass `std::arraytype`; the program itself
 // does nothing.
 func main() sync {
 }

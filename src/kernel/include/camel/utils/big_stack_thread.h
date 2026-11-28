@@ -10,7 +10,7 @@
  * on the platform: the process's stack limit with glibc (8 MiB by default), the value in the
  * executable's header on Windows (1 MiB unless the host was linked otherwise, e.g. python.exe
  * for the Python package), and 512 KiB on macOS whatever the limit of the process is. A worker
- * of std::tf is created through this class (cmake/TaskflowWorkerStack.cmake puts it in place of
+ * of std::prl is created through this class (cmake/TaskflowWorkerStack.cmake puts it in place of
  * std::thread in Taskflow's worker), so that it has kWorkerStackBytes at least on all three:
  * the process's stack limit (Unix) or the executable's stack size (Windows) where that is larger.
  *

@@ -23,7 +23,7 @@ expect_output_not_contains = ["-nan", "Segmentation fault", "dumped core", "[Err
 [[tests]]
 name = "complex.fastvm"
 desc = "The same program under the bytecode scheduler, which is where the array loops over a compact `c64` array run through the slow element class: the two bytecode VMs used to die by a signal at that reduce."
-args = ["${case}", "std::fastvm"]
+args = ["${case}", "std::fvm"]
 expect_stdout_contains = ["3+4i", "-5+10i", "[(1+2i, 3), (3+4i, 5)]", "3-4i", "nan+4.00i", "nan+nani", "[-3+4i, -5+10i]", "[2+4i, 4+6i]", "[3+4i]", "4+6i"]
 expect_output_not_contains = ["-nan", "Segmentation fault", "dumped core", "[Error]"]
 

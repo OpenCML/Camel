@@ -138,7 +138,7 @@
   - 结构体或元组（模型的权重）：一个目录，每个叶子一个文件，文件名是用点连接的叶子路径（`fc1.w.npy`、`0.npy`），也就是 `nn::save_params` 写出的布局。
   - `with` 参数的给法与普通参数相同。`var` 参数不能给值。
 - **绑定就是部分应用。** 得到值的参数在第一个遍运行之前成为入口图中的常量，因此各个遍把它当常量看待（据此折叠和特化）。其余参数仍是入口图的参数；`std::rgir` 把它们显示为与参数同名的 `PORT` 节点。
-- **运行需要每个参数都有值。** 调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`，或默认运行）拒绝仍带参数的入口图，诊断为 `RuntimeDiag::EntryArgumentMissing`（`0x04000010`，阶段 `run`），定位在 `main` 的定义处，并列出没有值的参数。什么都不会运行；绝不假定默认值、零值或随机值。重写遍和翻译遍接受未绑定的参数。
+- **运行需要每个参数都有值。** 调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`，或默认运行）拒绝仍带参数的入口图，诊断为 `RuntimeDiag::EntryArgumentMissing`（`0x04000010`，阶段 `run`），定位在 `main` 的定义处，并列出没有值的参数。什么都不会运行；绝不假定默认值、零值或随机值。重写遍和翻译遍接受未绑定的参数。
 - **错误的实参**（名字不是参数、同一名字给了两次、文本不是该类型的字面量、文件不存在、张量形状不同、对没有参数的 `main` 使用 `--arg`）是 `RuntimeDiag::EntryArgumentInvalid`（`0x04000011`），定位在 `main`，在任何遍运行之前报告。
 - **`main` 返回的值是普通函数的值，不是程序的结果**（设计原则 9.8）：程序本身没有结果，只有效应，**退出码只由 `process::exit(code)` 给出** —— 不调用就是 `0`，只有没有被处理的错误值或故障才使运行以非零结束。驱动程序只在被要求时把值写出：`-o` / `--output <file>`，且要有调度遍运行了程序。确切规则如下：
   - 没有写明返回类型的 `main`（`func main() sync { println('a') }`）以函数体的值结束（这里是 `println` 返回的 `'a'`）；这个值是函数自己的，既不打印也不写出，此时使用 `-o` 是 `EntryResultNotWritten`。退出码是 0。`println(x)` 仍然返回 `x`：`func main(): string sync { println('a') }` 时驱动程序写出 `'a'` —— 一次由 `println`，一次作为值。
@@ -154,9 +154,9 @@
 
 命令行上给出的遍按书写顺序运行。每个遍或者变换图，或者执行图（调度遍），或者翻译图（翻译遍）。
 
-- **默认流水线。** 不给出任何遍时运行 `std::run`：运行这个程序的那一步，写它的时候不关心哪个后端来跑。`std::run` 是某个调度遍的别名 —— 默认是 `std::fastvm`，也就是 `std::fvm`；`.opencmlrc` 的 `passes.run` 可以指定另一个调度遍（值不是调度遍时，开跑前就拒绝，诊断里点名的就是 `passes.run`）。给出的遍都没有消耗图时，在它们之后也运行这个默认遍，`.opencmlrc`（`passes.fallback`）可以改变这一列。后端保留自己的名字，哪个后端跑才是重点时就写它们（`std::fvm` 是 `std::fastvm`，`std::jit` 是 `std::fastvm::jit`，`std::nvm` 是 `std::nodevm`，`std::tf` 与 `std::prl` 是 `std::taskflow`）。
+- **默认流水线。** 不给出任何遍时运行 `std::run`：运行这个程序的那一步，写它的时候不关心哪个后端来跑。`std::run` 是某个调度遍的别名 —— 默认是 `std::fvm`；`.opencmlrc` 的 `passes.run` 可以指定另一个调度遍（值不是调度遍时，开跑前就拒绝，诊断里点名的就是 `passes.run`）。给出的遍都没有消耗图时，在它们之后也运行这个默认遍，`.opencmlrc`（`passes.fallback`）可以改变这一列。后端保留自己的名字，哪个后端跑才是重点时就写它们（`std::jit` 是 `std::fastvm::jit`，`std::nvm` 是 `std::nodevm`，`std::prl` 与 `std::prl` 是 `std::prl`）。
 - **所有遍的名字都在运行之前检查。** 程序编译之后（模块贡献的遍此时才存在）、第一个遍运行之前、第一份 `--dump-after-each-pass` 快照写出之前，流水线和后备遍的所有名字都被解析（先解析别名）。第一个未知的名字报告为 `RuntimeDiag::UnrecognizedGraphPass`，阶段为 `pass:<name>`，可用的遍和别名列在 stderr 上（`Pass <std::no_such_pass> not found, available passes are:`，然后是 `Available aliases are:`），退出码为 1。此时什么都没有执行：`camel f.cml std::nvm std::no_such_pass` 不会运行程序。`module::pass` 这样的名字按它所指的模块区分：模块在、但没有这个遍，报告为 `RuntimeDiag::PassNotProvidedByModule`（模块声明了该函数却没有 `export` 时是 `RuntimeDiag::PassNotExportedByModule`），只写出模块和它确实提供的遍，不再列出全部遍；模块在、但加载或编译失败，报告为 `RuntimeDiag::InvalidPassParameter`，带上加载器或编译器的原因（编译错误还带它的文件与位置）。
-- **写在消耗图的遍之后的遍永远不会运行。** 调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`）执行程序，翻译遍（`std::gir`、`std::rgir`、`std::cpp`、`onnx::export_model`、字节码和即时编译的转储）翻译程序；二者都不把图传下去，流水线到此结束。`camel f.cml std::nvm std::cxx::inline` 在节点虚拟机上运行程序，永远不会运行 `std::cxx::inline`。这种写法被接受，但在任何东西运行之前会在 stderr 上给出警告 `RuntimeDiag::PassesNeverRun`（`0x0410000F`，阶段 `pass:<消耗图的遍>`），列出不会运行的遍（见“警告”）。
+- **写在消耗图的遍之后的遍永远不会运行。** 调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`）执行程序，翻译遍（`std::gir`、`std::rgir`、`std::cpp`、`onnx::export_model`、字节码和即时编译的转储）翻译程序；二者都不把图传下去，流水线到此结束。`camel f.cml std::nvm std::cxx::inline` 在节点虚拟机上运行程序，永远不会运行 `std::cxx::inline`。这种写法被接受，但在任何东西运行之前会在 stderr 上给出警告 `RuntimeDiag::PassesNeverRun`（`0x0410000F`，阶段 `pass:<消耗图的遍>`），列出不会运行的遍（见“警告”）。
 - **语言不限制遍的顺序，而顺序可能有影响。** 一个遍并不承诺得到与另一种顺序相同的图：它修改图，并且可能有副作用。“任意遍序列给出相同行为”不是 Camel 的性质。
 - **标准优化遍**（`std::cxx::devirtualize`、`std::cxx::specialize`、`std::cxx::inline`、`std::cxx::fold`、`std::cxx::cse`、`std::cxx::dce`、`std::opt`、`tensor::fuse`）力求保持程序的结果。这是对这些遍的质量要求，由测试检查，不是语言保证。
 - **`std::macro` 是可选的。** 没有它，`#macro` 函数就是一个随程序运行的普通函数。
@@ -178,7 +178,7 @@
 | `std::opt` | `check_screens: bool = false`（测试通用遍的筛选：把它们本来会跳过的图也交给这个遍，若它改写了就失败），`settle_runs: int = 32`（连续多少轮改写各自都能改动同一张图，之后这个遍就报告它不收敛；这是引擎内部的上限，暴露出来是为了让测试能证明那个报告会发生——它不是调参旋钮，0 被拒绝，而不是读作“永不报告”） |
 | `std::fvm`、`std::jit` | `stats: string? = null`（把本次运行每张图的字节码数与执行计数追加写入该文件；null（默认值）不写），`config: bool = false`（在程序运行之前把本次运行实际拿到的设置打到标准错误上，一行 `[fastvm] config jit=<mode> hot_threshold=<n> trace_mir=<on 或 off> stats=<文件或 (none)>`：模式、一张图在多少次调用之后被编译、是否保留被追踪的 MIR，以及本次运行的统计写到哪里——`std::fvm` 默认打出的是 `[fastvm] config jit=Disabled hot_threshold=1 trace_mir=off stats=(none)`） |
 | `std::jit` | `hot_threshold: int = 1`（同一调用点调用多少次后编译一张图；0 表示第一次调用就编译）。**含循环区域的图在 0 与 1（默认）这两个"尽早编译"的阈值下第一次调用就编译**：使图变贵的是轮次，调用次数看不见轮次；显式把阈值设到 1 以上仍按调用次数走（`hot_threshold=1000000000` 因此仍表示"什么都不编译"） |
-| `std::tf`、`std::prl` | `linear: bool = false`（逐节点求值），`fanout_all: bool = false`（把每个无序的高阶调用都展开成并行任务），`diag: bool = false`（打印对每张图的决定），`segments: bool = false`（打印当前计划的分段（不是理论上可以切成的分段）：每段的条目与链、每条链等谁，以及每个算子落在哪一段），`bytecode: bool = true`（把串行的图交给字节码解释器），`gc_stats: int = 0`（1：运行结束时打印统计；2：另外每次回收一行），`gc_stress: bool = false`（本次运行的工作就是回收压力：它要求的每次回收都一对一地服务，而不是按闸门的节奏），`blocking_leaves: bool = true`（阻塞算子为等待而离开它的 GC 区域，于是在 sleep 或设备同步里的工作者等待时不会停下整个世界；关掉则等待期间一直持着该区域，回收若撞见它就在 500 ms 后放弃，闸门在拒绝反复出现之后报出来） |
+| `std::prl` | `linear: bool = false`（逐节点求值），`fanout_all: bool = false`（把每个无序的高阶调用都展开成并行任务），`diag: bool = false`（打印对每张图的决定），`segments: bool = false`（打印当前计划的分段（不是理论上可以切成的分段）：每段的条目与链、每条链等谁，以及每个算子落在哪一段），`bytecode: bool = true`（把串行的图交给字节码解释器），`gc_stats: int = 0`（1：运行结束时打印统计；2：另外每次回收一行），`gc_stress: bool = false`（本次运行的工作就是回收压力：它要求的每次回收都一对一地服务，而不是按闸门的节奏），`blocking_leaves: bool = true`（阻塞算子为等待而离开它的 GC 区域，于是在 sleep 或设备同步里的工作者等待时不会停下整个世界；关掉则等待期间一直持着该区域，回收若撞见它就在 500 ms 后放弃，闸门在拒绝反复出现之后报出来） |
 | `std::profile` | `top: int = 24`（算子表的行数；0 表示写出运行过的每个算子），`hints: bool = true`（报告在主机上运行的逐元素循环，以及它们为什么没有交给设备），`json: string? = null`（另外把报告作为一个 JSON 对象写入该文件；null（默认值）不写），`report: bool = true`（写出文本报告；false 只打开下面的诊断），`gc_stats: int = 0`（退出时分配器的统计：1 一行，2 另外每次回收一行），`type_stats: bool = false`（退出时类型存储的统计），`effect_trace: string? = null`（为每个执行过的有效应算子追加一行 JSON 到该文件；null（默认值）不写；见“效应追踪”），`opstats: bool = false`（退出时打印内核计时表：每个算子一行，带它的调用次数、总时间与每次调用的时间，由提供这些内核的模块测量），`variant_trace: bool = false`（为每个在重定位时被运行时读取类型的值打印一行：值、读它时用的类型，以及它带的 tag 与字段数） |
 | `onnx::export_model` | `out: string = ""`（模型文件；见下），`trace: bool = false`（把每个被下降的调用连同它实参的事实打到标准错误上），`dump: bool = false`（打印被翻译的那张简化后的图，与 `std::rgir` 相同），`prep_stats: bool = false`（打印导出收到这个函数时的大小，以及导出自己做完简化之后的大小） |
 | `std::cxx::saturate` | `rounds: int = 6`（标准规则库的饱和轮数），`strict: bool = false`（只保留逐位成立的规则，与 `std::opt` 的 `safe_fp=true` 相同） |
@@ -287,7 +287,7 @@
 - `data.name` 是稳定的诊断名；`code` 是它的数字形式。
 - 遍提交的每一张图（以及前端编码的每一张图）都做结构校验，release 构建中也是如此：节点、槽和边的引用在范围内，输入和输出互为镜像，`BRCH`/`JOIN` 的分支臂数目，`GATE` 有一个值输入和一个控制输入，直接调用传入的实参个数与被调用者接受的一致。违反时是 `RuntimeDiag::PassInternalError`，指出提交该图的遍，在任何东西运行之前报告。
 - 从某个遍逃逸出来而又不是诊断的异常（提交重写时的图校验、调度器构建执行顺序时遇到环）报告为 `RuntimeDiag::PassInternalError`（`0x0400000C`），阶段为 `pass:<name>`，消息里是异常的文本，没有源码位置，退出码为 1。它标志的是编译器的缺陷，不是对程序的拒绝。即使那是调度遍，阶段给出的也是遍的名字，所以它不能说明程序是否已经运行了一部分。任何遍之外的异常报告为 `InternalDiag::UnknownInternalError`，阶段为 `internal`。
-- `data.stage` 说明诊断在流水线的哪里产生：`parse`、`typecheck`、`compile`（见“资源上限”）、重写遍或翻译遍的 `pass:<name>`（包括未知的遍名）、调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`）的 `run`，或 `internal`。
+- `data.stage` 说明诊断在流水线的哪里产生：`parse`、`typecheck`、`compile`（见“资源上限”）、重写遍或翻译遍的 `pass:<name>`（包括未知的遍名）、调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`）的 `run`，或 `internal`。
 - `data.fixes` 出现时，就是这条诊断要求的改法，形状取自编辑器的 code action：一个由若干个 fix 组成的数组，每个 fix 可以单独应用；每个 fix 里是一个由若干 edit 组成的数组，这些 edit 必须一起应用。一个 edit 把它的 `range` 覆盖的文本换成 `replacement`，计数方式与本文件其他地方一致（行和列从 0 开始，`end` 不含）。空 range 是插入，空 `replacement` 是删除；一个 fix 里的各个 edit 指向诊断所在文件（`data.modulePath`）中互不重叠的区间，因此它们应用在原文上，而不是应用在前一个 edit 产生的文本上。
 
   ```json
@@ -318,7 +318,7 @@
 - `payload_sha1` 是对打印出来的实参值的哈希，实参值在算子运行之前取得。
 - `payload` 是被哈希的文本：每个实参写作 `type=value` 后跟 `|`，先是普通实参，然后是 `||`，然后是 `with` 实参（在被哈希的字节里，这两个分隔符是 `0x1f` 和 `0x1e`）。它被截断到 2048 字节；被截断的行还带有 `"payload_truncated":true`，而 `payload_sha1` 仍然覆盖完整的文本。
 
-追踪由安装在算子 URI 解析处的包装器写出，所以覆盖所有执行后端（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`）和宏求值器。它不记录算子是否在 `sync` 作用域内运行。文件在每个进程的第一个效应处被截断。见 `kernel/include/camel/core/effect_trace.h`。
+追踪由安装在算子 URI 解析处的包装器写出，所以覆盖所有执行后端（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`）和宏求值器。它不记录算子是否在 `sync` 作用域内运行。文件在每个进程的第一个效应处被截断。见 `kernel/include/camel/core/effect_trace.h`。
 
 ### 资源上限
 
@@ -330,9 +330,9 @@
 | `std::cxx::inline` 向其中内联的图的大小 | 4096 个节点 | 否 | 这次调用不内联 |
 | `std::opt` 的轮数 | 16 | 否 | 程序按现状传下去。带 `-v` 时有日志 |
 | 同一个递归函数的仅类型特化（张量实参的形状在递归的每一层都变化） | 8 | 否 | 这次调用保留它的被调用者 |
-| 非尾递归，在每个调度器上相同：`std::nvm`、`std::fvm`、`std::jit`（解释执行的和编译为原生代码的调用一样计数）和 `std::tf` / `std::prl`（计数随元素转到运行它的工作线程上） | 1000 个打开的调用 | `--max-recursion-depth <n>`（1 到 1000000） | 程序停止，诊断为 `RuntimeDiag::MaxRecursionDepthExceeded`（`0x04000004`，阶段 `run`，退出码 1），定位在将成为第 1001 个打开调用的调用表达式；在它之前运行的已经运行，其输出已经写出。消息给出上限（`Maximum recursion depth (1000) exceeded when evaluating graph '...'.`），建议给出选项 |
+| 非尾递归，在每个调度器上相同：`std::nvm`、`std::fvm`、`std::jit`（解释执行的和编译为原生代码的调用一样计数）和 `std::prl` / `std::prl`（计数随元素转到运行它的工作线程上） | 1000 个打开的调用 | `--max-recursion-depth <n>`（1 到 1000000） | 程序停止，诊断为 `RuntimeDiag::MaxRecursionDepthExceeded`（`0x04000004`，阶段 `run`，退出码 1），定位在将成为第 1001 个打开调用的调用表达式；在它之前运行的已经运行，其输出已经写出。消息给出上限（`Maximum recursion depth (1000) exceeded when evaluating graph '...'.`），建议给出选项 |
 | `std::jit` 编译为原生代码的代码中的递归（分支臂已被内联的自递归函数，例如在 `std::cxx::inline` 之后）占用的原生栈 | 无单独的上限：递归深度按上一行计数 | 上一行的选项和变量 | 默认上限下与解释执行给出同一条诊断（`camel f.cml std::cxx::inline std::jit`：`depth(999)` 运行，`depth(1000)` 是 `MaxRecursionDepthExceeded`）。原生栈将满的检查不覆盖已编译的代码：上限调得很高而递归确实很深时，进程以段错误结束，没有诊断（上限为 1000000 时，20000 层的递归能运行，100000 层的递归崩溃） |
-| `std::tf` 上线程的原生栈 | 与下一行相同：计数之外，线程的栈用掉十六分之十五时拒绝再嵌套一次调用 | `ulimit -s` 等（工作线程的栈至少 8 MiB：Unix 上进程的栈上限、Windows 上可执行文件的栈大小更大时取后者） | 在该调用处给出 `MaxRecursionDepthExceeded`；此时消息给出打开的调用数和栈的大小。默认上限（1000）在 Linux 默认的 8 MiB 栈下远够不到这里（见下文的实测） |
+| `std::prl` 上线程的原生栈 | 与下一行相同：计数之外，线程的栈用掉十六分之十五时拒绝再嵌套一次调用 | `ulimit -s` 等（工作线程的栈至少 8 MiB：Unix 上进程的栈上限、Windows 上可执行文件的栈大小更大时取后者） | 在该调用处给出 `MaxRecursionDepthExceeded`；此时消息给出打开的调用数和栈的大小。默认上限（1000）在 Linux 默认的 8 MiB 栈下远够不到这里（见下文的实测） |
 | 线程的原生栈，所有执行后端 | 线程的栈（Linux 上主线程默认 8 MiB） | `ulimit -s` 之类 | 在原生栈将满（Unix 上剩余不足十六分之一，且至少保留 128 KiB；Windows 为 SEH 故障展开保留十六分之十五）时还要嵌套的调用，在到达上面的上限之前就被拒绝，诊断为 `MaxRecursionDepthExceeded`；消息说明原生栈已满。正是这一点使调高的上限不至于以段错误告终。栈的边界在 Linux（glibc）、Windows 和 macOS 上读取（Windows 也已验证；macOS 已实现，但没有编译或运行过）；在其他平台上，上限不能调高到默认值以上 |
 | `std::macro` 对 `#macro` 函数的提前求值 | 64 个求值器帧（32 层的自递归：`count(31)` 被求值，`count(32)` 不被求值） | `--max-macro-depth <n>`（1 到 1000000） | 求值失败：在该调用处给出运行时故障 `RuntimeDiag::MacroEvaluationFailed`，流水线停止（见“`std::macro` 报告什么”）。求值器在原生栈上嵌套（每帧约 630 字节），栈将满时以同样的方式停下 |
 | 图空间（程序的运行时图；一个函数约占 1 到 2 KB） | 总共 256 MB，随程序的需要按段保留 | `--spaces graph_mb=<megabytes>` | `RuntimeDiag::MemoryExhausted`（`0x04000014`，退出码 1），定位在正在编码其图的函数，指出空间、用量、上限和变量。程序本身放不下时阶段为 `compile`，是某个遍使它增长时阶段为 `pass:<name>` |
@@ -340,7 +340,7 @@
 | 元空间（正在编译的图的常量和函数值；每个拥有它的函数、lambda 或分支臂约 1.2 KB） | 总共 256 MB，按段 | `--spaces meta_mb=<megabytes>` | `RuntimeDiag::MemoryExhausted`，阶段 `compile`，定位在正在编译的函数 |
 | 自动空间（运行期的值，受垃圾回收管理） | 宿主机的内存 | 否 | `RuntimeDiag::MemoryExhausted`（阶段 `pass:<scheduler>`），说明宿主机拒绝了这次分配 |
 
-**递归上限计的是什么** 在每个执行后端上都相同：每一次处于打开状态且不是尾调用的函数调用，不论它是写成一次调用、通过函数值进行，还是由高阶算子（`map`、`filter`、`reduce`、`foreach`）为某个元素进行。处于尾位置的调用替换它的调用者，不计数（见 `docs/technical/19_tail_call_optimization.md`），所以任意深度的尾递归在任何上限下都能运行。`if` 的分支臂是它们所在函数的尾调用。唯一不由程序自己发出的调用，即运行时对 `main` 的调用，不计数。因此上限为 L 时，对于从 `main` 调用的 `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)`，`depth(L - 1)` 是能运行的最深调用，在 `std::nvm`、`std::fvm`、`std::jit`（解释执行的和编译为原生代码的）以及 `std::tf` 上都是如此：默认值下是 `depth(999)`。改变存在哪些调用的遍（`std::cxx::inline`）也改变被计数的内容，因为它们改变了图。
+**递归上限计的是什么** 在每个执行后端上都相同：每一次处于打开状态且不是尾调用的函数调用，不论它是写成一次调用、通过函数值进行，还是由高阶算子（`map`、`filter`、`reduce`、`foreach`）为某个元素进行。处于尾位置的调用替换它的调用者，不计数（见 `docs/technical/19_tail_call_optimization.md`），所以任意深度的尾递归在任何上限下都能运行。`if` 的分支臂是它们所在函数的尾调用。唯一不由程序自己发出的调用，即运行时对 `main` 的调用，不计数。因此上限为 L 时，对于从 `main` 调用的 `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)`，`depth(L - 1)` 是能运行的最深调用，在 `std::nvm`、`std::fvm`、`std::jit`（解释执行的和编译为原生代码的）以及 `std::prl` 上都是如此：默认值下是 `depth(999)`。改变存在哪些调用的遍（`std::cxx::inline`）也改变被计数的内容，因为它们改变了图。
 
 **设置它。** 命令行上的 `--max-recursion-depth <n>`；`n` 是 1 到 1000000 的整数。其他任何值（0、文本、更大的数）在程序编译之前就在标准错误上被拒绝（`Invalid --max-recursion-depth value: '0'. Expected an integer from 1 to 1000000.`），退出码为 1。没有对应的 `.opencmlrc` 键。没有选项时，每个调度器都在 1000 处停下，并行调度器同样计数（设计原则 3.9）。
 
@@ -351,9 +351,9 @@
 | `std::nvm` | 帧池（堆）里的帧，加上原生栈上解释器循环的一次激活 | 约 545 字节原生栈，约 100 字节帧 | 14441 次调用；然后是诊断（不做栈检查时进程在 15399 处崩溃） |
 | `std::fvm`，直接调用 | 帧池里的帧和解释器自己的调用栈里的一项，都在堆上；不占原生栈 | 约 100 字节 | 上限本身（上限为 1000000 时运行了 999000） |
 | `std::fvm`，通过函数值的调用或高阶算子的元素调用 | 同上，再加上原生栈上解释器循环的一次嵌套激活 | 嵌套激活约占 1.7 KiB 原生栈 | 4587 次嵌套激活；然后是诊断（不做检查时在 4890 处崩溃） |
-| `std::tf` | 每张图一个的池（堆）里的帧，加上原生栈上的求值器 | 约 520 字节原生栈 | 14875 次调用；然后是诊断（不做检查时在 15858 处崩溃） |
+| `std::prl` | 每张图一个的池（堆）里的帧，加上原生栈上的求值器 | 约 520 字节原生栈 | 14875 次调用；然后是诊断（不做检查时在 15858 处崩溃） |
 
-**默认上限的余量**（Linux x86-64、发布构建实测）：把栈上限逐步调小，默认上限允许的最深递归（直接递归 `depth(999)`、经函数值 `step(499)`、`map` 元素内 `depth(998)`）仍能跑完所需的最小 `ulimit -s`：`std::nvm` 与 `std::tf` 三种情形都是 768 KiB；`std::fvm` 与 `std::jit`（含 `std::cxx::inline std::jit`）直接递归和 `map` 内是 192 KiB，经函数值是 1024 KiB。默认的 8 MiB 栈因此有 8 倍以上的余量；栈更小时得到的是上面那条“原生栈已满”的诊断，不是崩溃。Windows 上线程的默认栈是 1 MiB，测试集在那里第一次运行时，默认上限下 `std::nvm`（以及经函数值的 `std::fvm`）遇到的就是这条诊断，`std::tf` 则是栈溢出；因此各工具以 32 MiB 的栈链接（`/STACK`，见 `tools/libcamel_tool.cmake`），在 Windows 上这也是进程创建的每个线程的栈。`std::tf` 的工作线程在所有平台上都以指定的栈大小创建，至少 8 MiB：不指定大小创建的线程在 macOS 上只有 512 KiB，在 Windows 上由宿主加载 `libcamel` 时（`python.exe`）只有宿主的 1 MiB（`kernel/include/camel/utils/big_stack_thread.h`、`cmake/TaskflowWorkerStack.cmake`）。macOS 这一侧尚未运行过。自行加载 `libcamel` 的宿主（Python 包）用的是宿主自己的栈。
+**默认上限的余量**（Linux x86-64、发布构建实测）：把栈上限逐步调小，默认上限允许的最深递归（直接递归 `depth(999)`、经函数值 `step(499)`、`map` 元素内 `depth(998)`）仍能跑完所需的最小 `ulimit -s`：`std::nvm` 与 `std::prl` 三种情形都是 768 KiB；`std::fvm` 与 `std::jit`（含 `std::cxx::inline std::jit`）直接递归和 `map` 内是 192 KiB，经函数值是 1024 KiB。默认的 8 MiB 栈因此有 8 倍以上的余量；栈更小时得到的是上面那条“原生栈已满”的诊断，不是崩溃。Windows 上线程的默认栈是 1 MiB，测试集在那里第一次运行时，默认上限下 `std::nvm`（以及经函数值的 `std::fvm`）遇到的就是这条诊断，`std::prl` 则是栈溢出；因此各工具以 32 MiB 的栈链接（`/STACK`，见 `tools/libcamel_tool.cmake`），在 Windows 上这也是进程创建的每个线程的栈。`std::prl` 的工作线程在所有平台上都以指定的栈大小创建，至少 8 MiB：不指定大小创建的线程在 macOS 上只有 512 KiB，在 Windows 上由宿主加载 `libcamel` 时（`python.exe`）只有宿主的 1 MiB（`kernel/include/camel/utils/big_stack_thread.h`、`cmake/TaskflowWorkerStack.cmake`）。macOS 这一侧尚未运行过。自行加载 `libcamel` 的宿主（Python 包）用的是宿主自己的栈。
 
 `std::nvm` 和 `std::fvm` 的帧池按上限确定大小：每个可能打开的调用 4 KiB（默认值下约 4 MiB），最多 256 MiB；它一次性保留，只有用到的部分才被触及。帧非常大的函数的递归可能在计数到达之前就把它填满；那是同一条带位置的诊断，说明帧池已满。运行时间不受上限影响。`--native-stack-guard off` 关闭原生栈检查；它用于测量栈实际在哪里结束（上面的崩溃点），不供正常使用。
 

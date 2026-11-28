@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The self-test of type identity (`std::type::identity`): one identity per type, and one table for
+ * The self-test of type identity (`std::identitytype`): one identity per type, and one table for
  * `as`. Over a corpus that walks every type constructor it checks that equality is reflexive and
  * symmetric, that equal types are assignable both ways and share a canonical id, that nothing
  * is assignable from an unknown source, that `void` discards only in the result of a function, that
