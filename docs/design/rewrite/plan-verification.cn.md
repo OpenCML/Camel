@@ -377,45 +377,75 @@ S1 ──┬─► S2 ───────────────────�
 
 ## 附录 A：测量命令与逐字输出
 
-计划形式（主机 `88zjwei`，工作树 `D:\Projects\Camel-wt\h397-h247-plan`）：
+### A.0 写法基线（2026-11-28）
+
+本节之后的探针与命令都写成今天能编译、能跑的样子。与 2026-10-24 那版相比，四处写法变了，判定面的语义一处没动：
+
+| 旧写法 | 今天的写法 | 依据 |
+|---|---|---|
+| `rule f(x: T) { … } when c` | `rule f(x: T) when c { … }` | `when` 与 `#requires(...)` 都写在规则体之前：`src/stdlib/rules.cml#int_distribute`（`export rule int_distribute::<T>(a: T, b: T, c: T) when is_integer::<T>() { … }`） |
+| `check([r], 200, 7)` | `[r]->check<200, 7>` | 采样数与种子是 `with` 参数、被检查的规则数组是箭头左值：`src/stdlib/rewrite.cml#check`（`with <samples: int = 100, seed: int = 0>` / `export func check(rules: Rule[])`）；带程序的调用是 `[r]->check<100, 7>(f)`（同一个 `check` 的第二个声明） |
+| `Tensor<f32>` | 今天没有这个类型 | 写出来就是 `Unresolved type reference: 'Tensor'`；最接近的 `f32[…]` 也还没有 `+` / `*` 的算子组（A.4 逐字给出两条诊断） |
+| `println(check(rules, 200, 7))` | `println(check_text([r]->check<200, 7>))` | `check` 交回 `CheckReport`，`println` 打的是它的结构体；§1.1、§1.2 引用的那些行是 `check_text` 的渲染——同一份报告，两种读法（`src/stdlib/rewrite.cml#check_text`） |
+
+逐字输出里，主机上的检出根写成 `<checkout>`（主机上是 `/home/zjwei/camel-work/<树名>`）；除这一处路径外一个字没动。
+
+### A.1 计划形式
+
+（主机 `88zjwei`，工作树 `D:\Projects\Camel-wt\compile-view`）
 
 ```powershell
-pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path D:\Projects\Camel-wt\h397-h247-plan -Plan test/plans/feat/modules/rules.plan.toml -Tier fast -Jobs 8
+pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path D:\Projects\Camel-wt\compile-view -Plan test/plans/feat/modules/rules.plan.toml -Tier fast -Jobs 4
 ```
 
-尾行（`18c98b856`，2026-10-24）：
+尾行（`d3ca35e552`，2026-11-28）：
 
 ```
-[SUMMARY] total: 121, pass: 121, fail: 0
-[SPLIT] build 51.0 s, test 4.0 s, total 55.0 s
-RUN_EXIT=0
+[SUMMARY] total: 174, pass: 169, fail: 5
+[SPLIT] build 15.0 s, test 9.7 s, total 24.7 s
+RUN_EXIT=1
 ```
 
-仓库外探针（不进仓库、不改任何树；主机上用已构建的 `out/latest`）：
+五条红与判定面无关，是轮次计数那组用例：`rules.repeat_counts_rounds`、`rules.repeat_honours_the_budget`、`rules.alternate_alternates_rounds`、`rules.until_reads_the_predicate_before_a_round`、`rules.until_honours_the_budget`。这五行都在 `internal/reports/2026-11-28-promotion-69-reds.tsv` 的 `modules.rules` 行里，是已知红；A.6 列的十三个 `check` 条目一条都不在这五条里（它们今天全绿）。
 
-<!-- camel-snippet: fragment: 仓库外探针（跑在 /tmp，逐字记录当时的判定输出；它演示的是"今天"的判定面，不是页面示例） -->
+（旧读数留档：`18c98b856`，2026-10-24，`total: 121, pass: 121, fail: 0`，`RUN_EXIT=0`。）
+
+### A.2 探针一：配额面（无许可、整数）
+
+探针是临时用例，不进仓库：写进 `test/cases/probe/` 与 `test/plans/probe/` 跑一次，读完输出就删掉（运行方式见 A.6）。
+
+<!-- camel-snippet: fragment: 仓库外探针（逐字记录今天的判定输出；它演示的是"今天"的判定面，不是页面示例） -->
 ```camel
-// /tmp/h247_probe.cml
-import { check } from rewrite
+import { check, check_text } from rewrite
 import { is_integer } from types
 
-rule generic_add_zero::<T>(x: T) { x + 0 => x } when is_integer::<T>()
+rule generic_add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }
 rule wide_mul_div(x: int) { x * 2 / 2 => x }
 rule narrow_mul_div(x: i32) { x * 2 / 2 => x }
 
-func main(): int sync {
-    println(check([generic_add_zero], 200, 7))
-    println(check([wide_mul_div], 200, 7))
-    println(check([narrow_mul_div], 200, 7))
-    return 0
+func main() sync {
+    println(check_text([generic_add_zero]->check<200, 7>))
+    println(check_text([wide_mul_div]->check<200, 7>))
+    println(check_text([narrow_mul_div]->check<200, 7>))
 }
 ```
 
-<!-- camel-snippet: fragment: 仓库外探针（跑在 /tmp，逐字记录当时的判定输出；它演示的是"今天"的判定面，不是页面示例） -->
+逐字输出（`PROBE_EXIT=0`）：
+
+```
+sampled generic_add_zero<i32>: proposition equality, evidence samples 200, fired 64 of 64 admitted, coverage integer scalar i32: (x + 0) = x, no premise yet
+sampled generic_add_zero<int>: proposition equality, evidence samples 200, fired 64 of 64 admitted, coverage integer scalar int: (x + 0) = x, no premise yet
+
+sampled wide_mul_div: proposition equality, evidence samples 200, fired 8 of 8, coverage integer scalar int: ((x * 2) / 2) = x
+
+refuted narrow_mul_div: proposition equality, evidence counterexample, the two sides differ at (2147483647): -1 and 2147483647, coverage integer scalar i32: ((x * 2) / 2) = x
+```
+
+### A.3 探针二：许可面
+
+<!-- camel-snippet: fragment: 仓库外探针（逐字记录今天的判定输出；它演示的是"今天"的判定面，不是页面示例） -->
 ```camel
-// /tmp/h247_probe2.cml（许可面）
-import { check } from rewrite
-import { Tensor } from tensor
+import { check, check_text } from rewrite
 
 rule plain(x: float) { x * 1.0 => x }
 #requires(finite_math)
@@ -426,26 +456,127 @@ rule reassoc(x: float, const c1: float, const c2: float) { x * c1 + x * c2 => x 
 rule accurate(x: float) { x + 1.0 => x }
 #requires(nondeterministic)
 rule anywhere(x: float, const c: float) { x * c => c * x }
-rule guarded(x: int, const c: int) { x * c => x } when c == 1
-rule tensor_law(x: Tensor<f32>) { x + x => x * 2.0 }
+rule guarded(x: int, const c: int) when c == 1 { x * c => x }
 
-func main(): int sync {
-    println(check([plain, finite, reassoc, accurate, anywhere, guarded, tensor_law], 100, 7))
-    return 0
+func main() sync {
+    println(check_text([plain, finite, reassoc, accurate, anywhere, guarded]->check<100, 7>))
 }
 ```
 
-两条探针的逐字输出已在 §1.1 与 §1.2 引出（`PROBE_EXIT=0`）。运行方式（主机，`LD_LIBRARY_PATH` 指向 conda clang 环境的 `libstdc++`，因为构建用 clang 23）：
+逐字输出（`PROBE_EXIT=0`）：
 
 ```
-export CAMEL_HOME=<worktree>/out/latest
-export LD_LIBRARY_PATH=$HOME/camel-eval/conda/envs/clang/lib:$CAMEL_HOME/libs
-export PATH=$CAMEL_HOME/bin:$PATH
-camel /tmp/h247_probe.cml std::nvm
+sampled plain: proposition equality, evidence samples 100, fired 8 of 8, coverage beyond translation coverage: the element type 'float' is not translated yet (the floating theory is S3)
+sampled finite: proposition equality, evidence samples 100, fired 8 of 8, coverage beyond translation coverage: the element type 'float' is not translated yet (the floating theory is S3)
+refuted reassoc: proposition real equality + IEEE on special values, evidence counterexample, the two sides differ at (0, -3, 0): 0 and -0 (a zero of the other sign is a different bit pattern), coverage beyond translation coverage: the element type 'float' is not translated yet (the floating theory is S3)
+refuted accurate: proposition error bound, evidence counterexample, the rewritten left side is less accurate at (-63.585): its error 0.0159783 exceeds the original's 0 (ratio 3.59799e+13), coverage beyond translation coverage: the element type 'float' is not translated yet (the floating theory is S3)
+sampled anywhere: proposition equality, evidence none, reason no numeric bound, coverage beyond translation coverage: the element type 'float' is not translated yet (the floating theory is S3)
+sampled guarded: proposition equality, evidence samples 100, fired 3 of 3 admitted, coverage integer scalar int: (x * c) = x, no premise yet
 ```
 
-计划条目的引用（今天全绿，说明现状基线）：
+两条探针的逐字输出就是 §1.1 与 §1.2 引用的那些行（A.0 第三、四条说明了今天的打印方式）。
+
+### A.4 今天跑不起来的对照：张量规则
+
+§1.2 里张量那条只写了"按代码路径复述，未取得逐字原文"，原因在语法面：`Tensor<f32>` 今天不存在，换成最接近的 `f32[…]` 也还不够——`+` / `*` 没有数组的算子组。两条都按原样写、原样编译，得到的是诊断，不是判定：
+
+<!-- camel-snippet: fragment: 今天编译不过的写法（这两种写法今天都跑不起来；它们记录的是语法的边界，不是页面示例） -->
+```camel
+import { check, check_text } from rewrite
+import { Tensor } from tensor
+
+rule plain(x: float) { x * 1.0 => x }
+rule tensor_law(x: Tensor<f32>) { x + x => x * 2.0 }
+
+func main() sync {
+    println(check_text([plain, tensor_law]->check<100, 7>))
+}
+```
+
+逐字诊断（`PROBE_EXIT=1`）：
+
+```
+(zz_appendix_a_p3)<checkout>/test/cases/probe/zz_appendix_a_p3.cml:5:20: [Error]: Unresolved type reference: 'Tensor'. Ensure the type is defined and visible in the current scope. (name=SemanticDiag::UnresolvedTypeReference, code=0x0300000A)
+```
+
+把规则写成 `f32[…]` 而不是 `Tensor<f32>`，编译仍然过不去，因为数组没有 `+` / `*`：
+
+<!-- camel-snippet: fragment: 今天编译不过的写法（数组上还没有算术算子组；它记录的是语法的边界，不是页面示例） -->
+```camel
+import { check, check_text } from rewrite
+
+rule plain(x: float) { x * 1.0 => x }
+rule tensor_law(x: f32[...]) { x + x => x * 2.0 }
+
+func main() sync {
+    println(check_text([plain, tensor_law]->check<100, 7>))
+}
+```
+
+逐字诊断（`PROBE_EXIT=1`，候选重载表照录）：
+
+```
+(zz_appendix_a_p4)<checkout>/test/cases/probe/zz_appendix_a_p4.cml:4:32: [Error]: No matching function found for argument types: <> (f32[...], f32[...]); operator '+' is not defined for these operand types. Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads: 
+    <:op/add_i>: (i32, i32) => i32
+    <:op/add_l>: (int, int) => int
+    <:op/add_f>: (f32, f32) => f32
+    <:op/add_d>: (float, float) => float
+    <:op/add_s>: (string, string) => string
+    <:op/add_bytes>: (Bytes, Bytes) => Bytes
+    <:op/add_c>: (c64, c64) => c64
+    <:op/add_z>: (c128, c128) => c128
+    <:op/add_bf>: (bf16, bf16) => bf16
+    <:op/add_f6>: (f16, f16) => f16
+ (name=SemanticDiag::NoMatchingFunction, code=0x0300000F)
+(zz_appendix_a_p4)<checkout>/test/cases/probe/zz_appendix_a_p4.cml:4:41: [Error]: No matching function found for argument types: <> (f32[...], f32); operator '*' is not defined for these operand types. Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads: 
+    <:op/mul_i>: (i32, i32) => i32
+    <:op/mul_l>: (int, int) => int
+    <:op/mul_f>: (f32, f32) => f32
+    <:op/mul_d>: (float, float) => float
+    <:op/mul_c>: (c64, c64) => c64
+    <:op/mul_z>: (c128, c128) => c128
+    <:op/mul_bf>: (bf16, bf16) => bf16
+    <:op/mul_f6>: (f16, f16) => f16
+ (name=SemanticDiag::NoMatchingFunction, code=0x0300000F)
+```
+
+### A.5 运行方式
+
+主机上没有"随手跑一个文件"的口子：构建、计划、用例都从 `internal/tools/camel-remote.ps1` 走，探针也照这条走——写成临时用例与临时计划，跑一次，读完输出删掉，什么都不提交。
 
 ```powershell
-git grep -n "check" -- test/plans/feat/modules/rules.plan.toml
+# 临时用例 test/cases/probe/zz_appendix_a_p*.cml + 临时计划里每个用例一条
+pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path D:\Projects\Camel-wt\compile-view -Plan test/plans/probe/zz_appendix_a.plan.toml -Jobs 4 -NoGpuWatch -QueueOnTreeLock
+```
+
+控制台只留被截断的尾巴，逐字全文要按名字取回：探针记的都是"今天应该发生的事"，所以取全文时把该条写成一个必然不通过的期望（`expect_stdout_exact = "FORCE-PRINT"` 一类的占位串），它就落进本次运行的失败日志，再用 `-FetchFile … -FromThisRun` 取回来；文件落在 `test/results/fetched/` 下，与主机上同一个后缀。
+
+```powershell
+pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path D:\Projects\Camel-wt\compile-view -Plan test/plans/probe/zz_appendix_a.plan.toml -FetchFile 'fail/probe.zz_appendix_a/zz_appendix_a.p1/stdout.txt' -FromThisRun -Jobs 4 -NoGpuWatch -QueueOnTreeLock
+```
+
+两条诊断（A.4）走同一条路，只是取 `stderr.txt`。今天的计划运行器把控制台输出截到 12 行、每行 240 列，A.4 第二段那二十二行照录自取回的文件，不是控制台的尾巴。
+
+### A.6 计划条目的引用
+
+判定面在计划里的落点（13 条，今天全绿）：
+
+```powershell
+git grep -n -E 'name = "rules\..*check' -- test/plans/feat/modules/rules.plan.toml
+```
+
+```
+test/plans/feat/modules/rules.plan.toml:83:name = "rules.check_accepts_rules_that_hold"
+test/plans/feat/modules/rules.plan.toml:95:name = "rules.check_finds_rules_that_do_not_hold"
+test/plans/feat/modules/rules.plan.toml:119:name = "rules.reduced_element_type_instances_are_checked"
+test/plans/feat/modules/rules.plan.toml:131:name = "rules.check_names_the_type_it_cannot_make"
+test/plans/feat/modules/rules.plan.toml:154:name = "rules.pair_law_instances_are_checked"
+test/plans/feat/modules/rules.plan.toml:178:name = "rules.check_bound_follows_the_permission"
+test/plans/feat/modules/rules.plan.toml:445:name = "rules.when_passes_the_check"
+test/plans/feat/modules/rules.plan.toml:1315:name = "rules.accuracy_check_compares_error"
+test/plans/feat/modules/rules.plan.toml:1379:name = "rules.accuracy_library_passes_the_check"
+test/plans/feat/modules/rules.plan.toml:1415:name = "rules.every_exported_rule_enters_the_check"
+test/plans/feat/modules/rules.plan.toml:1428:name = "rules.the_coverage_check_refuses_every_refuted_law"
+test/plans/feat/modules/rules.plan.toml:1590:name = "rules.check_program_parameter"
+test/plans/feat/modules/rules.plan.toml:1613:name = "rules.check_named_with_argument"
 ```

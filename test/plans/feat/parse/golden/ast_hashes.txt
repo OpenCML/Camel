@@ -528,7 +528,7 @@ cb32c9dd5cb81d91 ok src/stdlib/io.cml
 ff9eee9cbc6a4008 ok src/stdlib/math.cml
 4bd3189fe34a101a ok src/stdlib/nn.cml
 109cb1c3af0c4f8a ok src/stdlib/onnx.cml
-564dc3104925f334 ok src/stdlib/opt.cml
+ca7376aa19c35b5a ok src/stdlib/opt.cml
 49015cbc4407a506 ok src/stdlib/optim.cml
 cfd1905583789732 ok src/stdlib/para.cml
 a82098797df46210 ok src/stdlib/perf.cml
@@ -4100,6 +4100,12 @@ e194ac11666ae0b0 ok test/cases/opt/cost/cost_choice.cml
 05a39d7c619af448 ok test/cases/opt/cxx_isolation/algebra_bound.cml
 97be72019c01ccf0 ok test/cases/opt/cxx_isolation/algebra_single_x.cml
 45b9bb45b5c9edeb ok test/cases/opt/cxx_isolation/algebra_two_writes.cml
+6c9193f63c0c6d3b ok test/cases/opt/cxx_isolation/inline_budget_zero.cml
+aea1e0495c2b92a2 ok test/cases/opt/cxx_isolation/inline_closure.cml
+7a4e9c3ab11412c4 ok test/cases/opt/cxx_isolation/inline_duplication_fits.cml
+02002b5f0a2562ea ok test/cases/opt/cxx_isolation/inline_duplication_over.cml
+2fccca6af9c051d4 ok test/cases/opt/cxx_isolation/inline_figure1.cml
+68d37d0d040d6039 ok test/cases/opt/cxx_isolation/paper_figure1.cml
 115bef8943a79e66 ok test/cases/opt/cxx_isolation/subject.cml
 6e3d58cae538a787 ok test/cases/opt/defun/captured.cml
 95e3e6e0d8046b6a ok test/cases/opt/defun/closure_dispatch.cml

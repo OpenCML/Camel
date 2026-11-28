@@ -36,11 +36,12 @@ listed several times with different arguments (or none: the report of the missin
 
 --have-compiler exits 0 when a C++ compiler is found (the plan's precondition), 1 otherwise.
 
-A bridged program is linked with the standard library of the compiler it is built with: the
-directory of `libstdc++.so` that the compiler itself reports, on the link line and in the
-program's rpath. The host's default search order can find an older libstdc++ than the one
-libcamel.so was built with, and the link then fails with `undefined reference to
-std::__detail::__wait_impl(...)@GLIBCXX_3.4.35`. When the compiler names no such library (MSVC,
+A bridged program is linked with the standard library libcamel.so was built with: the
+`libstdc++.so.6` the install ships beside libcamel.so when there is one, else the directory of
+`libstdc++.so` that the compiler itself reports, on the link line and in the program's rpath.
+The host's default search order (and a compiler older than the build's) can find an older
+libstdc++ than the one libcamel.so was built with, and the link then fails with `undefined
+reference to std::__detail::__wait_impl(...)@GLIBCXX_3.4.35`. When neither is there (MSVC,
 libc++, a driver that prints the name back), the link line is the one it was.
 
 --link-line prints the command a bridged program is linked with and checks that it names that
@@ -146,15 +147,29 @@ def build_command(compiler, msvc, source, target, bridged, camel_home, pch=None)
         return cmd
     if os.name == "nt":
         return cmd + [os.path.join(lib, "libcamel.lib")]
-    # The standard library of the compiler, ahead of the linker's defaults: libcamel.so is built
-    # with a newer libstdc++ than the one a host's default search order finds (measured:
+    # The standard library libcamel.so needs, ahead of the linker's defaults: libcamel.so can be
+    # built with a newer libstdc++ than the one a host's default search order finds (measured:
     # GLIBCXX_3.4.35 and 3.4.36), and the link then fails with "undefined reference to
-    # std::__detail::__wait_impl(...)@GLIBCXX_3.4.35". The rpath makes the program start with the
-    # library it was linked against, whatever LD_LIBRARY_PATH holds at run time.
+    # std::__detail::__wait_impl(...)@GLIBCXX_3.4.35". The library it needs is the one it was
+    # built with: when the install ships it beside libcamel.so, that file is named on the link
+    # line (it is a newer libstdc++.so.6 than the compiler's, and has every symbol the compiler's
+    # headers ask for) and the install's directory comes first in the rpath. Otherwise the
+    # compiler's own is, which is the library libcamel.so was built with on a host whose build
+    # used that compiler. The rpath makes the program start with the library it was linked
+    # against, whatever LD_LIBRARY_PATH holds at run time.
+    shipped = shipped_stdlib(lib)
+    if shipped:
+        return cmd + [shipped, "-L" + lib, "-lcamel", "-Wl,-rpath," + lib]
     stdlib = stdlib_dir(compiler)
     if stdlib:
         cmd += ["-L" + stdlib, "-Wl,-rpath," + stdlib]
     return cmd + ["-L" + lib, "-lcamel", "-Wl,-rpath," + lib]
+
+
+def shipped_stdlib(lib):
+    """The libstdc++ the install ships beside libcamel.so, or None."""
+    path = os.path.join(lib, "libstdc++.so.6")
+    return path if os.path.exists(path) else None
 
 
 def run(cmd, timeout, env=None, cwd=ROOT):
@@ -194,13 +209,21 @@ def stdlib_dir(compiler):
 
 def check_link_line(compiler, msvc):
     """The command a bridged program is linked with, printed and checked: it must name the
-    standard library of the compiler. Deleting the `-L` of stdlib_dir from build_command turns
-    this red (the plan's case link_line_keeps_the_compilers_stdlib)."""
+    standard library libcamel.so needs -- the one the install ships beside it, else the
+    compiler's. Deleting either from build_command turns this red (the plan's case
+    link_line_keeps_the_compilers_stdlib)."""
     camel_home = os.path.join(ROOT, "out", "latest")
     cmd = build_command(compiler, msvc, "PROGRAM.cpp", "PROGRAM" + EXE, True, camel_home)
     print("link: " + " ".join(cmd))
     if msvc or os.name == "nt":
         print("PASS: this platform's link line takes the runtime library alone: no libstdc++ to name")
+        return 0
+    shipped = shipped_stdlib(os.path.join(camel_home, "libs"))
+    if shipped:
+        if shipped not in cmd:
+            print("FAIL: the libstdc++ the install ships beside libcamel (%s) is not on the link line" % shipped)
+            return 1
+        print("PASS: the link line names the libstdc++ the install ships beside libcamel (%s)" % shipped)
         return 0
     stdlib = stdlib_dir(compiler)
     print("stdlib: " + (stdlib or "none"))
