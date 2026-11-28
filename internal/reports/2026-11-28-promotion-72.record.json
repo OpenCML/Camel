@@ -1,0 +1,63 @@
+{
+  "kind": "promotion",
+  "promotion": 72,
+  "tip": "0967afd6159a8d9b952e9a1e58f61038c7e0f630",
+  "measured_tip": "0967afd6159a8d9b952e9a1e58f61038c7e0f630",
+  "pushed_develop_sha": "0967afd6159a8d9b952e9a1e58f61038c7e0f630",
+  "landing_tip": "the record is a documentation commit and lands on whatever integration holds at push time; the ledger commits pushed while this layer ran touch internal/backlog.md and internal/collab only, and any code batch that arrives later is not covered by this reading",
+  "note": "the layer was measured at 0967afd6159a, the tip where batch five had landed. What that batch brought in is a part, not the whole: fsh-dev at its old tip 47dcfd3d3c, cpp-product-init 6e648a08ac, opt-inline 979224dec7, loop-tape-values ba4d1ec233, appendix-a b7438a15ae and editview-a ad71e9d0df are ancestors of the measured tip, while the argp work d3287fd4f4, the newer fsh-dev tip 884f52abbd, stdlib-docs 11cd15cf4e and tensor-pow-law a8925c2cd2 are not",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at 0967afd6159a; load 1m 31.35 at the start of the run, the lightest start of the day",
+  "binary_built": "2026-11-28T10:55:10+08:00",
+  "readings": {
+    "total": 9919,
+    "pass": 9717,
+    "fail": 141,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 0,
+    "re_run": 0,
+    "re_run_passed": 0,
+    "load_before": "1m 31.35, 5m 33.10, 15m 38.41",
+    "load_warning": "[load] WARNING: 1m load 31.35 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth to seventy-first layers carried; a promotion does not wait on load, D-1128-36)"
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-71-reds.tsv (the seventy-first promotion, 142 names)",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], both sides trimmed, with the plan aliases transforms/compile.transforms and stated_extents/compile.stated_extents read as the same plan",
+    "still_red": 141,
+    "turned_green": 1,
+    "turned_green_names": [
+      "modules.onnx.export_loop_carried_array_field"
+    ],
+    "new_reds": 0,
+    "new_reds_names": [],
+    "vanished_reds": 0,
+    "arithmetic": "142 names before: 1 turned green, 0 vanished, 0 appeared, 141 remain red; 141 = this reading red case names",
+    "notes": [
+      "the one that turned green is modules.onnx export_loop_carried_array_field, and the loop-tape-values work ba4d1ec233 is what repaired it; that commit is an ancestor of this tip, which is why the green counts here rather than as a later reading",
+      "no case timed out in this layer and none was re-run, and the start load 31.35 was the lightest of the day: the two transpose_loop_escape cases that timed out in the sixty-sixth to seventieth promotions and came in under their window in the seventy-first also stayed under it here, so they fail on their own assertions and the timeout was never the case's content",
+      "fault_deep.prl_off is absent for the sixth round running: the scheduler root-cause fix holds and no known-flaky allowance was used",
+      "the ledger commits pushed while this layer ran touch internal/backlog.md and internal/collab only, so they change nothing this reading measured"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 0,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [],
+    "how": "the layer reported timed_out 0 and re_run 0, so there was no timeout to run alone"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-72-reds.tsv",
+  "red_table_rows": 141,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-72-reds.tsv",
+  "new_red_names": [],
+  "pushed_as": "develop, fast-forwarded from b81f79aea70b to 0967afd6159a, the tip this layer measured",
+  "develop_before": "b81f79aea70bb4e3856aba3294e3bbab6df68ec2",
+  "develop_after": "0967afd6159a8d9b952e9a1e58f61038c7e0f630",
+  "commits_brought_in": 90,
+  "commits_touching_src": 8
+}

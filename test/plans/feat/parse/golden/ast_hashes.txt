@@ -519,9 +519,9 @@ fbe3cc322f6d79e8 ok showcase/i2-diffusion-step/step_gpu.cml
 ff143e01e0e4dbb0 ok src/stdlib/bytes.cml
 a5076fc3f00f63eb ok src/stdlib/ckpt.cml
 091e49283aec1438 ok src/stdlib/env.cml
-0797036114bc4a4c ok src/stdlib/fs.cml
-6fc6d3a548865115 ok src/stdlib/graph.cml
-c653d7d211aed8b2 ok src/stdlib/hash.cml
+bc15f3e20ce8c502 ok src/stdlib/fs.cml
+b2a4a6ea68eecd49 ok src/stdlib/graph.cml
+f97a7707c3fefb13 ok src/stdlib/hash.cml
 cb32c9dd5cb81d91 ok src/stdlib/io.cml
 70530f2be80f49bf ok src/stdlib/json.cml
 781c6adf9b64b7fe ok src/stdlib/laws.cml
@@ -555,7 +555,7 @@ facd1562ced5e6f9 ok src/stdlib/time.cml
 55a69df7d58bcf54 ok src/stdlib/transforms.cml
 52dc2227a3c3668e ok src/stdlib/tree.cml
 1c6c4945524af79c ok src/stdlib/types.cml
-ee3477079b27f4d9 ok src/stdlib/vjp.cml
+2084aa444b22675b ok src/stdlib/vjp.cml
 a2ca595975c02dee ok src/stdlib/autodiff/signatures/autodiff.cml
 6ae5ad8be3ee4eec ok src/stdlib/ckpt/signatures/ckpt.cml
 c219592077b5b712 no src/stdlib/nn/signatures/nn.cml
