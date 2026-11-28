@@ -538,3 +538,6 @@ git worktree add --detach <旧提交>
 **11. 尺子是"已发表的红表"，不是上一轮的笔记。**
 `lane-ssa-residue` 把"旧笔记里 onnx 家族 18 条"当成基数，于是把现在的 21 条读成"多了 3 条红"；对着 `2026-11-28-promotion-68-reds.tsv` 逐条核，那 3 条**本来就在表里**（是丙），而它以为"修绿"的那条（`reference_is_generated`）**根本不在表里**（是口径变化，不是修绿）。
 **规矩**：判"新增 / 修绿"一律**只对 `newestRedTable()` 选中的那张表、按 `(plan, case)` 两键**；自己上一轮的名单只能当线索、不能当基数。交回里写"对 X 表：甲 N / 乙 N / 丙 N"，不要写"比上次少了几条"。
+
+**12. `git cherry -v` 换底后仍全 `+` 是正常的。**
+我一度让车道"换底后 `cherry -v` 应该变空、空了才算干净"，`lane-oper-shape-guard` 纠了我：`cherry -v` 列的是"目标里没有等价补丁的那些提交"，换底（`rebase`）不改变"这 4 笔在上游有没有等价物"⇒ 本来就该全 `+`。**换底干净的判据是**：`rebase` 无冲突、`git status --porcelain` 空、`git log --oneline` 里提交数对得上，**不是** `cherry` 变空。判删才用 `cherry`：`+0 / -N`（全 `-`）才等价、才可删。
