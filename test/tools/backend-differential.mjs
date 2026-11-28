@@ -163,14 +163,13 @@ const SIDES = [
     { name: 'fvm', pass: 'std::fvm' }
 ]
 /// The passes that mean one of the two sides, so that a terminal scheduling pass can be replaced by
-/// the side's pass: `std::linear` is `std::nvm`, `std::fastvm` is `std::fvm` (`docs/cli.md`,
+/// the side's pass: `std::linear` is `std::nvm` (`docs/cli.md`,
 /// "Default pipeline").
 const SIDE_OF_PASS = new Map([
     ['std::nvm', 'nvm'],
     ['std::nodevm', 'nvm'],
     ['std::linear', 'nvm'],
     ['std::fvm', 'fvm'],
-    ['std::fastvm', 'fvm'],
     ['std::run', 'run']
 ])
 /// A pass whose whole job is to write the graph out: a program that ends in one, or that runs one

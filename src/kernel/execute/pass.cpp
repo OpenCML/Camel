@@ -100,7 +100,7 @@ void declareCoreTagReaders() {
 /// `resolveAlias`; this is the one value that resolution reads from configuration, not a second
 /// table of names.
 constexpr const char *kRunPassName          = "std::run";
-constexpr const char *kRunPassDefaultTarget = "std::fastvm";
+constexpr const char *kRunPassDefaultTarget = "std::fvm";
 
 std::string &runPassTargetOverride() {
     static std::string target;
@@ -122,15 +122,11 @@ const std::map<std::string, std::string> passAliases = {
     // section 0, P, the owner decides whether it selects the Camel one instead; nothing else in
     // this table has to move for that.
     {"std::opt", "std::cxx::opt"},
-    {"std::fastvm::jit::dump::asm", "std::fastvm::jit_asm"},
-    {"std::fastvm::jit::dump::bin", "std::fastvm::jit_bin"},
-    {"std::fastvm::jit::dump::rmir", "std::fastvm::jit_rmir"},
-    {"std::fastvm::jit::dump::mir", "std::fastvm::jit_mir"},
     // Standard scheduler aliases
     //
     // `std::run` is the step that runs the program, written when which back end runs it is not
     // the point: a reader does not have to learn the back ends to read "compile, rewrite, run".
-    // Its target is `passes.run` when the run configuration names one, and `std::fastvm` -- the
+    // Its target is `passes.run` when the run configuration names one, and `std::fvm` -- the
     // fast VM, which is `std::fvm` -- otherwise. `resolveAlias` reads that configuration; a
     // target that is not a scheduling pass is refused before anything runs, naming the setting
     // (`requireKnownPasses` asks `requireRunPassTarget`).
@@ -142,7 +138,6 @@ const std::map<std::string, std::string> passAliases = {
     // Common VM aliases
     {"std::lnr", "std::fvm"},
     {"std::prl", "std::taskflow"},
-    {"std::fastvm", "std::fvm"},
     {"std::jit", "std::fastvm::jit"},
     {"std::nodevm", "std::nvm"},
     // Common translation and dump aliases
@@ -415,7 +410,7 @@ std::string resolveAlias(const std::string &name) {
             // The one alias whose target the run configuration decides. The table's entry is the
             // default; a configuration that names another scheduling pass replaces it here, and
             // the target is resolved on through the table so every caller that compares spellings
-            // sees the pass itself (`std::fastvm` is `std::fvm`, `std::jit` is
+            // sees the pass itself (`std::jit` is
             // `std::fastvm::jit`).
             if (!runPassTargetOverride().empty()) {
                 target = runPassTargetOverride();

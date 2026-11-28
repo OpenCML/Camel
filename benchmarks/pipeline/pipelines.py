@@ -67,7 +67,7 @@ ONNX_TERMINAL = "onnx::export"
 # pipeline naming one is "not applicable" to other programs rather than a refusal.
 MODULE_PASSES = {"tensor::fuse": "tensor", "onnx::export": "onnx"}
 
-SCHEDULING_PASSES = {"std::nvm", "std::fvm", "std::jit", "std::tf", "std::nodevm", "std::fastvm",
+SCHEDULING_PASSES = {"std::nvm", "std::fvm", "std::jit", "std::tf", "std::nodevm",
                      "std::taskflow", "std::run", "std::linear", "std::parallel"}
 
 RANDOM_SEED = 20261004

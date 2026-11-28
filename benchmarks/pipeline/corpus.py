@@ -66,7 +66,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pipelines as pl  # noqa: E402
 
 EXCLUDED_PLAN_DIRS = ("parse", "format", "perf")
-SCHEDULING = {"std::nvm", "std::fvm", "std::jit", "std::tf", "std::prl", "std::nodevm", "std::fastvm",
+SCHEDULING = {"std::nvm", "std::fvm", "std::jit", "std::tf", "std::prl", "std::nodevm",
               "std::taskflow", "std::run", "std::linear", "std::parallel"}
 
 # Environment variables the harness sets itself; a plan value for them is not part of a

@@ -19,8 +19,3 @@ timeout_ms = 60000
 name = "type_array.selftest"
 desc = "int[] and int[?] are one object, int[3, 4] written as constants or as forms is one object, a negative extent is refused, equality ignores dimension names, assignability and the checked conversion refuse what contradicts them, unification and widening keep the rank, and the binding of names and packs works, including a dimension fixed by a later argument."
 args = ["${case}", "std::arraytype", "std::nvm"]
-
-[[tests]]
-name = "type_array.selftest_alias"
-desc = "The same self-test through its short alias."
-args = ["${case}", "std::arraytype", "std::nvm"]

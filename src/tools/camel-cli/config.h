@@ -61,7 +61,7 @@ extern std::vector<std::string> resolvedPassList; // effective pass list for run
 extern std::vector<std::string> fallbackPasses;   // run when graph != null after list; from rc
                                                   // passes.fallback or ["std::run"]
 /// passes.run from .opencmlrc: the scheduling pass `std::run` stands for ("" = the kernel's
-/// default, std::fastvm). Handed to camel::execute::setRunPassTarget after the rc is read.
+/// default, std::fvm). Handed to camel::execute::setRunPassTarget after the rc is read.
 extern std::string runPassTarget;
 extern std::string timeitPass;                    // parsed target pass from --timeit
 extern unsigned int timeitIterations;             // parsed iteration count from --timeit

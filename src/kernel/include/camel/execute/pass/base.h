@@ -120,7 +120,7 @@ struct PassApplyResult {
 
 /**
  * The scheduling pass `std::run` stands for. `std::run` is the step that runs the program, written
- * when which back end runs it is not the point; its target is `std::fastvm` unless the run
+ * when which back end runs it is not the point; its target is `std::fvm` unless the run
  * configuration names another scheduling pass (`passes.run` in `.opencmlrc`). A front end that
  * reads a configuration calls `setRunPassTarget` with that value, before any pass list is checked
  * or run; an empty name leaves the default. The value has to name a scheduling pass: a run whose
