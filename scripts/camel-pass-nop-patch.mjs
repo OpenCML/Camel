@@ -20,13 +20,16 @@
 // pass words in them; the last word decides.
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   TRANSLATE, argsArrays, elementsOf, passesOfElement, walk,
 } from './camel-pass-pipelines.mjs'
 
 const args = process.argv.slice(2)
 const rootIndex = args.indexOf('--root')
-const root = path.resolve(rootIndex >= 0 ? args[rootIndex + 1] : process.cwd())
+// The tree this script belongs to, unless --root names another: a default read off the process's
+// working directory wrote into whatever checkout a shell happened to start in.
+const root = path.resolve(rootIndex >= 0 ? args[rootIndex + 1] : path.join(path.dirname(fileURLToPath(import.meta.url)), '..'))
 const apply = args.includes('--apply')
 
 let patched = 0
