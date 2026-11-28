@@ -1,23 +1,12 @@
 /**
- * A dynamic axis out of range is an error about the request, not about a node of the
- * function: onnx::export_model reports it at the export_model call (line 11).
+ * A dynamic axis out of range is an error about the pass's own parameter, not about a node of the
+ * program: the pass reports it when it translates the program. The case used to name the exported
+ * function in an export_model call; the thin stage form translates the program the command line
+ * hands it. The program has one tensor input, whose rank the axis is
+ * checked against -- without an input the check has no rank to look at, which is why this case
+ * could pass or fail before for a reason that had nothing to do with the axis.
  */
 
-import { export_model } from onnx
-import { reshape } from tensor
-
-func main() => int sync {
-    let r = export_model<out: 'tmp/test/onnx/refusal_axis.onnx', dynamic_axes: [5]>(func (t: float[...]) => float[...] {
-        t * 2.0
-    }, reshape<[2]>([1.0, 2.0]))
-    return match r {
-        case error e => sync {
-            println(e)
-            return 1
-        }
-        case _ => sync {
-            println('exported')
-            return 0
-        }
-    }
+func main(x: f32[2]) => f32[2] sync {
+    return x
 }

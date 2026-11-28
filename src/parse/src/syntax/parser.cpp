@@ -10,7 +10,9 @@
 
 #include <algorithm>
 #include <array>
+#include <string_view>
 
+#include "camel/parse/ast/resource_modifiers.h"
 #include "camel/parse/syntax/lexer.h"
 
 namespace camel::parse::syntax {
@@ -1255,13 +1257,15 @@ void ParserImpl::parseTypeDeclRest(size_t m) {
 ///
 /// A resource declaration (design effects plan 3.1, design principles 3.3): `resource fs` names
 /// an ambient resource of the module, `resource io = [console, fs]` a group of resources and other
-/// groups, and the words after a single name are the modifiers of the resource -- `unordered`,
-/// `idempotent`, `overwriting`, `readonly`, `observed` -- which say which equalities an access to
-/// it satisfies (design principles 3.3, "资源修饰词说明写满足哪些等式"). They are written in any
-/// order and may be combined; a combination that cannot hold of one resource is reported by the
-/// semantic layer at the declaration, not here, so the parser accepts the words and nothing more.
-/// `resource` and the five words are contextual: they are not reserved words, and a declaration
-/// starts with `resource` only when a name follows it.
+/// groups, and the words after a single name are the modifiers of the resource -- the table
+/// `kResourceModifierWords` (`parse/ast/resource_modifiers.h`) is the list of them, written out in
+/// this production because a production is a specification and has to name what it accepts -- which
+/// say which equalities an access to it satisfies (design principles 3.3,
+/// "资源修饰词说明写满足哪些等式"). They are written in any order and may be combined; a
+/// combination that cannot hold of one resource is reported by the semantic layer at the
+/// declaration, not here, so the parser accepts the words and nothing more. `resource` and those
+/// words are contextual: they are not reserved words, and a declaration starts with `resource` only
+/// when a name follows it.
 void ParserImpl::parseResourceDecl() {
     const size_t m = mark();
     eat(TK::KwExport);
@@ -1273,13 +1277,20 @@ void ParserImpl::parseResourceDecl() {
         // rather than taking whatever token stands there.
         parseBracketedIdents(TK::RBracket, NK::BracketIdents);
     } else {
+        // The words are read from the table rather than spelled here: the next word is a modifier
+        // when the table has it, and the declaration ends at the first word it does not.
         for (;;) {
-            if (atWord(0, "unordered") || atWord(0, "idempotent") || atWord(0, "overwriting") ||
-                atWord(0, "readonly") || atWord(0, "observed")) {
-                bump();
-                continue;
+            bool wroteOne = false;
+            for (const std::string_view word : ast::kResourceModifierWords) {
+                if (atWord(0, word)) {
+                    bump();
+                    wroteOne = true;
+                    break;
+                }
             }
-            break;
+            if (!wroteOne) {
+                break;
+            }
         }
     }
     close(m, NK::ResourceDecl);

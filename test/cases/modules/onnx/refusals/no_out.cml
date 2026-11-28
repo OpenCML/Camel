@@ -1,0 +1,11 @@
+/**
+ * The stage form without the `out` parameter has no file to write: the refusal says the model
+ * file is not named and names the parameter that names it. The program itself is a plain tensor
+ * program, so nothing else can be refused first.
+ */
+
+import { reshape } from tensor
+
+func main() => f32[2] sync {
+    return reshape<[2]>([1.0, 2.0] as f32[])
+}

@@ -4973,6 +4973,24 @@ struct DetachedGraphsGuard {
     ~DetachedGraphsGuard() { ctx.releaseDetachedRuntimeGraphs(); }
 };
 
+/// Applies the `dynamic_axes` parameter to a tensor input's declared shape: an axis is counted
+/// from the end when negative, an axis outside the rank is refused, and every axis that applies is
+/// left without a fixed extent. Both binders call this one definition: the request form reads the
+/// rank off an example and the entry form off the declared type, and the axis means the same thing
+/// in both. The dynamism itself is remembered in one place, the `ValueInfo.shape` symbolic dim the
+/// binders write (`<parameter>_dim<axis>`), which is the same place a negative extent lands -- not
+/// a second list kept beside it.
+void applyDynamicAxes(tensor::StaticShape &shape, const std::vector<int64_t> &axes) {
+    const auto rank = static_cast<int64_t>(shape.size());
+    for (int64_t axis : axes) {
+        const int64_t a = axis < 0 ? axis + rank : axis;
+        if (a < 0 || a >= rank) {
+            throw ExportError(
+                std::format("dynamic axis {} is out of range for a rank-{} input", axis, rank));
+        }
+        shape[static_cast<size_t>(a)] = std::nullopt;
+    }
+}
 /// Binds the exported function's parameters to graph inputs shaped like the examples.
 class InputBinder {
   public:
@@ -4990,18 +5008,11 @@ class InputBinder {
             std::vector<size_t> dynamic;
             if (top) {
                 // Dynamic axes apply to tensor arguments (data), not to parameter trees.
-                const auto rank = static_cast<int64_t>(shape.size());
-                for (int64_t axis : options_.dynamicAxes) {
-                    const int64_t a = axis < 0 ? axis + rank : axis;
-                    if (a < 0 || a >= rank) {
-                        throw ExportError(
-                            std::format(
-                                "dynamic axis {} is out of range for a rank-{} input",
-                                axis,
-                                rank));
+                applyDynamicAxes(shape, options_.dynamicAxes);
+                for (size_t a = 0; a < shape.size(); ++a) {
+                    if (!shape[a]) {
+                        dynamic.push_back(a);
                     }
-                    shape[static_cast<size_t>(a)] = std::nullopt;
-                    dynamic.push_back(static_cast<size_t>(a));
                 }
             }
             if (!names_.insert(name).second) {
@@ -5692,7 +5703,8 @@ Model translatePrepared(
 /// element by its path (`m_fc1_w`, `t_0`).
 class DeclaredInputBinder {
   public:
-    explicit DeclaredInputBinder(Emitter &emitter) : emitter_(emitter) {}
+    DeclaredInputBinder(Emitter &emitter, const ExportOptions &options)
+        : emitter_(emitter), options_(options) {}
 
     Value bind(type::Type *ty, const std::string &name, const std::string &param) {
         if (!ty) {
@@ -5718,6 +5730,11 @@ class DeclaredInputBinder {
             for (size_t a = 0; a < shape.size(); ++a) {
                 if (shape[a] < 0) {
                     shape[a] = std::nullopt;
+                }
+            }
+            applyDynamicAxes(shape, options_.dynamicAxes);
+            for (size_t a = 0; a < shape.size(); ++a) {
+                if (!shape[a]) {
                     dynamic.push_back(a);
                 }
             }
@@ -5788,6 +5805,7 @@ class DeclaredInputBinder {
     }
 
     Emitter &emitter_;
+    const ExportOptions &options_;
     std::unordered_set<std::string> names_;
 };
 
@@ -5802,7 +5820,7 @@ Model translateEntryGraph(
 
     // One model input per parameter the entry graph still has, `with` ones first: the order
     // the parameters are bound in.
-    DeclaredInputBinder binder(emitter);
+    DeclaredInputBinder binder(emitter, options);
     std::vector<Value> inputs;
     const auto *funcType   = root->funcType();
     const size_t withCount = root->withPorts().size();

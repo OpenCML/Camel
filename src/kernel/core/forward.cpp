@@ -44,13 +44,21 @@ constexpr std::array<WrittenOperation, 6> kWrittenOperations{{
 /// reduction's name with the axis and the flag in angle brackets -- `mean<axis, keepdims>(xs)` --
 /// so their laws are filed under `mean` at one operand, and the name inside the URI says neither
 /// ( a reduction over an axis has one name).
-const std::array<RuleKeyException, 8> kRuleKeyExceptions{{
+const std::array<RuleKeyException, 9> kRuleKeyExceptions{{
     {":op/idx_arr",
      "index_into",
      2,
      "`xs[i]` is a bracket form, which is none of `a <op> b`, `<op> a` or `f(a, b)`, so the "
      "operator has no token a rule's left side could be written with; its rule is filed under the "
      "call `index_into(x, i)`, whose body the operator is"},
+
+    {":op/idx_arr",
+     "index_into_axis",
+     3,
+     "the same bracket form at three operands is a read along the dimension the third word names "
+     "(`xs[.., 0]`), and its rule is filed under `index_into_axis(x, i, at)` -- a key of its own, "
+     "because the two-operand law answers an element of the first dimension only and one law is "
+     "filed under one key"},
 
     {"tensor:argmax_axis",
      "argmax",
@@ -162,9 +170,17 @@ std::vector<std::string> ruleKeyExceptionLines() {
     return lines;
 }
 
-std::optional<RuleKey> ruleKeyOf(const std::string &family, const std::string &uri) {
+std::optional<RuleKey>
+ruleKeyOf(const std::string &family, const std::string &uri, std::optional<size_t> operandCount) {
     for (const RuleKeyException &exception : kRuleKeyExceptions) {
         if (exception.uri == uri) {
+            // The exception table is the one place a key depends on the operand count: one URI can
+            // spell one key at two operands and another at three. A question that states the count
+            // skips the entries that do not hold it; a question that does not states none and takes
+            // the first entry under the URI, which is the answer it has always had.
+            if (operandCount.has_value() && static_cast<size_t>(exception.arity) != *operandCount) {
+                continue;
+            }
             return RuleKey{exception.head, exception.arity};
         }
     }
@@ -205,9 +221,10 @@ namespace {
 /// Every rule `family` files under `uri`'s key, in filing order: the single answer a one-law key
 /// holds, and every candidate a key that holds several laws holds. A family whose key says nothing
 /// about the operator answers nothing, which is not the same as a family that holds no rule there.
-std::vector<RuleMatch> rulesIn(const std::string &family, const std::string &uri) {
+std::vector<RuleMatch>
+rulesIn(const std::string &family, const std::string &uri, std::optional<size_t> operandCount) {
     std::vector<RuleMatch> answers;
-    const auto key = ruleKeyOf(family, uri);
+    const auto key = ruleKeyOf(family, uri, operandCount);
     if (!key.has_value()) {
         return answers;
     }
@@ -221,29 +238,57 @@ std::vector<RuleMatch> rulesIn(const std::string &family, const std::string &uri
 
 } // namespace
 
+std::optional<RuleMatch> forwardRuleOf(const std::string &uri, std::optional<size_t> operandCount) {
+    return ruleIn(kForwardFamily, ruleKeyOf(kForwardFamily, uri, operandCount));
+}
+
 std::optional<RuleMatch> forwardRuleOf(const std::string &uri) {
-    return ruleIn(kForwardFamily, ruleKeyOf(kForwardFamily, uri));
+    return forwardRuleOf(uri, std::nullopt);
+}
+
+std::vector<RuleMatch> forwardRulesOf(const std::string &uri, std::optional<size_t> operandCount) {
+    return rulesIn(kForwardFamily, uri, operandCount);
 }
 
 std::vector<RuleMatch> forwardRulesOf(const std::string &uri) {
-    return rulesIn(kForwardFamily, uri);
+    return forwardRulesOf(uri, std::nullopt);
 }
 
 std::vector<RuleObject> forwardRules() { return rulesOf(kForwardFamily); }
 
+std::optional<RuleMatch>
+transposeRuleOf(const std::string &uri, std::optional<size_t> operandCount) {
+    return ruleIn(kTransposeFamily, ruleKeyOf(kTransposeFamily, uri, operandCount));
+}
+
 std::optional<RuleMatch> transposeRuleOf(const std::string &uri) {
-    return ruleIn(kTransposeFamily, ruleKeyOf(kTransposeFamily, uri));
+    return transposeRuleOf(uri, std::nullopt);
+}
+
+std::vector<RuleMatch>
+transposeRulesOf(const std::string &uri, std::optional<size_t> operandCount) {
+    return rulesIn(kTransposeFamily, uri, operandCount);
 }
 
 std::vector<RuleMatch> transposeRulesOf(const std::string &uri) {
-    return rulesIn(kTransposeFamily, uri);
+    return transposeRulesOf(uri, std::nullopt);
+}
+
+std::optional<RuleMatch> vmapRuleOf(const std::string &uri, std::optional<size_t> operandCount) {
+    return ruleIn(kVmapFamily, ruleKeyOf(kVmapFamily, uri, operandCount));
 }
 
 std::optional<RuleMatch> vmapRuleOf(const std::string &uri) {
-    return ruleIn(kVmapFamily, ruleKeyOf(kVmapFamily, uri));
+    return vmapRuleOf(uri, std::nullopt);
 }
 
-std::vector<RuleMatch> vmapRulesOf(const std::string &uri) { return rulesIn(kVmapFamily, uri); }
+std::vector<RuleMatch> vmapRulesOf(const std::string &uri, std::optional<size_t> operandCount) {
+    return rulesIn(kVmapFamily, uri, operandCount);
+}
+
+std::vector<RuleMatch> vmapRulesOf(const std::string &uri) {
+    return vmapRulesOf(uri, std::nullopt);
+}
 
 RuleMatch vmapRuleByHead(const std::string &head, uint32_t arity) {
     // Every way this can answer is the index's: `NoSuchFamily` (the batching ruleset is not loaded),

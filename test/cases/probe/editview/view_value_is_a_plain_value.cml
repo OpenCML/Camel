@@ -1,0 +1,25 @@
+/**
+ * A `view` block's value is the value of its body (design 15.1: "the block stands for what its body
+ * stands for"; 4.5: a plain value may leave the block). The body below ends in `3`, so the block
+ * stands for an `int` wherever it is written, and an `int` position takes it.
+ *
+ * This is the shape that tells the two readings apart. A body that ends in a *function* answers
+ * both the same way -- the body's value is that function, and so is the closure the block makes --
+ * which is why the older case could not see the difference. The type is written on the `let` so
+ * the reading is the declared one and not inferred from something downstream.
+ */
+import graph
+
+func dbl(x: int) => int {
+    return x * 2
+}
+
+func count(g: (x: int) => int) => int {
+    let n: int = view d = g { 3 }
+    return n + 1
+}
+
+func main() => int sync {
+    println(count(dbl))
+    return 0
+}

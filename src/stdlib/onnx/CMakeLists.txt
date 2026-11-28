@@ -18,6 +18,7 @@ add_camel_module(
     exporter.cpp
     lowering.cpp
     lowering_grad.cpp
+    model.cpp
     module.cpp
     passes/export.cpp
     proto/onnx_writer.cpp

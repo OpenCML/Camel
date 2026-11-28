@@ -160,3 +160,13 @@ args = ["check", "${case}"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "editview.view_value_is_a_plain_value"
+desc = "A `view` block whose body ends in a plain value stands for that value (design 15.1, 4.5): the block is an `int` where it is written, not the closure its body was put in. The position is written as `let n: int` so the reading is the declared one."
+kind = "behavior"
+case = "../../cases/probe/editview/view_value_is_a_plain_value.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

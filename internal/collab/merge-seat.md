@@ -21,7 +21,7 @@ node scripts/promote.mjs cancel [<id>]                     # 取消
 
 - 工作进程**有心跳**：进程死了，下一次 `status` 就判死、清理并放锁 —— 所以“卡住”的判据是 `status` 说它死了，不是“我等了很久”。
 - `--publish` **只推量过的那一笔**；没有 `--publish` 就只量不推。
-- 默认整层命令用 `camel-remote`；`summary.json` 里有每个计划的 `plan_path` 与每行 `test_timings`（含 `timed_out`）。
+- 默认整层命令用 `camel-remote -TokenClass funnel`（晋级是所有车道都在等的那一趟，令牌池里排在最前）；`summary.json` 里有每个计划的 `plan_path` 与每行 `test_timings`（含 `timed_out`）。
 - **超时只由运行器重跑一次**（单独、两倍时限）；晋级只读它写在 `test_timings` 行上的最终状态，不再自己重跑。层命令不是以 0 或 1 退出、或读数缺了上次读数里的用例，整个任务判失败、不发布。
 - 第一次真跑要在构建机上核五件：`-FetchFile summary.json -FromThisRun` 能否取到工作树、远端清理 `-Clean` 是否合适、`plan_path` 能否直接喂 `-Plan`、`--publish` 时钩子是否放行。
 
@@ -37,7 +37,7 @@ node scripts/merge-batch.mjs --seat <座位工作树> --lanes <lanes.json> --pus
 ```
 
 它做的事：把座位放到 `origin/integration` 尖端，依次把车道合成合并提交（第一父是合并时的尖端），文本冲突的跳过、
-退回车道自己换底；整批做一次增量编译（默认是对座位跑 `internal/tools/camel-remote.ps1`，不带计划，只构建）；
+退回车道自己换底；整批做一次增量编译（默认是对座位跑 `internal/tools/camel-remote.ps1 -TokenClass funnel`，不带计划，只构建）；
 编不过就按合并顺序对前缀二分，找到第一个编不过的前缀，拿掉它的最后一条车道，把后面的在最后一个好前缀上重合，
 再编一次，直到编过。合并说明列出车道的提交标题，末尾是 `Lane-Reading: <读数一行>`（只改文档的写
 `Lane-Reading: docs-only`），推送钩子逐笔查这一行。不带 `--push` 时停在编译之后，只打印汇总：合了哪些、
@@ -46,12 +46,12 @@ node scripts/merge-batch.mjs --seat <座位工作树> --lanes <lanes.json> --pus
 推送钩子还查一件事：推上 integration 的这一段里，凡是改了构建要读的路径（`scripts/common.js` 的 `BUILD_INFO_ROOTS`），
 从尖端顺第一父往回走，在碰到这样一笔之前必须先碰到一笔"构建过"的提交。`camel-remote.ps1` 在干净的树上把某个提交编过时，
 在公共 git 目录下记 `camel-built/<sha>`；`merge-batch` 的那次编译就会留下这条记录。所以手工做的合并或撤回，
-推之前也要对座位跑一次 `camel-remote.ps1`（不带计划），编不过的尖端推不上去。
+推之前也要对座位跑一次 `camel-remote.ps1 -TokenClass funnel`（不带计划），编不过的尖端推不上去。
 
 **本地 `npm run build` 对钩子无效**（2026-11-27 交付夜实测，卡了 40 分钟）：座位在本地编出 `BUILD_EXIT=0` 也**不写** `camel-built/<sha>`，
 钩子仍拒，原文是
 `pre-push: refusing to push HEAD to refs/heads/integration: <sha>… changes src/tools/camel-cli/config.cpp, which the build reads, and no commit from there to the tip was built.`
-改成对座位跑 `camel-remote.ps1 -Path . -Jobs 1 -NoGpuWatch`（`BUILD_EXIT=0`、`BUILD_SECONDS=30`）后一次通过。
+改成对座位跑 `camel-remote.ps1 -Path . -Jobs 1 -TokenClass funnel -NoGpuWatch`（`BUILD_EXIT=0`、`BUILD_SECONDS=30`）后一次通过。
 ⇒ 判据只有一条：**推之前必须有一次 `camel-remote` 留下的构建记录**，本地编过不算。看到上面那句拒文，不要重跑合并，去补那次 remote 构建。
 
 `--build "<命令>"` 换编译命令（`{seat}` 代表座位路径；退出码等于 `--red-exit`，默认 1，才算"源码编不过"，
@@ -211,9 +211,9 @@ node scripts/promote.mjs cancel [<任务号>]                  # 结束工作进
 
 ```
 ① 合：git merge --no-ff <lane>；golden 文件若冲突，一律取 integration 侧（golden 的 owner 是录制方，不是车道）
-② 复录：camel-remote.ps1 -Path . -UpdateAstHashes -NoGpuWatch  ⇒ 输出里必须见到 kept 0 recorded line(s) of the N
+② 复录：camel-remote.ps1 -Path . -UpdateAstHashes -TokenClass funnel -NoGpuWatch  ⇒ 输出里必须见到 kept 0 recorded line(s) of the N
         （kept 0 = 整表重算；有 kept 说明你在一个不是尖端的树上录，或者只点了一部分文件）
-③ 复检：camel-remote.ps1 -Path . -Check ast-hashes -NoGpuWatch ⇒ ast hashes: N file(s) checked, 0 stale
+③ 复检：camel-remote.ps1 -Path . -Check ast-hashes -TokenClass funnel -NoGpuWatch ⇒ ast hashes: N file(s) checked, 0 stale
 ④ 才编 / 才推：golden 是 test 数据、不是构建输入，所以这一笔本身不要求重编；但**同批的代码改动**仍然要一次构建记录
 ```
 
@@ -263,3 +263,18 @@ c) 差集非空 ⇒ **停下，报给协调者**，附三样：差集里的用�
 第 (c) 步的处置是"停下报协调者"，**不是"该批不入"**：一批如果正确地改变了语义，它的期望本来就该跟着改，
 写成"差集非空就不入"会把这类批永久挡在外面；正确做法是挡在推送前、由协调者判性质，
 然后**同批带上重钉一起进**。
+
+## 纯文档区间的放行，不依赖"前面恰好有一笔编过"
+
+`task-332` 用三组空跑钉过（`lane-backend-speed`，tip 为当时的 integration 尖端，先把该尖端的 `camel-built/<sha>` 记录**挪开**、保证区间里零记录）：
+
+- 纯文档合并（只加 `docs/**` 一个文件，`Lane-Reading: docs-only`）⇒ 钩子 `EXIT=0`、无输出，**不要求记录、不重编**；
+- 改 `src/compile/**`（构建输入）的合并 ⇒ `EXIT=1`，原文点名该文件并说"no commit from there to the tip was built"；
+- 文档 + 源码混合 ⇒ 同拒。
+
+因此 `docs/pitfalls`、`docs/pitfalls2` 那两次能过，不是"恰好 `6bd8b5e281` 有一份记录"，而是规则本来如此：钩子逐提交走第一父区间，**只有"没有记录且碰构建输入"的提交才拒**。
+
+两条前置要知道：
+
+1. 直推 integration 的单父提交会先被更早一道闸拒（"is a lane commit that went straight in … every arrival is a merge"）⇒ 这条判据只能在**合并提交**上测；
+2. "哪些路径算构建输入"只有一份清单（`scripts/common.js` 的 `BUILD_INFO_ROOTS` / `BUILD_INFO_ROOT_FILES`），钩子复用它 —— 不要新建第二份。

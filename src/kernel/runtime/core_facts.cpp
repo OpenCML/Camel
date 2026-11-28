@@ -91,6 +91,8 @@ std::optional<TypeCode> typeCodeNamed(std::string_view name) {
     return std::nullopt;
 }
 
+} // namespace
+
 // ---- core.shape ------------------------------------------------------------------------------
 
 /// "float32|2,3", "-|2,-1" (unknown element type; an extent nobody stated is -1, the spelling this
@@ -137,6 +139,8 @@ std::optional<TensorShape> decodeShape(std::string_view text) {
     }
     return shape;
 }
+
+namespace {
 
 std::optional<TensorShape> computeShape(std::span<const Anchor> anchors) {
     return shapeOfType(anchors[0].graph->node(anchors[0].node)->dataType());
@@ -198,6 +202,8 @@ std::optional<Reorder> computeReorder(std::span<const Anchor> anchors) {
     };
 }
 
+} // namespace
+
 std::string encodeReorder(const Reorder &r) {
     return flags({r.regroup, r.permute, r.blockIdentity, r.contract, r.changePrecision});
 }
@@ -209,6 +215,8 @@ std::optional<Reorder> decodeReorder(std::string_view text) {
     }
     return Reorder{(*bits)[0], (*bits)[1], (*bits)[2], (*bits)[3], (*bits)[4]};
 }
+
+namespace {
 
 // ---- core.effects ----------------------------------------------------------------------------
 

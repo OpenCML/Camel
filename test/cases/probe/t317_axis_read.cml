@@ -1,0 +1,16 @@
+/// A read on a dimension that is not the first, on a value that has that dimension: `m[.., 0]`
+/// slices the first dimension and takes position 0 of the second. Differentiating it asks the
+/// forward table for the axis-carrying form of the index operator.
+import { jvp } from transforms
+import rulesets.jvp
+
+func main() => int sync {
+    let m = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
+    let f = func (x: float[2, 2]) => float {
+        let col = x[.., 0]
+        return col[0] + col[1]
+    }
+    let (v, d) = jvp(f)(m, [[1.0, 0.0], [0.0, 0.0]] as float[2, 2])
+    `v={} d00={}`->format<v, d>->println
+    return 0
+}

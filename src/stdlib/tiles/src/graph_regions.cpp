@@ -5,16 +5,17 @@
 
 #include "camel/core/operator_semantics.h"
 #include "camel/core/operator_table.h"
-#include "camel/ops/operator_record.h"
+#include "camel/core/rtdata/func.h"
 #include "camel/core/tags.h"
 #include "camel/core/type/composite/tuple.h"
-#include "camel/core/rtdata/func.h"
+#include "camel/facts/core_values.h"
+#include "camel/ops/operator_record.h"
 #include "camel/runtime/control_regions.h"
-#include "camel/runtime/operator_instance.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
 #include "camel/runtime/oper_shape.h"
+#include "camel/runtime/operator_instance.h"
 #include "graph/graph_view.h"
 #include "src/stdlib/tensor/type.h"
 #include "src/stdlib/transforms/node_operator.h"
@@ -198,9 +199,9 @@ std::string eligibility(
     // and `gpuRefusal` turns it into the sentence that names the device, where a device is in use.
     if (narrowElementType(node->dataType()))
         return "device_element_kernel_missing";
-    const rt::fact::Anchor anchor{&graphs, &graph, id};
-    const auto fact =
-        facts.obtain<rt::fact::NodeInstance>(rt::fact::coreKinds().instance, {&anchor, 1});
+    // The same node, asked of the store that keeps this kind (`camel/facts/core_values.h`): the
+    // instance the runtime kind answered is the one the node's operator declares at that node.
+    const auto fact = camel::facts::instanceAt(graph, static_cast<camel::facts::NodeId>(id));
     if (!fact || !fact->instance || !fact->instance->extents())
         return "unresolved_index_instance";
     const auto &inst = *fact->instance;

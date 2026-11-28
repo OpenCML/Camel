@@ -294,7 +294,7 @@ struct EffectContainment {
 /// fine" and "I refused to look" cannot read the same in a log -- a checker that grows its declines
 /// to stay green has to make a number grow first.
 ///
-/// One component is no longer a decline: a reading of unknown class is refused (see
+/// One component is a refusal, not a decline: a reading of unknown class is refused (see
 /// EffectContainment::unnamed), so the run stops on it. It stays counted here so that a summary of
 /// a refused run says how many readings the refusal was about, and so that the line keeps six
 /// components that add up to `declined()`.

@@ -17,6 +17,7 @@
 #include "camel/execute/pass/params.h"
 #include "camel/execute/pass/snapshot.h"
 #include "camel/execute/pass/warnings.h"
+#include "camel/facts/core_kinds.h"
 #include "camel/facts/facts.h"
 #include "camel/init.h"
 #include "camel/parse/ast/builder.h"
@@ -26,6 +27,7 @@
 #include "camel/runtime/facts.h"
 #include "camel/runtime/operator_instance.h"
 #include "camel/runtime/operator_reuse.h"
+#include "camel/runtime/reachable.h"
 #include "camel/runtime/storage_reuse.h"
 #include "camel/utils/command_line.h"
 #include "camel/utils/install_layout.h"
@@ -581,13 +583,63 @@ int runCommand(int argc, char *argv[]) {
                            << "\n";
                         factsFailed = true;
                     } else {
-                        // One kind at a time, so a kind whose computation refuses the graph is one
+                        // One kind at a time, so a kind whose computation refuses a graph is one
+                        // line about that kind instead of the end of the table. A refusal is an
+                        // answer ("this graph has no plan until its values are extracted"), so it
+                        // fails the command only when that kind was asked for by name.
+                        //
+                        // Every graph the program reaches, not only the root graph: the kinds a
+                        // move has carried answer per graph and are counted per graph, and asking
+                        // only the root graph printed none of the four while their answers existed
+                        // -- an empty half of the table that read like an answer.
+                        // The four core kinds a move has carried answer per graph and are counted
+                        // per graph; asking only the root graph printed none of them while their
+                        // answers existed -- an empty half of the table that read like an answer.
+                        // They are computed and dumped graph by graph, and the dump below leaves
+                        // them out so a root graph's answers are not printed twice.
+                        const std::vector<camel::facts::KindId> moved{
+                            camel::facts::shapeKind(),
+                            camel::facts::instanceKind(),
+                            camel::facts::reorderKind(),
+                            camel::facts::permissionsKind()};
+                        const std::vector<camel::runtime::GCGraph *> graphs =
+                            camel::runtime::collectReachableGraphs(*ctx->runtimeProgram());
+                        for (auto *graph : graphs) {
+                            if (graph == nullptr) {
+                                continue;
+                            }
+                            camel::facts::Store *each = camel::facts::storeHolding(*graph);
+                            if (each == nullptr) {
+                                continue;
+                            }
+                            try {
+                                camel::facts::computeAll(*each, *graph, graph->view(), moved);
+                                camel::facts::dump(
+                                    *each,
+                                    *graph,
+                                    graph->view(),
+                                    os,
+                                    moved,
+                                    graph->name());
+                            } catch (const std::exception &error) {
+                                for (const camel::facts::KindId kind : moved) {
+                                    os << "FACT-KIND-REFUSED {\"kind\":"
+                                       << jsonText(camel::facts::kindInfo(kind).key)
+                                       << ",\"reason\":" << jsonText(error.what()) << "}\n";
+                                }
+                                factsFailed = factsFailed || !Inspect::factKind.empty();
+                            }
+                        }
+                        // One kind at a time, so a kind whose computation refuses a graph is one
                         // line about that kind instead of the end of the table. A refusal is an
                         // answer ("this graph has no plan until its values are extracted"), so it
                         // fails the command only when that kind was asked for by name.
                         const std::vector<camel::facts::KindId> kinds =
                             allKinds ? camel::facts::registeredKinds() : wantedFacts;
                         for (const camel::facts::KindId kind : kinds) {
+                            if (std::find(moved.begin(), moved.end(), kind) != moved.end()) {
+                                continue;
+                            }
                             const std::vector<camel::facts::KindId> one{kind};
                             try {
                                 camel::facts::computeAll(*store, *root, root->view(), one);
@@ -599,8 +651,17 @@ int runCommand(int argc, char *argv[]) {
                             }
                         }
                         // An empty list asks the dump for every registered kind.
-                        const std::vector<camel::facts::KindId> dumpKinds =
-                            allKinds ? std::vector<camel::facts::KindId>{} : wantedFacts;
+                        std::vector<camel::facts::KindId> dumpKinds =
+                            allKinds ? camel::facts::registeredKinds() : wantedFacts;
+                        dumpKinds.erase(
+                            std::remove_if(
+                                dumpKinds.begin(),
+                                dumpKinds.end(),
+                                [&](camel::facts::KindId kind) {
+                                    return std::find(moved.begin(), moved.end(), kind) !=
+                                           moved.end();
+                                }),
+                            dumpKinds.end());
                         camel::facts::dump(*store, *root, root->view(), os, dumpKinds);
                     }
                 }

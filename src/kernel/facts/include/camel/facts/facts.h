@@ -163,6 +163,22 @@ struct GraphAccess {
     std::function<const graph::GraphView *(const graph::Graph &)> view;
     /// The version of the graph's content: a stored fact is stale when it changed.
     std::function<std::uint64_t(const graph::Graph &)> version;
+    /// The version of node `NodeId`'s own content, as the owner states it: the hash of the node's
+    /// record, of the nodes it consumes and of its payload (`GCGraph::nodeContentHash`). It is what
+    /// a fact of a kind that reports its reads is checked against: while every node it read is
+    /// unchanged the fact holds although the graph's version moved, and a read finds it
+    /// `Status::Revalidated` instead of dropping it (Dependence::Reported).
+    ///
+    /// No owner supplies it today. A frozen graph's content cannot move, and a draft has no node
+    /// version of its own (its revision is the draft's, and every edit moves it), so no fact is
+    /// revalidated yet. The hook is the owner's answer and not the view's, like `callee` below,
+    /// and stays declared for the owner that versions nodes -- a session that versions what its
+    /// edits touch is the first caller it is written for.
+    std::function<std::uint64_t(const graph::Graph &, NodeId)> nodeVersion;
+    /// The same for a region's membership: its id and the nodes it holds. No owner supplies it
+    /// today either, so a fact that reported reading a region stays on the conservative rule and
+    /// goes stale with its graph.
+    std::function<std::uint64_t(const graph::Graph &, RegionId)> regionVersion;
     /// The graph FUNC node `NodeId` of `graph` calls, as the graph's identity, or null when the
     /// call names none this owner holds.
     ///
@@ -519,6 +535,15 @@ class Store {
         Reads reads;
         std::uint64_t epoch  = 0;
         std::uint64_t target = 0;
+        /// The versions of the nodes and of the regions the computation reported reading, when
+        /// the owner states them (`GraphAccess::nodeVersion`, `regionVersion`): what `find`
+        /// compares to tell a stale fact from a revalidated one. A mark is about the graph the
+        /// fact is anchored on, which is the one the computation read through.
+        std::vector<std::pair<NodeId, std::uint64_t>> nodeMarks;
+        std::vector<std::pair<RegionId, std::uint64_t>> regionMarks;
+        /// Whether those marks cover every read the computation reported. A stamp that left one
+        /// read out would call a fact valid on evidence that is not the whole of what it read.
+        bool readsCovered = false;
     };
     struct Key {
         KindId kind;
@@ -644,6 +669,13 @@ void forgetGraph(const graph::Graph *graph);
  * "reads": {"nodes", "regions", "names", "records"}, "epoch", "target"}; null for a Content
  * kind). A stale fact is not printed, and is dropped.
  *
+ * `rootLabel` is the name the caller gives the graph it dumped. A `graph::Graph` has no name of
+ * its own -- the framework's face is `view()`, which is all a computation may read -- so the
+ * tool that holds the `GCGraph` passes `GCGraph::name()`, and a dump of one callee reads
+ * "layer" instead of "root". That is what lets a reader dump every graph the program reaches
+ * and still tell the rows apart. A fact anchored on any other graph is still labelled
+ * "outside-the-walk": a dump is about one graph, and a fact about a neighbour is not its own.
+ *
  * `only` prints just those kinds -- the tool's `--fact <key>`, which asks by name. Empty prints
  * every registered kind, which is what `--facts` asks for. A kind nobody registered is not a
  * request this function can answer: an enumeration of what is registered never mentions what is
@@ -651,6 +683,6 @@ void forgetGraph(const graph::Graph *graph);
  */
 void dump(
     Store &store, const graph::Graph &root, const graph::GraphView &rootView, std::ostream &os,
-    std::span<const KindId> only = {});
+    std::span<const KindId> only = {}, std::string_view rootLabel = "root");
 
 } // namespace camel::facts

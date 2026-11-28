@@ -181,8 +181,10 @@ std::vector<std::string_view> split(std::string_view text, char sep) {
 /// the second and every later graph of one name, in the order of the GraphIds, the name with
 /// `~<ordinal>` appended. A name is only displayed and compared as a whole, never taken apart;
 /// it is the same in every process that builds the program the same way.
+} // namespace
+
 std::unordered_map<const GCGraph *, std::string>
-qualifiedNames(const std::vector<GCGraph *> &graphs) {
+qualifiedGraphNames(const std::vector<GCGraph *> &graphs) {
     std::vector<const GCGraph *> ordered(graphs.begin(), graphs.end());
     std::sort(ordered.begin(), ordered.end(), [](const GCGraph *a, const GCGraph *b) {
         return toValue(a->id()) < toValue(b->id());
@@ -197,6 +199,8 @@ qualifiedNames(const std::vector<GCGraph *> &graphs) {
     }
     return names;
 }
+
+namespace {
 
 template <typename T> std::optional<T> number(std::string_view text, int base = 10) {
     T value{};
@@ -288,7 +292,7 @@ std::vector<PortableFact> exportFacts(FactStore &store, const Program &program) 
     for (const auto *graph : graphs) {
         byId.emplace(graph->id(), graph);
     }
-    const auto names = qualifiedNames(graphs);
+    const auto names = qualifiedGraphNames(graphs);
     std::unordered_map<const GCGraph *, uint64_t> hashes;
     const auto portable =
         [&](const KindInfo &kind, std::span<const Anchor> anchors, const void *value) {
@@ -397,7 +401,7 @@ ImportResult importFact(FactStore &store, const Program &program, const Portable
         return ImportResult::OtherVersion;
     }
     const std::vector<GCGraph *> programGraphs = collectReachableGraphs(program);
-    const auto names                           = qualifiedNames(programGraphs);
+    const auto names                           = qualifiedGraphNames(programGraphs);
     std::unordered_map<std::string_view, const GCGraph *> byName;
     for (const auto *graph : programGraphs) {
         byName.emplace(names.at(graph), graph);
