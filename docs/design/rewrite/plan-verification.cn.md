@@ -28,7 +28,7 @@
 4. **今天会对一条真的不成立的规则说"通过"。** 探针逐字：`x * 2 / 2 => x` 在 `int`（64 位）上是
 
    ```
-   ok wide_mul_div: 200 samples agree, fired 8 of 8
+   sampled wide_mul_div: proposition equality, evidence samples 200, fired 8 of 8, coverage integer scalar int: ((x * 2) / 2) = x
    ```
 
    原因是 `lib/rewrite/module.cpp#pickInt` 的边界表只列到 `int32` 的两端，64 位溢出抽不到。这**正是** 8.1 说的"采样对照可能漏掉边界"，也是本任务要用它证明"能给出反例"的那条规则。
@@ -71,26 +71,28 @@
 三条用途各一行（无许可、`#requires(finite_math)`、`#requires(reassociate)`**不带守卫**、`#requires(refine_accuracy)`、`#requires(nondeterministic)`、带 `when`、张量各一条；探针规则见附录 A）：
 
 ```
-ok plain: 100 samples agree, fired 8 of 8
-ok finite: 100 samples agree, fired 8 of 8
-FAIL reassoc: the two sides differ at (-inf, 7, -1): -nan and -inf
-FAIL accurate: the rewritten left side is less accurate at (-115.74200000000002): its error 0.0087152 exceeds the original's 0 (ratio 1.96249e+13)
-unchecked anywhere: the permissions it needs have no numeric bound
-sampled guarded: … fired 1 of 1 admitted
-ok tensor_law: 100 samples agree, fired 8 of 8
+sampled plain: proposition equality, evidence samples 100, fired 8 of 8, coverage beyond translation coverage: the element type 'float' is not translated yet (the floating theory is S3)
+sampled finite: proposition equality, evidence samples 100, fired 8 of 8, coverage beyond translation coverage: the element type 'float' is not translated yet (the floating theory is S3)
+refuted reassoc: proposition real equality + IEEE on special values, evidence counterexample, the two sides differ at (0, -3, 0): 0 and -0 (a zero of the other sign is a different bit pattern), coverage beyond translation coverage: the element type 'float' is not translated yet (the floating theory is S3)
+refuted accurate: proposition error bound, evidence counterexample, the rewritten left side is less accurate at (-63.585): its error 0.0159783 exceeds the original's 0 (ratio 3.59799e+13), coverage beyond translation coverage: the element type 'float' is not translated yet (the floating theory is S3)
+sampled anywhere: proposition equality, evidence none, reason no numeric bound, coverage beyond translation coverage: the element type 'float' is not translated yet (the floating theory is S3)
+sampled guarded: proposition equality, evidence samples 100, fired 3 of 3 admitted, coverage integer scalar int: (x * c) = x, no premise yet
+sampled tensor_law: …（此行按代码路径复述，未取得逐字原文：今天的语言里没有能编译的张量规则写法）
 ```
+
+旧的三个词 `ok` / `FAIL` / `unchecked` 已经不存在：今天是 `proved` / `refuted` / `sampled`，每行还带命题、证据、原因与覆盖（`kVerdictWords`）。**两处反例点也换了**：`reassoc` 从 `(-inf, 7, -1): -nan and -inf` 变成 `(0, -3, 0): 0 and -0`，`narrow_mul_div`（下面那一段）从 `(-2147483648): 0 and -2147483648` 变成 `(2147483647): -1 and 2147483647`——抽样器变了，论据跟着变了，不是同一条论据换了个说法。
 
 以及任务书点名的那条边界缺陷（第 0 节第 4 条的两行）：
 
 ```
-unchecked generic_add_zero: a generic rule, whose instances are not checked here
+sampled generic_add_zero<i32>: proposition equality, evidence samples 200, fired 64 of 64 admitted, coverage integer scalar i32: (x + 0) = x, no premise yet
 
-ok wide_mul_div: 200 samples agree, fired 8 of 8
+sampled wide_mul_div: proposition equality, evidence samples 200, fired 8 of 8, coverage integer scalar int: ((x * 2) / 2) = x
 
-FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
+refuted narrow_mul_div: proposition equality, evidence counterexample, the two sides differ at (2147483647): -1 and 2147483647, coverage integer scalar i32: ((x * 2) / 2) = x
 ```
 
-**读法**：今天的三词裁决里，`sampled` 覆盖了两种很不一样的处境——真的证不了但采样一致（`plain`）、许可放宽了容差后采样一致（`finite`）；条件规则（`guarded`）另算：引擎在条件放行的样本上重写并比较了改写前后的值，但两侧各自抽样的比较没跑，行是 `sampled guarded: … fired k of m admitted`（下一笔把本节引文的 `ok`/`FAIL` 换成今天的三个词）。`unchecked` 是第四个字，只在两种情形出现（带许可但无界、泛型规则）。任务书要的三个字里，`proved` 与 `sampled` 今天都没有对应物，`refuted` 的对应物是 `FAIL`，而 `FAIL` 今天把"采样撞上反例"与"许可允许的不等"混在一起（`reassoc` 就是后者：它是一条**不带 `when` 守卫**的 `reassociate` 规则，所以走到了值路径，而 `reassociate` 一个位都不含 `no_infs`，样本里就有 `-inf`；标准库的 16 条 `reassociate` 规则都带守卫，走的是"条件选择实例"那一行，见 §1.1 末尾）。这一处冲突是交给作者的第一个问题。
+**读法**：今天的三词裁决里，`sampled` 覆盖了两种很不一样的处境——真的证不了但采样一致（`plain`）、许可放宽了容差后采样一致（`finite`）；条件规则（`guarded`）另算：引擎在条件放行的样本上重写并比较了改写前后的值，但两侧各自抽样的比较没跑，行是 `sampled guarded: … fired 3 of 3 admitted`。旧的三词 `ok` / `FAIL` / `unchecked` 已不存在，今天是 `proved` / `refuted` / `sampled`，每行还带命题、证据、原因与覆盖（`kVerdictWords`）；`nondeterministic` 既不是单独的一个词，也不是"没判"——它报 `sampled` 并写明原因 `no numeric bound`。词表这一处的冲突已经落定，剩下的是判定力。
 
 ### 1.3 今天有没有求解器接入
 
@@ -232,7 +234,7 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
   - **覆盖之外一律拒绝翻译**，并给出原因（不许猜、不许近似）。8.1 明列的三类覆盖不到是：**张量的整体性质**、**带区域的模式**、**调用外部函数的条件**（`docs/design/rewrite/v2.cn.md` 第 8.1 节的"覆盖不到的"那一条），所以这三类要走"`check` 兜底并在报告里标明"的路，也就是 `sampled` + 原因。
 - **红前用例**：今天没有任何翻译器。用同一个探针文件（仓库外，内容见附录 A）读到 64 位那条规则被判"通过"：
   ```
-  ok wide_mul_div: 200 samples agree, fired 8 of 8
+  sampled wide_mul_div: proposition equality, evidence samples 200, fired 8 of 8, coverage integer scalar int: ((x * 2) / 2) = x
   ```
   加一条计划断言 `refuted wide_mul_div`——今天红。
 - **验收**：
@@ -246,9 +248,9 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 
 - **产物**：判定器接上线：把 S1 的命题交给求解器，`unsat` ⇒ `proved`，`sat` ⇒ `refuted` + 反例模型渲染成 Camel 值文本；`unknown`/超时 ⇒ `sampled` 且原因写明（**不许**当 `proved`，见 G16）。
 - **红前用例**（三条，覆盖任务书要求的两类）：
-  1. `x * 2 / 2 => x`（`int`）今天 `ok wide_mul_div: 200 samples agree, fired 8 of 8` → 要求 `refuted`。
-  2. `x + 0 => x`（`int`，标准库的 `int_add_zero`）今天 `ok int_add_zero: 200 samples agree, fired 8 of 8` → 要求 `proved`。
-  3. `x * 2 / 2 => x`（`i32`）今天 `FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648` → 要求 `refuted` 且反例是同一个值。**注意这条今天"看起来对了"是巧合**：`pickInt` 的边界表里恰好有 `INT32_MIN`，而 64 位的两端不在表里；所以第 1 条与第 3 条必须一起验收，否则"能给出反例"会被 32 位的运气冒充。
+  1. `x * 2 / 2 => x`（`int`）今天 `sampled wide_mul_div: … fired 8 of 8` → 要求 `refuted`。
+  2. `x + 0 => x`（`int`，标准库的 `int_add_zero`）今天 `sampled int_add_zero<i32>: … fired 64 of 64 admitted` → 要求 `proved`。
+  3. `x * 2 / 2 => x`（`i32`）今天 `refuted narrow_mul_div: … the two sides differ at (2147483647): -1 and 2147483647` → 要求 `refuted` 且反例是同一个值。**注意这条今天"看起来对了"是巧合**：`pickInt` 的边界表里恰好有 `INT32_MIN`，而 64 位的两端不在表里；所以第 1 条与第 3 条必须一起验收，否则"能给出反例"会被 32 位的运气冒充。
 - **验收**：
   ```
   camel test/cases/modules/rules/verify_witness.cml std::nvm
@@ -275,7 +277,7 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 ### S4 `when` 与 `fact` 作前提
 
 - **产物**：`when` 的函数图（`GenericRuleInstance::when` / `RuleObject::when`）译成**假设**；报告写明"在 `when` 下证明"（今天的措辞是 `fired k of m admitted`，只说条件放行了多少样本，不提证明）。`fact` 的结论：能译的当假设；译不了的把该规则降为 `sampled` 并写明是哪一项做不到（8.1："覆盖不到的用 `check` 兜底并在报告里标明"）。
-- **红前用例**：`rule guarded(x: int, const c: int) { x * c => x } when c == 1` 今天逐字 `sampled guarded: … fired 1 of 1 admitted`——完全没有证明路径。库里同形状的两条（`check_when.cml` 的 `double_int` / `double_float`）今天是 `sampled double_int: … fired 64 of 64 admitted`。计划断言 `proved guarded under when`——今天红。
+- **红前用例**：`rule guarded(x: int, const c: int) when c == 1 { x * c => x }` 今天逐字 `sampled guarded: … fired 3 of 3 admitted`——完全没有证明路径。库里同形状的两条（`check_when.cml` 的 `double_int` / `double_float`）今天是 `sampled double_int: … fired 64 of 64 admitted`。计划断言 `proved guarded under when`——今天红。
 - **验收**：
   ```
   camel test/cases/modules/rules/check_when.cml std::nvm
