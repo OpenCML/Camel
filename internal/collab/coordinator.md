@@ -563,5 +563,12 @@ git worktree add --detach <旧提交>
 **19. `git cherry` 的普查必须在换底之外、对完整 HEAD 做；`-AstOnly` 必须逗号一次传。**
 `lane-ssa-residue` 在 rebase 进行中跑 `git cherry b250a0659b HEAD`，只数到已重放的 10 笔（`plus=10`），abort 之后才对完整 HEAD 得到 `plus=25 minus=0` —— 两个数会得出相反结论。另一条来自 `lane-enter-shape`：`-UpdateAstHashes -AstOnly 'a.cml,b.cml'` 的 `-AstOnly` 要**一次逗号传完**，重复传参会绑定失败。
 
+**21. 任务板 id 与内部卡号是两套编号，永远不要混着写。**
+`D-1128-64` ③：我在板上建了 `task-392`（删 `graph::commit_of`），而 `internal/collab/task-392-math-abs-l.md` 是另一件活（`math:abs_l`），决策者看到"task-392"立刻问"卡号别混"。板上 `task-N` 是 `team_task_create` 的顺序号，与 `internal/collab/task-N-*.md` **毫无关系**。**定法**：派工与回执里写"**板上** `task-N`"或"**内部卡** `task-N-<slug>`"，建卡时把"这是谁的哪一步"写进标题（如"这是 `task-374` 的一步"），并在接回里的第一行复述一遍。
+
+**22. "`src/**` 零改动 ⇒ 不用跑整层"不等于"不用重录 AST"。**
+`docs/notes6` 落地时合并位踩到（`seat-merge-1`，`db77af3b49`）：那枝 `src/**` 零改动，可它**改了 `test/cases/modules/rules/check_when.cml`、加了 `test/cases/modules/stdlib/abs_smallest_int.cml`** —— 两条都在 AST 记录里 ⇒ 首趟 `parse.frontend frontend.ast_record` 报甲（`recorded 04da6afb… now 4835f1d1…` / `missing … recorded -`）。按金标纪律"只读 check → `-UpdateAstHashes` → 只读 check"补 `4704 lines recorded, 2 added and 1 removed`，再 check `4704 file(s) checked, 0 stale`，单列一笔只动 `ast_hashes.txt`。
+**判据分两件事**：判**要不要跑整层**看 `src/**`；判**要不要重录 AST**看有没有动 `test/cases/**` 与 `docs/tutorial/examples/**`（注释也参与哈希，改注释同样要重录）。
+
 **20. 一行级工具错误的例外用法（铁律 18 的实操）。**
 `benchmarks/tools/grad_referee.py` 把计划给的 `--block-limit` 原样转给 camel，而 camel 只认 `--spaces block_mb=`（`src/tools/camel-cli/config.cpp:650/:823/:1239`）⇒ `unknown option`、4 条 slow 用例全红。改法唯一（目标写法由 CLI 自己规定），按铁律 18 例外我先改后报：`cmd += ["--spaces", f"block_mb={_block_limit_mb}"]`，当轮 `oversight_tell` 写明"改了哪一行、为什么只能这样改、不同意就回退"。**两笔缺一不可**：计划侧传裁判的参数名（`--block-limit`）与脚本侧传 camel 的参数名（`--spaces block_mb=`）是两个不同的接口，别把两笔当成重复。
