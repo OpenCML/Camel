@@ -89,14 +89,7 @@ oper_group_ptr_t Builder::internalOperatorGroup(camel::core::OperId oper) {
         if (const auto holder = context_->importModule(std::string(uri.substr(0, colon)));
             holder != nullptr) {
             if (const auto owned = holder->nativeOperatorGroup(oper); owned != nullptr) {
-                if (const char *trace = std::getenv("CAMEL_TRACE_OPER_GROUP"); trace != nullptr) {
-                    std::fprintf(
-                        stderr,
-                        "[camel-remote] operator group of %s is not the built-in module's: "
-                        "taken from module '%s'\n",
-                        std::string(uri).c_str(),
-                        std::string(uri.substr(0, colon)).c_str());
-                }
+
                 return owned;
             }
         }
