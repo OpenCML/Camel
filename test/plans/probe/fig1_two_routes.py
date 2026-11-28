@@ -39,7 +39,7 @@ def measure(passes):
         "rc": p.returncode,
         "bytes": len(text),
         "sha256": hashlib.sha256(text.encode()).hexdigest(),
-        "stats": json.dumps(stats, sort_keys=True),
+        "stats_obj": (stats if isinstance(stats, dict) else {}),
         "text": text,
         "stderr": (p.stderr.splitlines()[:2] if p.returncode != 0 else []),
     }
@@ -57,3 +57,4 @@ for route, passes in ROUTES[stage]:
 if len(seen) == 2:
     print("identical=%s" % (seen["camel"] == seen["cpp"]))
 sys.exit(1)
+
