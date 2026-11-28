@@ -136,6 +136,24 @@
 
 ## 三、比对方法（可执行步骤）
 
+### 3.0 地基验证（`std::jgir canonical=true` 能不能当基准）
+
+**读数（`lane-kinds-oper` 测得，原文照抄）**：5 个程序 × 2 遍、**同一个二进制**：
+
+| 程序 | 遍 1 / 遍 2 | 结论 | 指纹 |
+|------|-------------|------|------|
+| `broadcast_like_spreads_rank_zero` | `0/0` | SAME | `21D09512588B4D36` |
+| `closed_rank_rejects_rank_zero` | `1/1` | SAME | `7D09A21BF1F6A3AD` |
+| `err_lambda_tuple_arity` | `1/1` | SAME | `CE9DD7603B837C1E` |
+| `hello` | `0/0` | SAME | `9806026B430A1872` |
+| `binary_search` | `0/0` | SAME | `F6EA1AEEEAEF4702` |
+
+- 换 cwd 跑 `hello` / `binary_search` **亦 SAME**。
+- 产物里**时间戳 0、临时目录名 0、随机 id 0**（`[0-9a-f]{16,}` 命中的全是 `"bits": "0x…"` 的浮点位模式，属内容）。
+- **唯一要归一的一样：源文件绝对路径** —— 失败程序首行 `--> D:\Projects\Camel-wt\coord\test\cases\compile\…cml:11:21`（另一例 `:8:23`）⇒ 归一到"**文件名 + 行:列**"（去掉树前缀）。
+
+**前提必须如实读**：这次用的是 `D:\Projects\Camel-wt\perf\out\latest\bin\camel.exe`（**23.4 小时前**构建，`coord` 树没有构建）——**它不是当前尖的产物**。迁移比对时两个构建都会各留 `build-info.json`（§3.1），**基准是否稳定要以那次的读数为准**；本次只证明**同一二进制**下产物可重复、与 cwd 无关。
+
 ### 3.1 两个构建
 
 1. **旧路径构建**：`kVarLoweringSsa = false`，`npm run build`（或 `camel-remote.ps1 -Path <wt>`），把 `out/latest/bin/camel` 与 `out/latest/libs` 拷到 `out/migrate/old/`。
@@ -161,6 +179,17 @@ Get-ChildItem out/migrate/graphs/old/*.jgir | ForEach-Object {
     if (Compare-Object (Get-Content $_.FullName) (Get-Content "out/migrate/graphs/new/$n")) { $n }
 } | Set-Content out/migrate/differing.txt
 ```
+
+### 3.3a 比对前归一（**只有这一条**）
+
+**只把输出里出现的"源文件绝对路径前缀"换成一个固定串**（`文件名 + 行:列` 保留），例如把 `D:\Projects\Camel-wt\<树>\test\cases\compile\x.cml:11:21` 归成 `<src>/x.cml:11:21`：
+
+```powershell
+$raw = Get-Content $_.FullName -Raw
+($raw -replace '(?<p>[A-Za-z]:\\[^\r\n:]*\\)(?<f>[^\\:\r\n]+:\d+:\d+)', '<src>/$2') | Set-Content $out
+```
+
+**判据：归一规则只有这一条。** 其余**一个字节都不许归一** —— 多归一一样（空白、顺序、数字）就会把真正的差异洗掉，比不归一更坏。归一之后的 hash 才算比对用的 hash。
 
 ### 3.4 归因表模板（每个差异程序一行）
 
