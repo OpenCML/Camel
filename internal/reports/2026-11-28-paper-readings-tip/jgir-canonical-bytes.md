@@ -93,3 +93,41 @@ throw new Error('JGIR ' + JSON.stringify({key: 'KEY', name: 'NAME', len: enc.len
 - **可以说**：在这 19 对上，两侧 `std::jgir canonical=true` 的整份输出**长度相同**、**17 对哈希相同**。
 - **不能说**：17/19 是"逐字节相同"—— 哈希是 32 位滚动和，只作筛子；第 13、17 对是真不同，其余 17 对**尚未逐字节确认**。
 - 要把这句坐实，先补上"整份文本能落地"的通道（见页首三条选项之一），我再跑一遍同样的 38 条 run 并给出偏移与存档。
+
+## 分母的证据（原文行，`test/plans/feat/opt/camel_passes.plan.toml`）
+
+```
+L195: name = "camel_passes.fold.same_text"
+L200: compare_to = "camel_passes.fold.by_cpp"
+L254: name = "camel_passes.fold_fault.same_text"
+L259: compare_to = "camel_passes.fold_fault.by_cpp"
+```
+
+两条 `same_text` **自己就是一条 `compare_to` 条目**（它们的 `compare_to` 分别指向 `fold.by_cpp` /
+`fold_fault.by_cpp`），也就是它们各自**已经是一对的一端**。把"19 条 `compare_to` + 2 条 `same_text`"相加，
+等于把这两条 run 再数一遍 ⇒ **对数是 19**，不是 21。
+
+## 三类分开（本轮）
+
+| 类 | 对数 | 成员 |
+|---|---|---|
+| 图相同（长度 + 哈希级） | **17** | 00–12、14、15、18（另 16 见下） |
+| 图不同（需偏移与两侧原文） | **2** | 13 `fold.by_cpp` ← `.same_text`；17 `cse.after_inline.by_cpp` ← `.by_camel` |
+| 不产出图（两侧 0 字节，单列） | **1** | 16 `fold_fault.without_the_pass` ← `fold_fault.same_run` —— 该对两侧都不打印图（`without_the_pass` 是"不过该遍"的对照，`same_run` 是同一遍跑一次的对照），所以它量的不是图，不进"图相同"的分子也不进分母 |
+
+⇒ **分母写法**：把 16 排除后是 **17 / 18**；若把它算进来并标"两侧无图"，则是 **17 / 19**。
+本页主张前者（**17/18**），并把 16 单列为"不产出图"。**这一句仍不是逐字节结论**，见页首。
+
+## 还差什么：CLI 直跑
+
+Lead 的方向（CLI 重定向到文件，绕开 runner 的消息通道）是对的，但 `camel-remote.ps1` **没有直跑 CLI 的入口**：
+`-Check` 是**固定名单的检查器**（`$checkers`，只认 `planStage`/`namedOnly` 里那几个名字），不是任意命令。
+所以要落地"38 条 CLI + `fc /b`"，需要给这个脚本加一个直跑参数（例如 `-Run <argv>`，把命令在 host 上执行并把
+stdout/stderr 落盘后取回），或者由有 host 直连的人按下面的模板跑一次：
+
+```
+# 每对两侧各一次，遍名与参数照计划原文
+camel <case> std::cxx::algebra std::jgir canonical=true std::nop > 13.base.gir 2> 13.base.err
+camel <case> std::fold   ...            std::jgir canonical=true std::nop > 13.other.gir 2> 13.other.err
+fc /b 13.base.gir 13.other.gir          # 或 cmp -l
+```
