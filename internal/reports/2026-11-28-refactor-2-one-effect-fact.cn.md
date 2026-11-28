@@ -283,3 +283,194 @@ bool Record::accessesOutsideProgram() const {
 2. **但那枝仍留了两份拼装**：`ResourceSignature::pure()` 自己把 `!ambient.empty()` / `allocates.has_value()` / `external && ambient.empty()` 翻成四格，`Record::pure()` 自己把 `!uses.stated() || declaresWrite()` / `accessesOutsideProgram()` / … 翻成四格 —— 两边各拼一次。这正是决策者说的"要被删的两份真相之一"。第 1 刀要做的是：**`declaresNoWrite(...)` 只留一份拼装**，两个读者各自只交出自己那份事实（记录：子句；签名：测量出的部件），四格的拼装与判定不重复。
 3. **`accessesOutsideProgram` 不新增为记录的第二个方法**：它是同一句"读的必须是程序自己的"在记录侧的又一次拼装；若保留，只能作为 `declaresNoWrite` 的**输入之一**，不许再自成一份判定。
 4. **pre-publish 自检那一笔已被取代**：`bbed9dd32b`（`pure && (writes || allocates || externalEffect || functionOperand)` ⇒ 拒绝，用 `std::any_of` 内联问 `sem::writes`）后来由 `lane/c4-round-source` **改动 `63384055bc`**（枝尖 `ae14f65247`）改成 `sem::writesSomething(sem::signatureOf(r, 0))` + 文案 `a pure operator writes a resource`。第 1 刀以那一版为准（它是合并位那一批），`bbed9dd32b` 只作形状参考。
+
+## 9 第 1 刀的调用面清点（落枝前就绪；`git grep -n "\.pure()\|->pure()" -- src` 全量 = 30 处代码 + 2 处文档注释）
+
+**这里有四个不同的 `pure()` 答案，不是两个** —— 第 1 刀只合其中 2、3 两处，别的**一律不动**：
+
+| # | 定义 | 读者（全部） | 第 1 刀动不动 |
+|---|---|---|---|
+| 1 | `AST::ResourceClauseLoad::pure()`（`src/parse/include/camel/parse/ast/type.h:254`，直接读 `pure_` 字段）—— **源码里写的那个词** | `gct/builder.cpp:1214`、`:1218`、`:1222`、`:1415` | **不动**（它就是"声明"本身） |
+| 2 | `ops::Record::pure()`（`operator_record.h:487-492`） | `introspect.cpp:284`（`clause_pure` 列）、`facts.cpp:1324`（`Arrangeable::pure` 这一项） | **改成调 `declaresNoWrite(...)`** |
+| 3 | `sem::ResourceSignature::pure()`（`resource_semantics.h:378-382`） | `builder_diagnostics.cpp:200`（`func->resources()`）、`:242`、`:284`、`:1075`（`promised`）、`builder_modules.cpp:421`（`signature`）、`:558`（`written`）、`builder_resources.cpp:500`（`at->site.clause`）、`builder_when.cpp:2291`（`signature.resources()`）、`resource_semantics.cpp:618`（`target`）、`:802`（`signature`）、`type/text.cpp:104`、`:318`、`:321`、`test/commit_checks.cpp:298`（`type->resources()`） | **改成调 `declaresNoWrite(...)`** |
+| 4 | `runtime::fact::EffectSummary::pure()`（`effects.h:40`，`!external && !writesVariables`） | `execute/pass.cpp:1052`、`stdlib/graph/read.cpp:591`、`:599`、`std/cml/cml.cpp:1429`、`:1434`、`test/block_body.cpp:416`、`tiles/src/compiler.cpp:461` | **不动**（实测摘要，不是承诺） |
+
+另有 `CppRegistration::pure()`（`operator_record.cpp:68`，builder DSL 的登记位）与两处文档注释（`operator_table.h:1028`、`operator_record.h:639`），都不是判定。
+
+**名字核对**：`git grep -n "operatorPure" -- src` **退出码 1，这个名字不存在**；`operatorArrangeable` 有 6 处出现：定义 `facts.cpp:1533`、声明 `arrangeable.h:92`、读者 `runtime/graph.cpp:231`、`compile/src/gir/builder_helpers.h:769`、`test/block_body.cpp:509`、`test/facts_compare.cpp:229`。第 1 刀**不碰** `operatorArrangeable`（第五项是第 2 刀）。
+
+**落枝即改的两行（形状；命名以决策者 §7 的 `declaresNoWrite` 为准，`two-bits-model` 里叫 `keepsPurePromise`，同一形状）**：
+- `Record::pure()` → `sem::declaresNoWrite(!uses.stated() || declaresWrite(), /*accessesOutside=*/<记录侧那一格>, uses.value.allocates.has_value(), uses.value.externalEffect || uses.value.functionOperand)`（未声明子句的保守读法保持今天的样子）。
+- `ResourceSignature::pure()` → `mode == Concrete && sem::declaresNoWrite(writesSomething(*this), !ambient.empty(), allocates.has_value(), external && ambient.empty())`。
+- 实现**一处**：放在 `resource_semantics.h` 紧邻 `writesSomething`（`:422` 那一带），inline，四格全非才算守住承诺。
+
+## 10 换底前的基线读数（第 1 刀"新增红 0"的对照；**底 = `625bfa13dc`，`src/` 等于 `integration@4f59be8265`**）
+
+> 这一组是**换底前**的现场，第 1 刀落枝后要按**同一选法**逐名比；比的是名字，不是数字。读数在宿主 `88zjwei` 上取，`[provenance] tip 625bfa13dc…`。
+
+- `test/plans/feat/tools/facts.plan.toml`：**11/11 通过，0 红**。
+- `test/plans/feat/tools/facts_compare.plan.toml`：**2/2 通过，0 红**。
+- `test/plans/feat/modules`（整目录）：`[SUMMARY] total: 2096, pass: 2068, fail: 20, skip: 4, known failures: 4`。
+  - **20 条 FAIL（换底前的红，逐名）**：`op_stats.table.nvm`、`op_stats.table.fvm`、`export_unsupported_op`、`export_impure_op`、`pass_export_refusal_located.request_in_arm_json`、`as_refusal.constant_fails.pass`、`as_refusal.constant_fails.operator`、`slice_runtime`、`si_as_fails`、`si_as_fails_fvm`、`si_as_fails_jit`、`si_as_fails_prl`、`fusion_group.profile.none`、`npy_generic_wrapper_mismatch`、`rename.env_graph_identity`、`rename.process_graph_identity`、`types_and_node_kind`、`node_kinds_match_the_graph`、`outline_delivers_the_graph_it_makes`、`outline_delivers_a_graph_the_bytecode_vm_can_compile`。
+  - **4 条 XFAIL（已知失败，不是红）**：`second_order_refused_vjp`、`ort_loop_values_dynamic`、`conv2d_shaped.derived_input_states_the_input_extents.nvm`、`conv2d_shaped.kernel_builds_what_it_derived.nvm`。
+  - 第 1 刀后的判据是：这 20 条**一条不多、一条不少**（新增红 0），4 条 XFAIL 不动。
+  - **20 条 FAIL 按 plan 归类（只归类，不解释）**：
+
+| plan | 条数 | 名字（原样） |
+|---|---|---|
+| `test/plans/feat/modules/onnx.plan.toml` | 5 | `export_unsupported_op`、`export_impure_op`、`pass_export_refusal_located.request_in_arm_json`、`as_refusal.constant_fails.pass`、`as_refusal.constant_fails.operator` |
+| `test/plans/feat/modules/tensor/shape_inference.plan.toml` | 4 | `si_as_fails`、`si_as_fails_fvm`、`si_as_fails_jit`、`si_as_fails_prl` |
+| `test/plans/feat/modules/tensor.plan.toml` | 2 | `op_stats.table.nvm`、`op_stats.table.fvm`（plan 里是 `name = "op_stats.table"`，`:1295`，按后端展开） |
+| `test/plans/feat/modules/rename_identity.plan.toml` | 2 | `rename.env_graph_identity`、`rename.process_graph_identity` |
+| `test/plans/feat/modules/graph.plan.toml` | 2 | `types_and_node_kind`、`node_kinds_match_the_graph` |
+| `test/plans/feat/modules/graph_outline.plan.toml` | 2 | `outline_delivers_the_graph_it_makes`、`outline_delivers_a_graph_the_bytecode_vm_can_compile` |
+| `test/plans/feat/modules/tensor/bounds.plan.toml` | 1 | `slice_runtime` |
+| `test/plans/feat/modules/tensor/dtype.plan.toml` | 1 | `npy_generic_wrapper_mismatch` |
+| `test/plans/feat/modules/fusion_group.plan.toml` | 1 | `fusion_group.profile.none` |
+| **合计** | **20** | |
+
+  - **两条 `graph_outline` 的红已改判**（原先"与 `lane-editview-commit` 同族、单独盯"的猜测**被读数证伪**，下一个人别再按那个方向查）：这两条的断言是 `expect_stdout_exact`（`graph_outline.plan.toml:33` / `:43`；`expect_exit = 0` 那一侧**没报差异**），两侧输出**都是 633 字符**，只在 `offset 194` 差**一位数字**（期望 `new_id=81`，实得 `new_id=82`），`stderr` 空 ⇒ **"造出的图进了提交"这一侧本来就是对的**（`in_committed=true`、`graphs=1->2`、`made_graph=subject$outline6 nodes=3 exit_reads=2` 全对），红的是 **id 计数器漂了一位**：**不是交付缺陷，不修，也不改期望**。
+  - 负责人原话（记在这里当同族假设的墓碑）：
+    > "读数收到，而且它**证伪了我的同族猜测** —— 这两条不是'图没进提交'，是**期望把 id 的具体数值钉死了**……这与'提交把新图收进新程序'**不同族**，那条修完这两条**不会**变绿。"
+  - 第 1 刀后照旧**逐名比**：这两条仍红、名字不变就**照实报、不解释**；若它们的 `new_id` 从 `82` 变成别的数（说明有别的位移），**单独点名**报负责人。
+- **注意**：这组底不是最新 integration（`c4-round-source` 未落地；取这组读数时 integration 到了 `a5b8663744`，随后又到 `0fb33bc32f`）；换底后按 §7 的规矩**重取**一遍再把行号/读数改掉。
+
+## 11 `rt::fact::Anchor` 带 `Program`：一条**钉子**，不是红→绿（决策 `D-1128-205` 批的 (A)）
+
+**先看现场，再定判据。** 这条教训写在这里给下一个接这条的人：写用例**之前**先量"改前"的现场——否则很容易造出一条"改前就绿"的用例冒充红→绿。本次正是这样：决策者给判据时假设它会红，量出来它已经是绿的，于是**不做 (B)、不编红**。
+
+**决策者更正（原文，要害）**：
+
+> "我上一条说'换一个 `Program` 就看丢没改的图上的事实'是错的：`Stamp` 按闭包里每张图的 `(id, revision)` 算，提交又保 id 与 revision，所以看不丢；**`Program` 进键只是设计上多余**。"
+
+⇒ 页里与所有后续报告**不再写"会看丢事实"**。但**"进键只是设计上多余"这句要按读数改准**（见 §13，2026-11-28 实测）：`Program` **从来不在键里**（`FactStore::KeyHash` 只哈希 `kind`/`graph`/`node`，`src/kernel/runtime/facts.cpp:322-325`），**它在 stamp 里**——`stampNow` 每次 `put`（`:342`）与每一次查找（`:381-382`）都拿 `*anchor.program` 去算**闭包修订**（`closureRevisionOf` → `closureRevision(*anchor.program, graph)`，`:87-91`），`checkAnchors` 还把 `program == nullptr` 当拒绝条件（`:103`）。⇒ 这一项**不是"删掉一份多余身份"的清理**：**删字段 = 改 stamp 语义**。上面那句引文照原样保留（那是当时的原话），更正写在 §13。
+
+**改前现场（探针读数，`origin/integration@0fb33bc32f`，插桩跑完已复原、临时枝已删）**：
+
+```
+[SUMMARY] total: 12, pass: 11, fail: 1        ← 唯一 fail 是故意 assert(false) 打印读数的探针条目
+FACTS probe third_f_id kept ; FACTS probe third_f_revision kept ; FACTS probe third_main_revision new
+>>> FACTS probe_two_commits_f valid ; FACTS probe_old_program_f valid ; FACTS probe_same_program_f valid
+```
+
+机制（所以绿）：`Stamp` = `closureRevision` 的哈希（根 id + 闭包里每张图的 `(id, revision)`，`reachable.cpp:43-56`），提交复制图但保 id、保 revision（`draft_session.cpp:1935` → `inheritRevision`，`graph_build.h:177-181`）⇒ 换一个 `Program` 算出同一个哈希。
+
+**钉子落在哪**：`test/plans/feat/modules/graph_facts.plan.toml` 的新条目 **`two_commits_keep_a_fact`** + `test::facts`（`src/stdlib/test/facts.cpp`）。**不落 `tools/facts`**：那里跑的是新框架 `camel::facts`，它的 `Anchor` 从来只有 `{graph, node}`；病在 `camel::runtime::fact::FactStore`，它的自有计划就是 `modules/graph_facts`、自有 pass 就是 `test::facts`。条目与代码注释里**逐字写明"这是钉子，不是红→绿"**，并把上面那行探针原文当来由记着（`graph_facts.plan.toml` 条目上方注释、`facts.cpp` 该段落注释）。
+
+**判据（改 `Anchor` 那次才算全）**：`git grep 'Anchor{.*program()' src` = 0（**改前实测 2 处**：`src/stdlib/graph/facts.cpp:65`、`src/stdlib/tiles/src/compiled_scope.cpp:37`）+ 钉子绿 + `facts` 11/11 + `facts_compare` 2/2 不变 + `BUILD_EXIT=0` / `dirty 0` / `numstat`。
+
+**钉子自己的读数**（branch `lane/fact-anchor-pin`，基 `0fb33bc32f`，tip `30521fbe3f`）：`graph_facts.plan.toml` `[SUMMARY] total: 12, pass: 12, fail: 0`；`facts` `total: 11, pass: 11, fail: 0`；`facts_compare` `total: 2, pass: 2, fail: 0`；`BUILD_EXIT=0`。
+
+**`Anchor` 的 `Program` 有第二个消费者，改 `src/kernel/facts/**` 时要一起看**（负责人点名记录，只记不催）：那 2 处 `program()` 构造点属于**两套**读者 ——
+- `src/stdlib/tiles/src/compiled_scope.cpp:37`：tiles 的 `tiles.compiled_scope`（`prepareProgram` / `compileTypes` / `hasCompiledScope`）；
+- `src/stdlib/graph/facts.cpp:65`：`std::graph` 模块的 `publishedAnchor(handle, site, node)`（`Anchor{handle->program(), &graph, node ? handle->index() : kInvalidNodeRef}`），服务 `graph.arrangeable` / `graph.effects` 那一族查询。
+
+⇒ 那件改完**不能只看 tiles**：`feat/modules/tiles.plan.toml` 与 **`feat/modules/graph.plan.toml` 的读数都要带上**（`graph.plan.toml` 今天已有 2 条红：`types_and_node_kind`、`node_kinds_match_the_graph`，见 §10）。
+
+## 12 `feat/modules/graph.plan.toml` 那两条红的诊断（只读：不改 plan、不改期望、不动 `src/`）
+
+读数：`test/plans/feat/modules/graph.plan.toml` 于枝 `lane/draft-read-cut@71d180500e`（`src/` 同 §10 的底），宿主 `88zjwei`，`[SUMMARY] total: 80, pass: 78, fail: 2`，失败正是这两条；`BUILD_EXIT=0`、`TREE_STATE=clean`。实得 stdout 用 `-FetchFile ... -FromThisRun` 取回（运行名 `20261128_185829_38844_idpp`，本地落 `test/results/fetched/fail/modules.graph/node_kinds_match_the_graph/stdout.txt`）。
+
+### 12.1 `types_and_node_kind` —— **计数漂移**
+
+- 断言侧：**`expect_stdout_exact`**（`graph.plan.toml:14`；`:13` `expect_exit = 0` **没报差异**）。诊断原文：
+  `[INFO] expect_stdout_exact differs: first difference at offset 26 (expected 44 chars, got 44 chars): expected "…1\n47\nNodeKind::Oper\n", got "…1\n60\nNodeKind::Oper\n"`
+- 差异逐字：两侧**都 44 字符**，`offset 26` 起差一个数：期望 **`47`**、实得 **`60`**，其余 42 字符一致。这一行是 case 里的第 7 句 `println(creation_id(graph_of(p)))`（`test/cases/modules/graph_types.cml:14`），即**图的创建 id**。
+- 判类：**id/计数漂移**（`47 → 60`，**+13**）。不是行为变化、不是缺陷。
+
+### 12.2 `node_kinds_match_the_graph` —— **同一计数漂移 + 期望过期（两件事叠在一条上）**
+
+- 断言侧：**`expect_stdout_exact`**（`graph.plan.toml:24`；`:23` `expect_exit = 0` 没报差异；`stderr` 空）。诊断原文：
+  `[INFO] expect_stdout_exact differs: first difference at offset 34 (expected 727 chars, got 711 chars): expected "…[pick, total, kinds, main, __g_51__, __g_52__, __g_53__, __g_55__]\n…", got "…[pick, total, kinds, main, __g_64__, __g_65__, __g_66__, __g_68__]\n…"`
+- 逐行比（期望 vs 实得，共 4 行，只有第 2、3 行不同）：
+  - **第 2 行（图名）**：长度**都是 66**，只有四个自动名变了：`__g_51__/52/53/55` → `__g_64__/65/66/68`，**每项 +13**，相对间距不变 ⇒ **与 12.1 同一个计数器**。
+  - **第 3 行（kind 列表）**：`656 → 640`，**少 16 字符**，恰是 `"NodeKind::Data, "` 一项的 16 字符；逐项读，`main` 那张图从
+    期望 `Data, Data, Data, Func, Oper, Oper, Data, Data, Oper, Oper, Oper, Oper, Gate`（**13** 项）
+    变成 `Data, Data, Func, Oper, Oper, Data, Data, Oper, Oper, Oper, Oper, Gate`（**12** 项）—— **少一个 `NodeKind::Data`**；其余 7 张图的列表逐项一致。
+  - 总长 `727 → 711`（**−16**）= 上述一项 `NodeKind::Data` 的宽度；名字那 4 项等长，不贡献长度差。
+- 判类：**两件事** —— ① 名字里的 `+13` 是**同一计数漂移**（与 12.1 同因）；② `main` 少一个 `Data` 是**期望过期**（树的行为按设计变了，不是缺陷）：`test/cases/modules/graph_kinds.cml` 在 **`ee550f53dc`**（"main: the entry declares no value, and the returns that carried one go with it"，2026-11-28 08:04）把 `main` 的 `return 0` 删了 —— 那个 `0` 字面量就是 main 图里少掉的那个 `Data` 节点；而这一行期望是 **`9cdb0c9458`**（"feat(prelude): the map and set operators are the prelude's declarations"）定下的，那时 `main` 还 `return 0`。
+- **若要修，修在测试侧**：`graph.plan.toml:24` 的期望改成实得（`__g_64__/65/66/68` + main 的 12 项列表）；同理 `:14` 的 `47` 改成 `60`。**不是 `src/` 的缺陷**，本轮不改（期望改动要负责人点头）。
+
+### 12.3 同因结论
+
+`types_and_node_kind` 的 `47→60` 与 `node_kinds_match_the_graph` 第 2 行的 `__g_51__… → __g_64__…` **同因**：同一个**图创建 id 计数器整体 +13**（两处都是 +13，且相对间距不变）。`node_kinds_match_the_graph` **额外**还有第 3 行 `main` 少一个 `Data` 的**期望过期**（由 `ee550f53dc` 删 `return 0` 造成），这一项与计数器无关。**+13 是哪一笔记出来的，没定位**——**按性质判据改完之后与本条无关**（计数不再进期望，追它是白花时间）。
+
+### 12.4 改期望的判据换成了性质（决策者 `D-1128-208`；原"照实改两个数"作废）
+
+原来那三条（同因一起改、两件事分开验、`+13` 不二分）**只剩第一条还在，且只对 `main` 那条成立**；`47→60` 与 `__g_51__→__g_64__` 一律**不再照实改**——用例把**全局创建计数钉成绝对值**，任何"前面多建了几张图"的改动都会让它红，正撞 `agents/refactor.md` 的"**不测会因无关原因变化的计数**"。三条现在是：
+
+1. **`main` 少一个 `NodeKind::Data`**：这是 `return 0` 被设计删除的**直接结果** ⇒ **照实改**。旧 → 新逐项：
+   - 旧（13 项）：`Data, Data, Data, Func, Oper, Oper, Data, Data, Oper, Oper, Oper, Oper, Gate`
+   - 新（12 项）：`Data, Data, Func, Oper, Oper, Data, Data, Oper, Oper, Oper, Oper, Gate`
+   - 其余 7 张图的列表逐项不动。
+2. **计数改成测性质**：
+   - `creation_id`（`graph_types.cml:14`）：改成**先后关系**——`creation_id(graph_of(later)) > creation_id(graph_of(p))`，期望那行从 `47` 变 `true`；**不再出现任何绝对数字**。
+   - **自动图名**：比较前把 `__g_N__` 按**出现顺序**归一成 `__g_1____g_2__…`，再逐字比；**归一只在比较处**（`verify_script` 里的 `seen` 映射），**不改生成侧、不改名字本身**。
+3. **改完这两条不再随计数漂移 ⇒ `+13` 不用二分**（与 12.3 末句一致）。
+
+### 12.5 交付读数（`lane/graph-kinds-renumber`，基 `origin/integration@aef14dfa5a`）
+
+```
+26e255b94333d664ce41a83c52f840c48992b412  graph: the creation number is read as an order, never as a value
+numstat：9  1 test/cases/modules/graph_types.cml
+         2  1 test/plans/feat/modules/graph.plan.toml
+         1  1 test/plans/feat/parse/golden/ast_hashes.txt
+```
+
+- **`graph.plan.toml`：`[SUMMARY] total: 80, pass: 80, fail: 0`**（`BUILD_EXIT=0`、`TREE_STATE=clean`、`dirty 0`）。
+- **`feat/modules` 整目录逐名**：`total: 2096, pass: 2070, fail: 18, skip: 4, known failures: 4` —— 基线是 `2068 / 20 / 4 / 4`，**少的正是这两条，新增红 0**；18 条名字与基线逐名相同（`op_stats.table.nvm`、`op_stats.table.fvm`、`export_unsupported_op`、`export_impure_op`、`pass_export_refusal_located.request_in_arm_json`、`as_refusal.constant_fails.pass`、`as_refusal.constant_fails.operator`、`slice_runtime`、`si_as_fails`、`si_as_fails_fvm`、`si_as_fails_jit`、`si_as_fails_prl`、`fusion_group.profile.none`、`npy_generic_wrapper_mismatch`、`rename.env_graph_identity`、`rename.process_graph_identity`、`outline_delivers_the_graph_it_makes`、`outline_delivers_a_graph_the_bytecode_vm_can_compile`）。
+- **`feat/parse`：`total: 131, pass: 131, fail: 0`**；`frontend.ast_record`、`inspect.ast_snapshot`、`numbers.ast_snapshot` 全绿。**golden 只动一行**：`test/cases/modules/graph_types.cml` `8834137bc1ccbf58` → `c837dac7499ecff0`（记录用 `-UpdateAstHashes -AstOnly` 只点名这一个文件；`numstat` 1/1）。工具输出原文：
+  ```
+  wrote test/plans/feat/parse/golden/ast_hashes.txt (4734 files: 95 parse cases + 227 probes + 4412 other .cml files of the repository; re-hashed 228 line(s), kept 4506 recorded line(s) of the 4734)
+  AST_UPDATE_EXIT=0
+  [camel-remote] AST snapshot: 4734 lines recorded, 1 added and 1 removed (D:\Projects\Camel-wt\value-ports\test\plans\feat\parse\golden\ast_hashes.txt)
+  ```
+  "1 added and 1 removed" 就是**同一行值变了**（旧值算 removed、新值算 added），行数仍 4734 —— 这是"只动一行"的第二步旁证。
+- **"编号变大仍绿"的读数**：集成尖与本枝底跑出的名字**都是 `__g_64__…`**，自然漂移这次没出现，所以把同一段 `renumber` 拿到**本机 `node`** 上跑三串输入（老钉 `51` 系、今日 `64` 系、**人为 +100 的 `164` 系**）：三串归一后**同一串**、长度都是 **707** ⇒ 归一不随计数走。**这条是本机跑同一段实现，不是宿主读数**（页里保留这个标注）。
+- 两条 `rev-parse` 相等（`HEAD` = `lane/graph-kinds-renumber` = `26e255b94333d664ce41a83c52f840c48992b412`）；**未 push**。
+## 13 `Anchor` 的 `program`：不在键里，在 stamp 里 —— 这条**不是清理**（做之前先判了"能不能只删"）
+
+开工令之前的只读判定（`origin/integration@24f5563f1e`，未动一行代码）。判的是：7 处构造点上的 `program` 是"身份/键的一部分"还是"读图时用来 resolve 的"。
+
+### 13.1 读数：它是 stamp 的输入
+
+```
+src/kernel/runtime/facts.cpp:87  /// The closure revision of `graph`, read in the program of the first anchor on it.
+src/kernel/runtime/facts.cpp:91          return closureRevision(*anchor.program, const_cast<GCGraph *>(graph));
+
+src/kernel/runtime/facts.cpp:342     stamp.graphs.emplace_back(graph->id(), closureRevisionOf(anchors, graph));   // 每次 put
+src/kernel/runtime/facts.cpp:381-382 it->stamp.graphs[i] == std::pair<GraphId, uint64_t>(graphs[i]->id(), closureRevisionOf(anchors, graphs[i]));  // 每次查找
+
+src/kernel/runtime/facts.cpp:103     if (anchor.graph == nullptr || anchor.program == nullptr) {
+src/kernel/runtime/facts.cpp:104         reject(kind.key, "an anchor without a graph");
+
+src/kernel/runtime/facts.cpp:322-325 size_t FactStore::KeyHash::operator()(const Key &key) const {
+                                       size_t seed = std::hash<GraphId>{}(key.graph);
+                                       seed ^= std::hash<uint32_t>{}(key.kind) + …;
+                                       seed ^= std::hash<uint32_t>{}(key.node) + …
+```
+⇒ **键里没有 `program`**（`KeyHash` 只哈希 `kind`/`graph`/`node`）；**`program` 在 stamp 里**：`stampNow` 每次 `put`、`find` 每次查找都拿 `*anchor.program` 算**闭包修订**；`checkAnchors` 还把 `program == nullptr` 当拒绝条件。另外 `src/kernel/runtime/facts.cpp:541` 自己写着 "a graph does not know its program" ⇒ 删掉字段，**这两处就没有闭包来源**。
+
+**因此：删字段 = 改 stamp 语义（design 10.3 / 4.4）= 设计改动，不是清理。**停止硬删，报负责人；负责人采 **(b) 只改文字、代码一行不动**。
+
+### 13.2 改前把 7 处原文贴过，并且 7 处不是全集
+
+`git grep 'Anchor{.*program()'` 只命中 2 处（`graph/facts.cpp:65`、`tiles/src/compiled_scope.cpp:37`）；**按类型数**（构造 `camel::runtime::fact::Anchor`）实测 **63 行构造点**：
+- `src/kernel/**` **15 行**：`runtime/facts.cpp` 3（`:155`/`:158`/`:632`）、`runtime/core_facts.cpp` 8（`:361`/`:362`/`:473`/`:533`/`:545`/`:555`/`:562`/`:572`）、`runtime/fact_persist.cpp` 4（`:327`/`:344`/`:347`/`:416`）
+- `src/stdlib/**` **48 行**：`graph/facts.cpp:65`、`rewrite/fact.cpp:909`、`tiles/src/compiled_scope.cpp:37/:47/:76`、`tiles/src/compiler.cpp:466/:467`、`transforms/transpose_operator.cpp:490`、**`test/facts.cpp` 39 行**、`test/facts_compare.cpp:667`
+- 消费点 **2 处**（`facts.cpp:342`、`:381-382`）+ 拒绝 **1 处**（`:103`）
+
+> 口头估的"≈55 处、32 处在 `src/kernel/**`"**不准**：实测 **63 行构造点，只有 15 行在 `src/kernel/**`**，48 行在 `src/stdlib/**`。**这条数字就是"为什么不做"的根据，不是待办**：它说明"删一个有冗余嫌疑的字段"实际要碰 63 行、跨出原定两处很远，而收益只是把一份**在 stamp 里被真用着**的输入挪个位置 —— 删了还得给闭包另找一个来源。所以 `D-1128-217` 结案：**代码一行不动**。
+
+### 13.3 (b) 做了什么（只文字）
+
+- `src/kernel/include/camel/runtime/facts.h:103-105` 的注释改准（`lane/anchor-program-note@d171072f35`，`numstat` 5/2，代码零行变动）：
+  旧 "`program` is the program the graph is read in: the graphs it refers to are the ones that program holds."
+  新 "`program` is the program this fact is read in, and it is what the stamp's closure revision is computed from (`closureRevisionOf` …). So it is an input of the reading, not a part of the key: the key is the kind, the graph and the node alone (`FactStore::KeyHash`) …"
+- 页 §11 那句"`Program` 进键只是设计上多余"按读数改准（引文照原样保留，更正指向本节）。
+- 判据也跟着换掉：**不用** `grep 'Anchor{' -- src | wc -l`（= 66，混了 `camel::facts::Anchor` 与 `runtime::fact::Anchor` 两种类型，且 3 处不含字面 `Anchor{`）；**改用**"改完后任何构造点都不给 runtime 锚传 `program`（编译器会直接拒 3 元初始化）+ 点名 `runtime::fact::Anchor` 的 7 处逐处对上 + `grep 'Anchor' | grep program` 只剩 `anchorsIn(const Program &, const GCGraph &)` 这类**签名**"。
+- `D-1128-198` / `D-1128-205` 的前提（"把 `Program` 从锚的身份里删掉是清理"）**不成立，撤回**；`Anchor` 这一项**结案**，不再列为清理。
+
+### 13.4 这一步的分量（负责人点的）：**先判"能不能只删"，再报**
+
+这条判词本来已经被接受（"删一份多余的身份，是清理"），是开工前那次只读判定把它翻过来的：先问"这 63 行里的 `program` 是身份还是读时 resolve"，读到 `facts.cpp:91` 那行 `closureRevision(*anchor.program, …)` 才确定它**在 stamp 里被真用着**。⇒ **判据写错时，越早停越省钱**：真正花掉的是十分钟只读判定，省掉的是改 63 行 + 改 stamp 语义 + 决策者再撤一次判词。页里记下来，供后面同类"身份冗余"的判断照着做：**先看类型在键里怎么哈希、再看它在 stamp 里怎么被消费，两边都读过再谈删。**
