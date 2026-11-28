@@ -8,7 +8,7 @@
 // the number their bits name, and `bool` is one byte, written one way; `i64` fills the slot, so
 // its word is its value. `i8`/`i16` do not exist in the language.
 
-func main() => int {
+func main() sync {
     let m: i32 = -3
     let z: i32 = 0
     let low: i32 = -2147483647 - 1
@@ -31,5 +31,4 @@ func main() => int {
     let bench: i64 = -3
     let computed: i64 = i64(0) - i64(3)
     println(bench == computed, bench == bench + 0, bench < computed, bench > computed)
-    return 0
 }
