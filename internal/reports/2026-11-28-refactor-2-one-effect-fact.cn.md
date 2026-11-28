@@ -419,6 +419,12 @@ numstat：9  1 test/cases/modules/graph_types.cml
 
 - **`graph.plan.toml`：`[SUMMARY] total: 80, pass: 80, fail: 0`**（`BUILD_EXIT=0`、`TREE_STATE=clean`、`dirty 0`）。
 - **`feat/modules` 整目录逐名**：`total: 2096, pass: 2070, fail: 18, skip: 4, known failures: 4` —— 基线是 `2068 / 20 / 4 / 4`，**少的正是这两条，新增红 0**；18 条名字与基线逐名相同（`op_stats.table.nvm`、`op_stats.table.fvm`、`export_unsupported_op`、`export_impure_op`、`pass_export_refusal_located.request_in_arm_json`、`as_refusal.constant_fails.pass`、`as_refusal.constant_fails.operator`、`slice_runtime`、`si_as_fails`、`si_as_fails_fvm`、`si_as_fails_jit`、`si_as_fails_prl`、`fusion_group.profile.none`、`npy_generic_wrapper_mismatch`、`rename.env_graph_identity`、`rename.process_graph_identity`、`outline_delivers_the_graph_it_makes`、`outline_delivers_a_graph_the_bytecode_vm_can_compile`）。
-- **`feat/parse`：`total: 131, pass: 131, fail: 0`**；`frontend.ast_record`、`inspect.ast_snapshot`、`numbers.ast_snapshot` 全绿。**golden 只动一行**：`test/cases/modules/graph_types.cml` `8834137bc1ccbf58` → `c837dac7499ecff0`（记录用 `-UpdateAstHashes -AstOnly` 只点名这一个文件；工具报 "1 added and 1 removed"，`numstat` 1/1）。
+- **`feat/parse`：`total: 131, pass: 131, fail: 0`**；`frontend.ast_record`、`inspect.ast_snapshot`、`numbers.ast_snapshot` 全绿。**golden 只动一行**：`test/cases/modules/graph_types.cml` `8834137bc1ccbf58` → `c837dac7499ecff0`（记录用 `-UpdateAstHashes -AstOnly` 只点名这一个文件；`numstat` 1/1）。工具输出原文：
+  ```
+  wrote test/plans/feat/parse/golden/ast_hashes.txt (4734 files: 95 parse cases + 227 probes + 4412 other .cml files of the repository; re-hashed 228 line(s), kept 4506 recorded line(s) of the 4734)
+  AST_UPDATE_EXIT=0
+  [camel-remote] AST snapshot: 4734 lines recorded, 1 added and 1 removed (D:\Projects\Camel-wt\value-ports\test\plans\feat\parse\golden\ast_hashes.txt)
+  ```
+  "1 added and 1 removed" 就是**同一行值变了**（旧值算 removed、新值算 added），行数仍 4734 —— 这是"只动一行"的第二步旁证。
 - **"编号变大仍绿"的读数**：集成尖与本枝底跑出的名字**都是 `__g_64__…`**，自然漂移这次没出现，所以把同一段 `renumber` 拿到**本机 `node`** 上跑三串输入（老钉 `51` 系、今日 `64` 系、**人为 +100 的 `164` 系**）：三串归一后**同一串**、长度都是 **707** ⇒ 归一不随计数走。**这条是本机跑同一段实现，不是宿主读数**（页里保留这个标注）。
 - 两条 `rev-parse` 相等（`HEAD` = `lane/graph-kinds-renumber` = `26e255b94333d664ce41a83c52f840c48992b412`）；**未 push**。
