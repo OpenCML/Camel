@@ -118,6 +118,24 @@
 - **逃逸（被闭包捕获）**：仍走 `state` 的 `Ref`/`get`/`set`，但那是**语言层面的句柄**，不是建图内部的格子 —— 建图不再为它记账。
 
 
+## 二·一 ① 的范围比"平直 `var`"大：简单情形**今天已经是 SSA**，要做的是把三类边界从格子改成版本
+
+**这一条必须先读，否则会把①做成"改一遍已经对的东西"。**
+
+**读数（`lane-ssa-residue` 交，`D:\Projects\Camel-wt\onnx-run@42889bcde9`，只读）**：
+
+- **调用面很小**：`visitVariNode` **1 个调用者**（`builder.cpp:828` 的 visit 分派臂）；`newVariable` 3（`builder_expr.cpp:515` 绑定、`builder_call.cpp:3011` `var` 实参、`builder_generator.cpp:248` pc 格）、`newVariableOfType` 1（`builder_expr.cpp:434`）、`readVariable` 6（`builder.h:3219`、`builder_call.cpp:503`、`builder_calls.cpp:313`、**`builder_control.cpp:3170` 循环入口**、`builder_operator_writes.cpp:441`、**`captures.cpp:328` 捕获源**）、`peekVariable` 1、`variableOperator` 4、`variableAfterCall` 3。
+- **逃逸的判据不在那两个函数里**：`builder.h:1087-1095`（原文："captured by a closure, handed out as a `var` argument, or a `var` parameter of this graph -- keeps its cell"），`escapingVariables_` 由 `builder_calls.cpp:1004` 与 `captures.cpp:188` 在**别的文件、别的时机**填；**捕获**在 `captures.cpp:117-129/183-213`；**循环携带**在 `builder_control.cpp:2449`（"A write inside a loop is carried state"），登记在 `:2587 carriedVersions_[variable] = joinNode` 与 `:2849`。
+- **账很小、没有第三方读者**：`knownCellUsers_`（`builder.h:1101`）写 2（`builder_expr.cpp:684`、`builder_variables.cpp:312`）/删 1（`builder_variables.cpp:919`）/读 1（`builder_variables.cpp:491` 折叠资格判据）；`writesOf_`（`builder.h:1106`）写 1（`builder_expr.cpp:586`）/删 1（`builder_variables.cpp:918`）/读 2（`builder_variables.cpp:544`、`:808`）。
+
+**结论（照读数写）**：**平直的 `var` 今天已经被折叠成 SSA**（`variableReadSource_`（`builder_variables.cpp:311`）+ `writesOf_` 在折叠那一趟做掉了）。所以①**不是**"把平直的改掉"，而是：**把逃逸／循环携带／被捕获这三类的边界，从"格子"改成"版本"** —— 而这三类的边界正是在：
+
+- **臂的结果**：`addArm`（`builder_control.cpp:2212`）/`setArmResult`（`:1103-1119`）——臂交出的是"值"还是"读格子"；
+- **循环携带**：`carriedVersions_[variable] = joinNode`（`builder_control.cpp:2587`，另见 `:2849`）；
+- **捕获**：`captures.cpp:117-129/183-213` 与 `escapingVariables_` 的填充点（`builder_calls.cpp:1004`、`captures.cpp:188`）。
+
+⇒ 因此**"只动 `visitVariNode` + `readVariable` 两处"做不到**：第二刀（`addArm`/`setArmResult`）是必需的。这一条把 §二 的形状与"开工第一笔"的范围一起改了：**第一笔只能覆盖"既不平直也不需要第二刀"的那一小块，其余必须等第二刀**。
+
 ## 二·二 迁移期并存：编译期开关，运行期只有一条路
 
 新路径（从类型完整的树直接降成 SSA，不建格子、不抹除）**与旧路径并存**，但并存是**编译期选择**：一个临时常量（例如 `src/compile/src/gir/builder_variables.cpp` 顶部的 `constexpr bool kVarLoweringSsa = false;`），**运行期只有一条路**，没有任何运行时分支。
