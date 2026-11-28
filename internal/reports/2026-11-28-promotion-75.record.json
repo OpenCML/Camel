@@ -1,0 +1,62 @@
+{
+  "kind": "promotion",
+  "promotion": 75,
+  "tip": "a97b033b517d16ba086aec5322203e9b2f4960de",
+  "measured_tip": "a97b033b517d16ba086aec5322203e9b2f4960de",
+  "pushed_develop_sha": "a97b033b517d16ba086aec5322203e9b2f4960de",
+  "landing_tip": "the record is a documentation commit and lands on whatever integration holds at push time. This layer was started without waiting for the tip to hold still, because batches had been arriving every ninety seconds for the quarter hour before it; whatever arrived while it ran is not covered by this reading",
+  "note": "the layer was measured at a97b033b517d, the tip the seat/batch9 batch had reached: seat/batch9 itself (merged at 34ff6fefa5 and built and read at 34ff6fefa5dd), wip/baseline-74 (merged at 5396b56c1d and built and read at 5396b56c1dfa, then again at d315da85ae), the forward pass touching src/kernel/core/forward.cpp and the runtime conv/equality, the stdlib jvp/nvm changes, and the plan edits to the compile rulesets and transforms plans. Total rose by one entry against the seventy-fourth layer because the transforms plan gained jvp_of_a_take, not because any case was re-layered",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at a97b033b517d; load 1m 23.58 at the start of the run",
+  "binary_built": "2026-11-28T12:34:16+08:00",
+  "readings": {
+    "total": 9920,
+    "pass": 9718,
+    "fail": 141,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 0,
+    "re_run": 0,
+    "re_run_passed": 0,
+    "load_before": "1m 23.58, 5m 22.15, 15m 23.35",
+    "load_warning": "[load] WARNING: 1m load 23.58 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth to seventy-fourth layers carried; a promotion does not wait on load, D-1128-36)"
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-74-reds.tsv (the seventy-fourth promotion, 141 names)",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], with the plan aliases transforms/compile.transforms and stated_extents/compile.stated_extents read as the same plan; this reading writes the bare names transforms (8 rows) and stated_extents (1 row), the same spelling the seventy-fourth table holds",
+    "still_red": 141,
+    "turned_green": 0,
+    "turned_green_names": [],
+    "new_reds": 0,
+    "new_reds_names": [],
+    "vanished_reds": 0,
+    "arithmetic": "141 names before: 0 turned green, 0 vanished, 0 appeared, 141 remain red; the two sets are the same set name for name, and the one extra entry this layer declares is a new passing case, not a new red",
+    "total_delta": "9920 against 9919: the transforms plan gained jvp_of_a_take (it passes, and ea8c75725d is the forward change that came with it), while gpu.profile device_region.nvm passed in the seventy-fourth layer and was skipped here",
+    "notes": [
+      "the one entry the total gained is jvp_of_a_take.nvm in the transforms plan: it passes, so it is a plan addition and not a red of any kind",
+      "the pass and skip columns moved by one in opposite directions for a reason outside the red set: gpu.profile device_region.nvm passed in the seventy-fourth layer and was skipped in this one",
+      "no case timed out in this layer and none was re-run; fault_deep.prl_off is absent for the ninth round running because the scheduler root-cause fix holds",
+      "export_loop_carried_array_field stayed green for the fourth reading running"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 0,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [],
+    "how": "the layer reported timed_out 0 and re_run 0, so there was no timeout to run alone"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-75-reds.tsv",
+  "red_table_rows": 141,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-75-reds.tsv",
+  "new_red_names": [],
+  "pushed_as": "develop, fast-forwarded from 09acc5fe89c1 to a97b033b517d, the tip this layer measured",
+  "develop_before": "09acc5fe89c1227f86f184ec9e7ac9cf4ff9cac6",
+  "develop_after": "a97b033b517d16ba086aec5322203e9b2f4960de",
+  "commits_brought_in": 41,
+  "commits_touching_src": 7
+}
