@@ -41,7 +41,7 @@ FIXED: Dict[str, List[str]] = {
     "P9": ["std::macro", "std::cxx::inline", "std::nvm"],
     "P10": ["std::macro", "tensor::fuse", "std::nvm"],
     "P11": ["std::opt", "std::nvm"],
-    "P12": ["std::macro", "std::opt", "std::tf"],
+    "P12": ["std::macro", "std::opt", "std::prl"],
 }
 
 REFERENCE = "P0"
@@ -67,8 +67,8 @@ ONNX_TERMINAL = "onnx::export"
 # pipeline naming one is "not applicable" to other programs rather than a refusal.
 MODULE_PASSES = {"tensor::fuse": "tensor", "onnx::export": "onnx"}
 
-SCHEDULING_PASSES = {"std::nvm", "std::fvm", "std::jit", "std::tf", "std::nodevm", "std::fastvm",
-                     "std::taskflow", "std::run", "std::linear", "std::parallel"}
+SCHEDULING_PASSES = {"std::nvm", "std::fvm", "std::jit", "std::prl", "std::nodevm",
+                     "std::prl", "std::run", "std::linear", "std::prl"}
 
 RANDOM_SEED = 20261004
 RANDOM_PER_TERMINAL = 20

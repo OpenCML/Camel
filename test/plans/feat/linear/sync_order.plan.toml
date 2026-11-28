@@ -53,10 +53,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sync_block_order.tf"
-desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::tf."
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::prl."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
-args = ["${case}", "std::tf"]
+args = ["${case}", "std::prl"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -405,10 +405,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sync_block_order.opt_tf"
-desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt std::tf."
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt std::prl."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
-args = ["${case}", "std::opt", "std::tf"]
+args = ["${case}", "std::opt", "std::prl"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -453,10 +453,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sync_block_order.inline_tf"
-desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::cxx::inline std::tf."
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::cxx::inline std::prl."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
-args = ["${case}", "std::cxx::inline", "std::tf"]
+args = ["${case}", "std::cxx::inline", "std::prl"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -517,10 +517,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sync_block_order.macro_opt_tf"
-desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::opt std::tf."
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::opt std::prl."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
-args = ["${case}", "std::macro", "std::opt", "std::tf"]
+args = ["${case}", "std::macro", "std::opt", "std::prl"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

@@ -88,7 +88,7 @@ name = "multi_pattern.tf"
 desc = "`case a | b => body` enters the body when any pattern matches (only the first used to be read); a wildcard among the alternatives makes the case the default (tf)."
 kind = "behavior"
 case = "../../../cases/linear/match/multi_pattern.cml"
-args = ["${case}", "std::tf"]
+args = ["${case}", "std::prl"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -264,7 +264,7 @@ name = "wildcard_first.tf"
 desc = "Nothing after the wildcard case is reachable: the case after it used to be entered for every value that matched no pattern (tf)."
 kind = "behavior"
 case = "../../../cases/linear/match/wildcard_first.cml"
-args = ["${case}", "std::tf"]
+args = ["${case}", "std::prl"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -280,7 +280,7 @@ name = "let_multi_binding.tf"
 desc = "`let a, b = 1, 2` and `var c, d = 3, 4` bind every name; only the last used to be bound (tf)."
 kind = "behavior"
 case = "../../../cases/linear/match/let_multi_binding.cml"
-args = ["${case}", "std::tf"]
+args = ["${case}", "std::prl"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {

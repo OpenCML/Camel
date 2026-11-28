@@ -300,7 +300,7 @@ error[RuntimeDiag::MaxRecursionDepthExceeded]: Maximum recursion depth (1000) ex
 
 | 遍 | 作用 |
 |---|---|
-| （不写） | `std::run`，即 `std::fastvm`（`std::fvm`） |
+| （不写） | `std::run`，即 `std::fvm` |
 | `std::nvm` | 节点虚拟机：直接在图上解释执行 |
 | `std::fvm` | 字节码虚拟机 |
 | `std::jit` | 带即时编译的字节码虚拟机；不能编译的图由解释器执行 |

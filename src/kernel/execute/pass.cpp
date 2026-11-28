@@ -19,6 +19,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/observer.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/definitions.h"
 #include "camel/runtime/effect_liveness.h"
@@ -100,7 +101,7 @@ void declareCoreTagReaders() {
 /// `resolveAlias`; this is the one value that resolution reads from configuration, not a second
 /// table of names.
 constexpr const char *kRunPassName          = "std::run";
-constexpr const char *kRunPassDefaultTarget = "std::fastvm";
+constexpr const char *kRunPassDefaultTarget = "std::fvm";
 
 std::string &runPassTargetOverride() {
     static std::string target;
@@ -122,27 +123,19 @@ const std::map<std::string, std::string> passAliases = {
     // section 0, P, the owner decides whether it selects the Camel one instead; nothing else in
     // this table has to move for that.
     {"std::opt", "std::cxx::opt"},
-    {"std::fastvm::jit::dump::asm", "std::fastvm::jit_asm"},
-    {"std::fastvm::jit::dump::bin", "std::fastvm::jit_bin"},
-    {"std::fastvm::jit::dump::rmir", "std::fastvm::jit_rmir"},
-    {"std::fastvm::jit::dump::mir", "std::fastvm::jit_mir"},
     // Standard scheduler aliases
     //
     // `std::run` is the step that runs the program, written when which back end runs it is not
     // the point: a reader does not have to learn the back ends to read "compile, rewrite, run".
-    // Its target is `passes.run` when the run configuration names one, and `std::fastvm` -- the
+    // Its target is `passes.run` when the run configuration names one, and `std::fvm` -- the
     // fast VM, which is `std::fvm` -- otherwise. `resolveAlias` reads that configuration; a
     // target that is not a scheduling pass is refused before anything runs, naming the setting
     // (`requireKnownPasses` asks `requireRunPassTarget`).
     {kRunPassName, kRunPassDefaultTarget},
     {"std::linear", "std::nvm"},
-    {"std::parallel", "std::taskflow"},
-    {"std::tf", "std::taskflow"},
 
     // Common VM aliases
     {"std::lnr", "std::fvm"},
-    {"std::prl", "std::taskflow"},
-    {"std::fastvm", "std::fvm"},
     {"std::jit", "std::fastvm::jit"},
     {"std::nodevm", "std::nvm"},
     // Common translation and dump aliases
@@ -415,7 +408,7 @@ std::string resolveAlias(const std::string &name) {
             // The one alias whose target the run configuration decides. The table's entry is the
             // default; a configuration that names another scheduling pass replaces it here, and
             // the target is resolved on through the table so every caller that compares spellings
-            // sees the pass itself (`std::fastvm` is `std::fvm`, `std::jit` is
+            // sees the pass itself (`std::jit` is
             // `std::fastvm::jit`).
             if (!runPassTargetOverride().empty()) {
                 target = runPassTargetOverride();
@@ -2517,6 +2510,44 @@ std::string runPassTarget() {
 
 namespace {
 
+/// The kernel of `std::run`: the step that runs the program, handed to the pass the run's
+/// configuration names (`passes.run`, `setRunPassTarget` above).
+///
+/// The step is a pass like any other -- a declaration in `std.cml`, a kernel here -- and what it
+/// does is hand the program to that pass: the choice is the run's configuration, not a second
+/// table of names and not a branch in the resolution of a written name. Today the core's alias
+/// entry answers `std::run` before a pipeline reaches this kernel; the kernel is what the name
+/// resolves to once that entry goes, so a pipeline that writes `std::run` and one that writes
+/// nothing take the same step here.
+///
+/// It reads no parameters of its own: the parameters belong to the pass it hands the program to,
+/// and are read from that pass's own declaration (`constructPass` below asks them the way every
+/// other written name does). Nothing writes `std::run` with a parameter beside it today, and a
+/// parameter written there would be the one thing this step cannot carry.
+std::unique_ptr<GraphIRPass> makeRunPass(const context_ptr_t &ctx, const PassArgs &) {
+    const std::string target          = runPassTarget();
+    std::unique_ptr<GraphIRPass> pass = constructPass(ctx, target);
+    if (!pass) {
+        // Construction reported its own problem (a refused parameter, a pass that broke while
+        // being built); with nothing to run, the refusal is the run's.
+        throw DiagnosticBuilder::of(RuntimeDiag::InvalidPassParameter)
+            .commit(
+                kRunPassName,
+                std::format("`passes.run` names '{}', which is not a pass", target));
+    }
+    return pass;
+}
+
+/// One kernel, written where the pass is: a `PassKernel` names `std::run` and builds the step, the
+/// same shape every other pass's kernel has, so the declaration and the kernel are one pair the
+/// declaration check reads (`test/tools/check-pass-declarations.mjs`) rather than a registry entry
+/// beside it. The name is the literal the declaration writes; `kRunPassName` is the same string and
+/// names the setting's subject in diagnostics.
+const camel::execute::PassKernel
+    runPassKernel("std::run", [](const context_ptr_t &ctx, const PassArgs &args) {
+        return makeRunPass(ctx, args);
+    });
+
 /// `std::run` runs the program, so the pass it names has to be a scheduling pass. The value is
 /// the run configuration's (`passes.run`), not the pipeline's, so a wrong one is refused before
 /// anything runs and the diagnostic names the setting: the alias is spelled in the pipeline, and
@@ -2541,7 +2572,7 @@ void requireRunPassTarget(const context_ptr_t &ctx) {
                 kRunPassName,
                 std::format(
                     "`passes.run` names '{}', which is not a scheduling pass; `{}` runs the "
-                    "program, so it must name one (std::fvm, std::nvm, std::jit, std::taskflow)",
+                    "program, so it must name one (std::fvm, std::nvm, std::jit, std::prl)",
                     target,
                     kRunPassName));
     }

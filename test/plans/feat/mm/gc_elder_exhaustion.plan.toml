@@ -10,8 +10,8 @@ backing store was being allocated); the next collection then traced the freed ob
 program computed with reused memory. Every test checks the printed total against a value computed
 independently of Camel.
 
-Under std::tf a collection could also run while a flow was running: the other workers were inside
-operators, and a map held the results of its finished elements outside any frame. The std::tf
+Under std::prl a collection could also run while a flow was running: the other workers were inside
+operators, and a map held the results of its finished elements outside any frame. The std::prl
 tests cover that: the nested map at full size, and every program at a small size with a major
 collection, heap verification before and after, at every safepoint the scheduler polls.
 """
@@ -210,10 +210,10 @@ timeout_ms = 120000
 [[tests]]
 name = "gc_elder_exhaustion.nested_map_tf"
 tier = "fast"
-desc = "A table built by a map inside a map element, 200 times over, across several elder-space collections. Pipeline: std::tf."
+desc = "A table built by a map inside a map element, 200 times over, across several elder-space collections. Pipeline: std::prl."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_map.cml"
-args = ["${case}", "--arg", "reps=200", "std::tf"]
+args = ["${case}", "--arg", "reps=200", "std::prl"]
 expect_exit = 0
 expect_stdout_contains = ["gc_nested_map total=17472000"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -222,10 +222,10 @@ timeout_ms = 240000
 [[tests]]
 name = "gc_elder_exhaustion.nested_map_tf_stress"
 tier = "fast"
-desc = "A table built by a map inside a map element, 48 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 20 collections ran while a flow was running (measured: 85 to 132 in 12 runs at 2, 4 and 18 workers, load 11; the floor is about a quarter of the lowest), read from the scheduler's statistics line (std::prl gc_stats=1). The number follows the run time. It was measured again, and the repetitions raised from 3, when the higher-order operators stopped making a task of every element and the run became several times shorter (before: 40 to 86 with 3 repetitions). With one worker an unordered operator runs on the calling thread and a program may start no flow at all; the floor is then not applied (the statistics line gives the number of workers)."
+desc = "A table built by a map inside a map element, 48 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::prl. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 20 collections ran while a flow was running (measured: 85 to 132 in 12 runs at 2, 4 and 18 workers, load 11; the floor is about a quarter of the lowest), read from the scheduler's statistics line (std::prl gc_stats=1). The number follows the run time. It was measured again, and the repetitions raised from 3, when the higher-order operators stopped making a task of every element and the run became several times shorter (before: 40 to 86 with 3 repetitions). With one worker an unordered operator runs on the calling thread and a program may start no flow at all; the floor is then not applied (the statistics line gives the number of workers)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_map.cml"
-args = ["--gc-stress", "safepoint=1,kind=major", "--gc-check", "verify=both", "${case}", "--arg", "reps=48", "std::tf gc_stats=1"]
+args = ["--gc-stress", "safepoint=1,kind=major", "--gc-check", "verify=both", "${case}", "--arg", "reps=48", "std::prl gc_stats=1"]
 expect_exit = 0
 expect_stdout_contains = ["gc_nested_map total=2792448"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -243,10 +243,10 @@ timeout_ms = 240000
 [[tests]]
 name = "gc_elder_exhaustion.nested_filter_tf_stress"
 tier = "fast"
-desc = "filter nested with map both ways, the element functions building rows, 12 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 25 collections ran while a flow was running (measured: 94 to 232 in 12 runs at 1, 2 and 18 workers, load 12; the floor is about a quarter of the lowest), read from the scheduler's statistics line (std::prl gc_stats=1). The number follows the run time. It was measured again, and the repetitions raised from 3, when the higher-order operators stopped making a task of every element and the run became several times shorter (before: 140 to 253 with 3 repetitions). With one worker an unordered operator runs on the calling thread and a program may start no flow at all; the floor is then not applied (the statistics line gives the number of workers)."
+desc = "filter nested with map both ways, the element functions building rows, 12 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::prl. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 25 collections ran while a flow was running (measured: 94 to 232 in 12 runs at 1, 2 and 18 workers, load 12; the floor is about a quarter of the lowest), read from the scheduler's statistics line (std::prl gc_stats=1). The number follows the run time. It was measured again, and the repetitions raised from 3, when the higher-order operators stopped making a task of every element and the run became several times shorter (before: 140 to 253 with 3 repetitions). With one worker an unordered operator runs on the calling thread and a program may start no flow at all; the floor is then not applied (the statistics line gives the number of workers)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_filter.cml"
-args = ["--gc-stress", "safepoint=1,kind=major", "--gc-check", "verify=both", "${case}", "--arg", "reps=12", "std::tf gc_stats=1"]
+args = ["--gc-stress", "safepoint=1,kind=major", "--gc-check", "verify=both", "${case}", "--arg", "reps=12", "std::prl gc_stats=1"]
 expect_exit = 0
 expect_stdout_contains = ["gc_nested_filter total=541440"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -264,10 +264,10 @@ timeout_ms = 240000
 [[tests]]
 name = "gc_elder_exhaustion.nested_reduce_tf_stress"
 tier = "fast"
-desc = "reduce nested with map both ways, one accumulator being an array rebuilt at every step, 12 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 115 collections ran while a flow was running (measured: 461 to 908 in 12 runs at 1, 2 and 18 workers, load 14; the floor is about a quarter of the lowest), read from the scheduler's statistics line (std::prl gc_stats=1). The number follows the run time. It was measured again, and the repetitions raised from 3, when the higher-order operators stopped making a task of every element and the run became several times shorter (before: 665 to 1297 with 3 repetitions). With one worker an unordered operator runs on the calling thread and a program may start no flow at all; the floor is then not applied (the statistics line gives the number of workers)."
+desc = "reduce nested with map both ways, one accumulator being an array rebuilt at every step, 12 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::prl. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 115 collections ran while a flow was running (measured: 461 to 908 in 12 runs at 1, 2 and 18 workers, load 14; the floor is about a quarter of the lowest), read from the scheduler's statistics line (std::prl gc_stats=1). The number follows the run time. It was measured again, and the repetitions raised from 3, when the higher-order operators stopped making a task of every element and the run became several times shorter (before: 665 to 1297 with 3 repetitions). With one worker an unordered operator runs on the calling thread and a program may start no flow at all; the floor is then not applied (the statistics line gives the number of workers)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_reduce.cml"
-args = ["--gc-stress", "safepoint=1,kind=major", "--gc-check", "verify=both", "${case}", "--arg", "reps=12", "std::tf gc_stats=1"]
+args = ["--gc-stress", "safepoint=1,kind=major", "--gc-check", "verify=both", "${case}", "--arg", "reps=12", "std::prl gc_stats=1"]
 expect_exit = 0
 expect_stdout_contains = ["gc_nested_reduce total=40107264"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -285,10 +285,10 @@ timeout_ms = 240000
 [[tests]]
 name = "gc_elder_exhaustion.nested_foreach_tf_stress"
 tier = "fast"
-desc = "foreach nested with map both ways, the bodies building rows and appending to captured variables, 12 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 25 collections ran while a flow was running (measured: 102 to 169 in 12 runs at 1, 2 and 18 workers, load 14; the floor is about a quarter of the lowest), read from the scheduler's statistics line (std::prl gc_stats=1). The number follows the run time. It was measured again, and the repetitions raised from 3, when the higher-order operators stopped making a task of every element and the run became several times shorter (before: 116 to 323 with 3 repetitions). With one worker an unordered operator runs on the calling thread and a program may start no flow at all; the floor is then not applied (the statistics line gives the number of workers)."
+desc = "foreach nested with map both ways, the bodies building rows and appending to captured variables, 12 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::prl. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 25 collections ran while a flow was running (measured: 102 to 169 in 12 runs at 1, 2 and 18 workers, load 14; the floor is about a quarter of the lowest), read from the scheduler's statistics line (std::prl gc_stats=1). The number follows the run time. It was measured again, and the repetitions raised from 3, when the higher-order operators stopped making a task of every element and the run became several times shorter (before: 116 to 323 with 3 repetitions). With one worker an unordered operator runs on the calling thread and a program may start no flow at all; the floor is then not applied (the statistics line gives the number of workers)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_foreach.cml"
-args = ["--gc-stress", "safepoint=1,kind=major", "--gc-check", "verify=both", "${case}", "--arg", "reps=12", "std::tf gc_stats=1"]
+args = ["--gc-stress", "safepoint=1,kind=major", "--gc-check", "verify=both", "${case}", "--arg", "reps=12", "std::prl gc_stats=1"]
 expect_exit = 0
 expect_stdout_contains = ["gc_nested_foreach total=1221888"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

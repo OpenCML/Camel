@@ -160,7 +160,7 @@ RcPassesConfig loadOneRc(const fs::path &path) {
     if (p != passes.end())
         cfg.fallback = parsePassList(*p);
     // `passes.run` is one pass specification -- the scheduling pass `std::run` stands for -- not a
-    // list: it is read as the string it is, and an empty one leaves the default (`std::fastvm`).
+    // list: it is read as the string it is, and an empty one leaves the default (`std::fvm`).
     p = passes.find("run");
     if (p != passes.end() && p->is_string())
         cfg.run = p->get<std::string>();
@@ -219,7 +219,7 @@ std::vector<std::string> resolvePassListWithRc(
         *outFallbackPasses =
             rc.fallback.empty() ? std::vector<std::string>{DEFAULT_FALLBACK_PASS} : rc.fallback;
     // The pass `std::run` stands for: `passes.run` when the rc names one, empty otherwise (the
-    // kernel's default, `std::fastvm`, then applies). It is not part of any list.
+    // kernel's default, `std::fvm`, then applies). It is not part of any list.
     if (outRunTarget)
         *outRunTarget = rc.run;
 
