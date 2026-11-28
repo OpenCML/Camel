@@ -7,6 +7,7 @@
 #include "camel/utils/assert.h"
 #include "camel/utils/brpred.h"
 #include "camel/utils/log.h"
+#include "asan_region.h"
 #include "header.h"
 
 #ifndef NDEBUG
@@ -40,6 +41,9 @@ class BumpPointerAllocator : public IAllocator {
         begin_  = start_;
         top_.store(start_, std::memory_order_relaxed);
         end_ = start_ + aligned_capacity; // Actual usable byte count.
+        // ASAN: nothing has been handed out yet, so the whole space is unreadable; `alloc` takes
+        // the poison off the block it hands out (`asan_region.h`).
+        asan_region::poison(start_, aligned_capacity);
     }
 
     void *alloc(size_t size, size_t align = alignof(slot_t)) override {
@@ -73,6 +77,11 @@ class BumpPointerAllocator : public IAllocator {
                 break;
             }
         }
+
+        // ASAN: the bytes above the old top are poisoned; this block is being handed out, so take
+        // the poison off before the header and the caller's payload are written into it
+        // (`asan_region.h`).
+        asan_region::unpoison(currentTop, total_size);
 
         // Install the object header and store the aligned total size.
         installHeader(currentTop, total_size);
@@ -150,6 +159,11 @@ class BumpPointerAllocator : public IAllocator {
                 }
             });
 
+            // ASAN: the space has just taken the block back, so the bytes above the new top go
+            // back under the shadow; a write through a pointer that still names them (or a write
+            // past the end of the block that is handed out next) is reported at the write.
+            asan_region::poison(
+                newTop, static_cast<size_t>(top_.load(std::memory_order_relaxed) - newTop));
             top_.store(newTop, std::memory_order_release);
         });
     }
@@ -157,6 +171,9 @@ class BumpPointerAllocator : public IAllocator {
     void reset() override {
         withExclusiveAccess([&] {
             begin_ = start_;
+            // ASAN: after a reset nothing is handed out; the whole space goes back under the
+            // shadow, and `alloc` takes the poison off the blocks it hands out.
+            asan_region::poison(start_, capacity());
             top_.store(start_, std::memory_order_release);
         });
     }
