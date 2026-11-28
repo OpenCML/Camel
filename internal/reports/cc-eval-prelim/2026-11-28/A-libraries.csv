@@ -1,9 +1,10 @@
-tip=fd950804d6 (origin/develop); machine=build host (zjwei@camel-work); load=~40 (1m) at read time; date=2026-11-28; PRELIMINARY, not final
-category,files_glob,lines,rule_count,note
-autodiff_cpp,src/stdlib/autodiff/** + transforms/jvp.cpp + transforms/split.cpp,12131,—,pullback.cpp 5435 + jvp.cpp 3468 + split.cpp 2625 dominate
-autodiff_rulesets_cml,src/stdlib/rulesets/**,4071,43 export func,43 xport func declarations across the rulesets .cml files
-onnx_export,src/stdlib/onnx/** + onnx.cml,12880,—,exporter.cpp 5738 is the largest single file in the library
-rules_rewrite,src/stdlib/rewrite/**,6399,—,module.cpp 4852
-cxx_opt_lang,src/stdlib/std/cxx/**,8304,—,generic.cpp 2140 + defunctionalize.cpp 1967
-quant,src/stdlib/**quant**,—,—,no path matched quant in this tree; recorded as — rather than 0 (nothing to measure, not measured zero)
-opt_cml,src/stdlib/std/cxx/**/*.cml,—,—,no .cml files under std/cxx in this tree; the Lang-side rewrite lives in rewrite/ (counted above)
+tip=353d36e3d1 (lane/cc-eval-prelim-2; sources identical to the first reading's fd950804d6 -- `git diff --name-only fd950804d6 353d36e3d1 -- src` is empty); machine=build host (zjwei@camel-work); load=~30 (1m, about 3 cores of it not Camel: qemu/sidekiq/llm_server); date=2026-11-28; PRELIMINARY, not final
+INSTRUMENT: lines_wc_l = wc -l, the number of newline bytes, i.e. PHYSICAL lines including blank lines and comments; lines_measure_object_line = Get-Content $f | Measure-Object -Line, which counts NON-EMPTY lines only. The difference between the two columns is exactly the file's blank-line count. Where they disagree, wc -l is the number to use.
+category,files_glob,files,lines_prev_fd950804d6,prev_instrument,lines_wc_l,lines_measure_object_line,decl_kind,decl_count,correction
+autodiff_cpp,"src/stdlib/autodiff/** + transforms/jvp.cpp + transforms/split.cpp",12,12131,Measure-Object -Line,12530,12131,—,—,"+399 = blank lines the old instrument skipped; content unchanged. pullback.cpp 5655, jvp.cpp 3509, split.cpp 2676 (wc -l)"
+autodiff_rulesets_cml,"src/stdlib/rulesets/{jvp,transpose,vmap}.cml",3,4071,Measure-Object -Line,4329,3960,"export rule / export func","187 / 43","SCOPE, not content: the old row covered all six ruleset files, including the two probes (48) and int8.cml (71); all six are 4448 by wc -l, minus 377 blanks = 4071. This row is the three autodiff rule sets only. Of its 43 export func: jvp 14, transpose 1, vmap 28"
+quant_ruleset_cml,src/stdlib/rulesets/int8.cml,1,— (glob src/stdlib/**quant** matched nothing),no earlier reading,71,69,"export rule / export func","1 / 0","RETRACTED DASH: the file is int8.cml, which no glob containing the word quant can match. The dash was a wrong glob, not an absent library. 1 export rule (matmul_int8), 0 export func"
+onnx_export,"src/stdlib/onnx/** + onnx.cml",19,12880,Measure-Object -Line,13585,12880,—,—,"+705 = blank lines; content unchanged. exporter.cpp 5946 is the largest single file in the library"
+rules_rewrite,src/stdlib/rewrite/**,10,6399,Measure-Object -Line,6725,6399,—,—,"+326 = blank lines; content unchanged. module.cpp 5038"
+cxx_opt_lang,src/stdlib/std/cxx/**,27,8304,Measure-Object -Line,8768,8304,—,—,"+464 = blank lines; content unchanged. generic.cpp 2204 + defun/defunctionalize.cpp 2030; the four rewrites' implementation surface is 5504 of these lines (see the B reading)"
+opt_cml,src/stdlib/opt.cml,1,— (no .cml under std/cxx),no earlier reading,552,484,"export rule / export func","0 / 6","RETRACTED DASH: the Lang-side rewrite is here, not under std/cxx, so the old glob could not reach it. fold, cse, dce, inline as Camel functions; replaces the four rewrites in std/cxx/opt/**. 552 - 484 = 68 blank lines"

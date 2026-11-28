@@ -5,6 +5,19 @@ tags = ["feat", "opt", "inline", "recursion", "camel"]
 
 # The recursion rule of `opt::inline` (stdlib/opt.cml), and its control.
 #
+# Two readings of the same question live here, and they are different questions, so a reader must
+# not merge them. This file reads **size**: how many call sites and how many nodes each graph has a
+# `std::jgir` run shows, and no graph above 64 nodes, which is what "the pass stopped where the rule
+# says it stops" looks like as a number. Whether the two implementations agree **graph for graph,
+# byte for byte** is `opt.cxx_isolation`'s question, and that file answers it in six pairs -- the
+# Figure 1 corpus (`inline_figure1`), a closure call that captures a variable (`inline_closure`,
+# `inline_closure_corpus`), a growth budget of 0 (`inline_budget_zero`) and recursion
+# (`inline_recursion`) and the paper's own program (`paper_figure1`), each `by_cpp` beside
+# `by_camel`, both run through `std::jgir canonical=true`
+# and compared with `compare_fields = ["exit_code", "stdout_normalized"]`. Equal counts beside a
+# byte difference (or the reverse) is a real reading of that file; one file's green says nothing
+# about the other's question.
+#
 # A pass that expands a call whose callee recurses does not stop there: expanding `down` into `main`
 # brings `down(n - 1)` into `main`, that call is still not a call of the graph being edited, and the
 # next round expands it again until the whole growth budget is spent -- `main` grew to 4095 nodes on
