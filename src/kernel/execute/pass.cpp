@@ -1729,7 +1729,7 @@ bool nodeRunsForItsEffect(
         if (access.resource.cls == camel::core::sem::ResourceClass::Ambient) {
             return true;
         }
-        if (access.mode != camel::core::sem::AccessMode::Read) {
+        if (camel::core::sem::writes(access.mode)) {
             writes = true;
         }
     }

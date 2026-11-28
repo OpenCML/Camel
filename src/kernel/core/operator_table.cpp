@@ -143,6 +143,23 @@ const camel::ops::Record *OperatorTable::recordOf(OperId id) const {
     return record == 0 ? nullptr : camel::ops::Registry::instance().find(record);
 }
 
+bool OperatorTable::mayBeWritten(const sem::Resource &resource) const {
+    // One scan of the declarations, and the answer they give: a resource is written exactly when
+    // some clause declares an access to it that writes. The judgement of "that access writes" is
+    // `Record::declaresWrite`, asked here for one resource -- it is not spelled a second time.
+    // Nothing about the resource's class is read: `Handle` covers a draft and a read-only handle
+    // alike, so a resource nothing writes (the graph, the spelling) answers false however its
+    // class is named.
+    const std::uint32_t count = size();
+    for (OperId id = 1; id < count; ++id) {
+        const camel::ops::Record *record = recordOf(id);
+        if (record != nullptr && record->declaresWrite(&resource)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 OperId OperatorTable::intern(std::string_view uri) {
     if (const auto known = lookup(uri)) {
         return *known;
@@ -1233,3 +1250,43 @@ FunctionValueClause functionValueClauseAt(
 }
 
 } // namespace camel::core
+
+namespace camel::ops {
+
+// ---- The footprint's two readings --------------------------------------------------------
+//
+// Both are declared on the record and implemented here, beside the table they ask: which
+// resources an operator's clause declares is the record's own statement, and whether one of them
+// is written is the table's -- `OperatorTable::mayBeWritten`. `pure` (the promise) is not read
+// here: an operator that reads a resource nothing writes keeps it.
+
+bool Record::declaresWrite(const camel::core::sem::Resource *of) const {
+    if (!uses.stated()) {
+        return false;
+    }
+    for (const camel::core::sem::ResourceAccess &access : uses.value.accesses) {
+        if ((of == nullptr || access.resource == *of) && camel::core::sem::writes(access.mode)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Record::accessesWritableResource() const {
+    if (!uses.stated()) {
+        return false;
+    }
+    // Only a read is a dependency that this bit is about (design principles: a read is a
+    // dependency, a write is an effect, and a write is ordered by the region's order edges). A
+    // clause that writes a resource some declaration writes does not read state that a write
+    // reaches, so its own write is not what this answers.
+    const camel::core::OperatorTable &table = camel::core::OperatorTable::instance();
+    for (const camel::core::sem::ResourceAccess &access : uses.value.accesses) {
+        if (!camel::core::sem::writes(access.mode) && table.mayBeWritten(access.resource)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace camel::ops
