@@ -18,6 +18,7 @@
 #include "nlohmann/json.hpp"
 // state.h 必须在任何会拉入 Windows 的头之前，避免 minwindef/wingdi 的 TRUE/FALSE/ERROR/IN/CONST
 // 与解析器冲突
+#include "camel/execute/pass/base.h"
 #include "core/debug_core.h"
 #include "state.h"
 
@@ -1178,7 +1179,7 @@ void DebuggerServer::httpServerLoop() {
                 stages.push_back({{"id", id}, {"label", id}});
             const auto &passes = getState().runPasses;
             if (passes.empty()) {
-                stages.push_back({{"id", "std::run"}, {"label", "fallback"}});
+                stages.push_back({{"id", ::runPassName()}, {"label", "fallback"}});
             } else {
                 for (const auto &p : passes) {
                     std::string label = p;

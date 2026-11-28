@@ -2408,6 +2408,9 @@ std::string runPassTarget() {
     return kRunPassDefaultTarget;
 }
 
+const char *runPassName() { return kRunPassName; }
+const char *runPassDefaultTarget() { return kRunPassDefaultTarget; }
+
 namespace {
 
 /// The kernel of `std::run`: the step that runs the program, handed to the pass the run's
@@ -2471,7 +2474,7 @@ void requireRunPassTarget(const context_ptr_t &ctx) {
                 kRunPassName,
                 std::format(
                     "`passes.run` names '{}', which is not a scheduling pass; `{}` runs the "
-                    "program, so it must name one (std::fvm, std::nvm, std::jit, std::prl)",
+                    "program, so it can only hand it to a pass that runs it",
                     target,
                     kRunPassName));
     }

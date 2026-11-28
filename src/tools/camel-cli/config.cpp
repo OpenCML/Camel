@@ -21,6 +21,7 @@
 #include "camel/execute/devices.h"
 #include "camel/execute/limits.h"
 #include "camel/execute/pass.h"
+#include "camel/execute/pass/base.h"
 #include "camel/execute/pass/params.h"
 #include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
@@ -357,7 +358,7 @@ string timeitSpec               = ""; // raw --timeit "std::jit/10"
 string inputFile                = ""; // from --input (alternative to first positional as file)
 string resolvedInputPath        = ""; // computed: inputFile or targetFiles[0]
 vector<string> resolvedPassList = {}; // computed: passes or derived from targetFiles
-vector<string> fallbackPasses   = {"std::run"};
+vector<string> fallbackPasses   = {::runPassName()};
 string runPassTarget            = ""; // passes.run; "" = the kernel's default target
 string timeitPass               = "";
 unsigned int timeitIterations   = 0;

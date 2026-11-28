@@ -131,6 +131,15 @@ void setRunPassTarget(const std::string &name);
 std::string runPassTarget();
 
 /**
+ * The name of the pass that runs the program (`std::run`) and the scheduling pass it stands for
+ * when the run configuration names none (`std::fvm`). Both are one string in the build, written
+ * here beside the declaration and the kernel that are the pass; a front end, a debugger and a
+ * tool that need either one ask for it instead of writing the name again.
+ */
+const char *runPassName();
+const char *runPassDefaultTarget();
+
+/**
  * Checks every name of a pass list, after alias resolution, before anything runs. Passes
  * contributed by modules ("tensor::fuse", "onnx::export_model") exist once the program's modules
  * are loaded, so this is called after compilation. Throws RuntimeDiag::UnrecognizedGraphPass
