@@ -16,12 +16,36 @@ timeout_ms = 10000
 
 [[tests]]
 name = "node_kinds_match_the_graph"
-desc = "Every graph of a program with a branch, closures and a fold lists the kinds the graph has, in the order `nodes` answers; the graph inventory and the kinds match the std::jgir dump of the same program. A literal written in a `with` position is built at the call, after the ordinary arguments (design principles 5.9), so it takes the last data node of its graph. The first list read `Port, Port, Oper, Join, Brch, Oper, Oper` -- the creation order, which put the `join` the branch ends at before the two operations that follow it. `nodes` answers the canonical order now (design principles 9.5), and the walk numbers a graph from what it returns. Three of the eight lists moved, each with the same kinds in a different order: `pick` is `Port, Port, Oper, Oper, Oper, Brch, Join` (the two operands of the join before it), `kinds` is `Port, Oper, Data, Oper` (the operator before the data it takes), and `main` is `Data, Data, Data, Func, Oper, Oper, Data, Data, Oper, Oper, Oper, Oper, Gate` (the three data nodes `main` builds first). The old values would ask for the creation order back."
+desc = "Every graph of a program with a branch, closures and a fold lists the kinds the graph has, in the order `nodes` answers; the graph inventory and the kinds match the std::jgir dump of the same program. A literal written in a `with` position is built at the call, after the ordinary arguments (design principles 5.9), so it takes the last data node of its graph. The first list read `Port, Port, Oper, Join, Brch, Oper, Oper` -- the creation order, which put the `join` the branch ends at before the two operations that follow it. `nodes` answers the canonical order now (design principles 9.5), and the walk numbers a graph from what it returns. Three of the eight lists moved, each with the same kinds in a different order: `pick` is `Port, Port, Oper, Oper, Oper, Brch, Join` (the two operands of the join before it), `kinds` is `Port, Oper, Data, Oper` (the operator before the data it takes), and `main` is `Data, Data, Func, Oper, Oper, Data, Data, Oper, Oper, Oper, Oper, Gate` (the two data nodes `main` builds first: it declares no return value, so it no longer builds the `0` it used to return). The old values would ask for the creation order back. The four anonymous graphs are named after the id they were created with, and a name is not what this case is about, so the comparison renumbers them by first appearance (see the entry)."
 kind = "behavior"
 case = "../../../cases/modules/graph_kinds.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "10\n[pick, total, kinds, main, __g_51__, __g_52__, __g_53__, __g_55__]\n[[NodeKind::Port, NodeKind::Port, NodeKind::Oper, NodeKind::Oper, NodeKind::Oper, NodeKind::Brch, NodeKind::Join], [NodeKind::Port, NodeKind::Data, NodeKind::Oper, NodeKind::Data, NodeKind::Data, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper, NodeKind::Data, NodeKind::Oper], [NodeKind::Data, NodeKind::Data, NodeKind::Data, NodeKind::Func, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Oper, NodeKind::Oper, NodeKind::Gate], [NodeKind::Port, NodeKind::Data, NodeKind::Func], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper]]\n"
+# The four anonymous graphs are named after the id they were created with, and that number is a
+# counter: a change that builds more graphs before this program moves it without touching anything
+# this case is about (`agents/refactor.md`: a test does not measure a count that changes for reasons
+# unrelated to the reading). So the names are renumbered by the order they appear in and everything
+# else is compared as written -- the same four marks in the same order, and the same kind lists.
+verify_script = """
+({ input, assert }) => {
+const renumber = (text) => {
+  const seen = new Map()
+  return text.replace(/__g_\d+__/g, (name) => {
+    if (!seen.has(name)) seen.set(name, `__g_${seen.size + 1}__`)
+    return seen.get(name)
+  })
+}
+const expected = [
+  '10',
+  '[pick, total, kinds, main, __g_1__, __g_2__, __g_3__, __g_4__]',
+  '[[NodeKind::Port, NodeKind::Port, NodeKind::Oper, NodeKind::Oper, NodeKind::Oper, NodeKind::Brch, NodeKind::Join], [NodeKind::Port, NodeKind::Data, NodeKind::Oper, NodeKind::Data, NodeKind::Data, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper, NodeKind::Data, NodeKind::Oper], [NodeKind::Data, NodeKind::Data, NodeKind::Func, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Oper, NodeKind::Oper, NodeKind::Gate], [NodeKind::Port, NodeKind::Data, NodeKind::Func], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper]]',
+].join('\n') + '\n'
+const got = renumber(input.normalized.stdout)
+let at = 0
+while (at < got.length && at < expected.length && got[at] === expected[at]) ++at
+assert(got === expected, `MISMATCH at=${at} gotLen=${got.length} expLen=${expected.length} got=${JSON.stringify(got.slice(Math.max(0, at - 30), at + 60))} exp=${JSON.stringify(expected.slice(Math.max(0, at - 30), at + 60))}`)
+}
+"""
 timeout_ms = 10000
 
 [[tests]]
