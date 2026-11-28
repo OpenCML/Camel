@@ -241,10 +241,6 @@ enum GCGraphFlag : uint8_t {
     /// A graph's macro-ness is the declaration's fact -- `#macro`, read by tag::declaresMacro off
     /// the exit node (GCGraph::isMacro) -- so there is no flag and no writer. The number stays
     /// unused so that every other bit keeps the value it had.
-    /// A commit looked at the graph's gates: none waits on nothing (GraphDraft::
-    /// dissolveUnorderedGates). A graph without it is looked at by the first commit that
-    /// reaches it; a graph with it is left as it is unless it is edited.
-    kGraphFlagGatesDissolved = 1 << 1,
     /// Some values of the graph have several writings (an equivalence table, writings.h). Such
     /// a graph is not in the executable state: it has no execution plan and no back end or
     /// exporter takes it; extraction brings it back.
