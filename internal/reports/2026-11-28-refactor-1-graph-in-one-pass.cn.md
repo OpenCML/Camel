@@ -151,7 +151,6 @@
 | `progen` | **100 个程序**（`test/tools/progen`，`test/plans/feat/opt/progen.plan.toml`） | 生成器专造"边界形状"：臂里的 `var`、循环携带、闭包捕获、分支值汇合。今天的两条红（seed 11、25）与昨天的两条（seed 71、39）都出自它 |
 | `examples/` | `test/plans/feat/examples.plan.toml` 里的全部用例 | 人手写的小程序，覆盖语言表面（`var`、`if`、循环、闭包、`match`），是"新路径不能把常见写法做坏"的第一道 |
 | `feat/compile` | `test/plans/feat/compile/**` 全部用例 | 编译器的自家用例：诊断、类型、期望行为都在这儿；`var` 降低换路径最容易碰坏的就是这一批 |
-
 | **臂里写 / 循环体里写 / 被闭包捕获**的 `var` 最小程序（各一条，人手写） | 3–6 个程序 | **这才是新旧路径真的会出差异的地方**：平直 `var` 今天已折叠成 SSA（§二·一），差异只会出现在这三类边界上；它们各自正对 `addArm`/`setArmResult`、`carriedVersions_`、`captures.cpp`。**同一条规矩：归不了因算新路径的错** |
 
 ## 三、比对方法（可执行步骤）
