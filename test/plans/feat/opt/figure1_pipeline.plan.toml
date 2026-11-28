@@ -1,0 +1,93 @@
+id = "opt.figure1_pipeline"
+order = 486
+tier = "fast"
+tags = ["feat", "opt", "inline", "figure1", "report"]
+
+# The pipeline the figure of the paper is drawn from, one reading per step, all with the Camel
+# inliner and the paper's own program (`inc(x) * 3 + (x + 1) * 4`, printed). These entries are the
+# source of the three graphs and the node counts the paper's figure carries; the last pair is the
+# comparison with the C++ inliner on the same downstream, compared on the canonical bytes.
+#
+# A step prints `std::gir`, so the entry's stdout IS the graph the report pastes, and the node count
+# of that graph is counted from those lines rather than from a summary.
+
+[[tests]]
+name = "figure1_pipeline.before"
+desc = "The paper's program before any pass: `inc` and `f` and `main`, the two calls `f` and `main` make, and `std::gir`'s dot output -- the graph the first step is read against."
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/paper_figure1.cml"
+args = ["${case}", "std::gir", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const text = input.normalized.stdout
+if (!text.includes("digraph")) throw new Error("std::gir printed no dot: " + text.slice(0, 200))
+if (!text.includes("F02") && !text.includes("subgraph")) {
+    throw new Error("the dot has no per function subgraph: " + text.slice(0, 200))
+}
+"""
+
+[[tests]]
+name = "figure1_pipeline.inline"
+desc = "Step one, `opt::inline`: the call `f` makes is expanded, so `inc`'s body is in the graph and `f`'s own call site is gone -- the dot output of the second graph of the report."
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/paper_figure1.cml"
+args = ["${case}", "opt::inline", "std::gir", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const text = input.normalized.stdout
+if (!text.includes("digraph")) throw new Error("std::gir printed no dot: " + text.slice(0, 200))
+"""
+
+[[tests]]
+name = "figure1_pipeline.cse"
+desc = "Step two, `+ opt::cse`: the `x + 1` the inlining brought in and the one the program writes become one node, so the third graph of the report has fewer nodes than the second and the same meaning."
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/paper_figure1.cml"
+args = ["${case}", "opt::inline", "opt::cse", "std::gir", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const text = input.normalized.stdout
+if (!text.includes("digraph")) throw new Error("std::gir printed no dot: " + text.slice(0, 200))
+"""
+
+[[tests]]
+name = "figure1_pipeline.algebra"
+desc = "Step three, `+ opt::algebra`: `a * 3 + a * 4` becomes `a * 7`, and the report's last graph ends in `x -> (+1) -> (*7)`. This is the entry whose stdout the report's figure is cut from."
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/paper_figure1.cml"
+args = ["${case}", "opt::inline", "opt::cse", "opt::algebra", "std::gir", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const text = input.normalized.stdout
+if (!text.includes("digraph")) throw new Error("std::gir printed no dot: " + text.slice(0, 200))
+if (!/label="7"/.test(text)) throw new Error("the folded constant 7 is not in the dot, so the algebra step did not run: " + text.slice(0, 300))
+"""
+
+[[tests]]
+name = "figure1_pipeline.algebra.by_cpp_inline"
+desc = "The same three steps with `std::cxx::inline` in place of `opt::inline` and the Camel passes after it: the dot output the Camel one is compared with, byte for byte."
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/paper_figure1.cml"
+args = ["${case}", "std::cxx::inline", "opt::cse", "opt::algebra", "std::gir", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const text = input.normalized.stdout
+if (!text.includes("digraph")) throw new Error("std::gir printed no dot: " + text.slice(0, 200))
+if (!/label="7"/.test(text)) throw new Error("the folded constant 7 is not in the dot, so the algebra step did not run: " + text.slice(0, 300))
+"""
+
+[[tests]]
+name = "figure1_pipeline.algebra.by_camel_inline"
+desc = "The Camel pipeline of the paper's figure, compared with the `std::cxx::inline` reading of the entry above on exit code and stdout: the two graphs are the same bytes, which is the claim the report makes."
+kind = "differential"
+case = "../../../cases/opt/cxx_isolation/paper_figure1.cml"
+args = ["${case}", "opt::inline", "opt::cse", "opt::algebra", "std::gir", "std::nop"]
+expect_exit = 0
+timeout_ms = 20000
+compare_to = "figure1_pipeline.algebra.by_cpp_inline"
+compare_fields = ["exit_code", "stdout_normalized"]
