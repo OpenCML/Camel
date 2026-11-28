@@ -578,3 +578,5 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
 · **"临时借补丁"多半是基点落后，不是补丁没合**（2026-11-28，`lane/block-hash`）：借之前先 `git merge-base --is-ancestor <sha> HEAD`。非 0 ⇒ 你的枝不含它，**别借补丁跑整层**（借了会毒化读数：`616f65b436` 会造出 `modules.graph_inline.a_call_through_a_value_reaches_what_its_type_declares` 与 `compile.type_packs.gradient_type.printed` 两条假红）；非借不可时在交回里点名该提交号、两条假红原名、以及"不借时绿"的那次读数；更好的做法是把基点移到含它的 `origin/integration`。
 
 · **借补丁会在树上留下暂存区残留**（2026-11-28）：`cherry-pick -n` 之后即使 `git restore` 了工作区，`git add` 过的内容仍可能在别人的 `git status` 里显示成"有人在改这个文件"——实例：`mm-capacity` 的 `staged.patch` 就是 `cherry-pick -n 616f65b436` 的残留，被当成了"第三个人的重复实现"。所以借补丁的正确收尾是**三件**：`git restore --staged` 撤暂存、`git restore` 撤工作区、`git status --porcelain` 必须为空；并把借用的提交号写进交回。
+
+· **提速类派工要先读那个类型的契约再写改法**（2026-11-28）：我曾在 `task-401` 的卡面写"把 `nodesOfTopo()` 的表存进 `ExecPlan` 一份"，而 `src/kernel/include/camel/runtime/exec_plan.h:16-19`/`:165-168` 明确写着"plan 是值、不持有读者填的表；后端自己的状态放后端（`fvm/version_state.h` 按 plan 键）"⇒ 那个改法会造**第二份真相**、违反契约。正确形状永远是**读者侧缓存**（后端自己的状态，keyed by plan）。教训：写"缓存/共享一张表"这类改法前，先读该类型头文件里的契约段与既有样板（`fvm/version_state.h`），并把"收益上限"写清（例如"只有两个调用点、每次一张表的一次性复制，不在节点循环里"⇒ 上限是每次进入一次，不是每节点）。
