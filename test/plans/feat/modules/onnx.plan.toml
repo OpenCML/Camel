@@ -3388,3 +3388,26 @@ assert(!fs.existsSync(`${input.test_tmp}/export_refusal_is_visible.onnx`), 'a re
 }
 """
 timeout_ms = 10000
+
+[[tests]]
+name = "export_collect_reverse_refused_by_name"
+desc = "A collecting loop exported through its gradient is refused by name: the reverse has to grow an array every round, and this exporter has no lowering that keeps it (a Loop's reverse cannot carry the array, only its length). The refusal is the exporter's own state -- 'this exporter does not yet lower a collecting loop's reverse into ONNX sequences' -- and not the generic 'no lowering at opset N', which would send the reader after a lowering that cannot exist. The append is recognised by the id the table interns (oper::Append / oper::AppendOwned), the same way the in-place append is, so the message cannot depend on how the operator's URI is spelled."
+
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_collect_reverse.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/export_collect_reverse.onnx"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const fs = await import('fs')
+const text = input.normalized.output
+assert(text.includes("this exporter does not yet lower a collecting loop's reverse into ONNX sequences"), 'the refusal must name the collecting loop\'s reverse: ' + text)
+assert(text.includes('ExportUnsupported'), 'the refusal must be the error value of the export_model call')
+assert(!text.includes('has no ONNX lowering at opset'), 'the generic message would send the reader after a lowering that cannot exist: ' + text)
+assert(!fs.existsSync(path.join(input.test_tmp, 'export_collect_reverse.onnx')), 'a refused export must not write a model')
+}
+"""
+timeout_ms = 30000
