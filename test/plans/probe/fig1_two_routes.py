@@ -34,29 +34,24 @@ def measure(passes):
         else:
             dot.append(line)
     text = "\n".join(dot)
-    gs = (stats or {}).get("graphs") or []
-    counts = "nodes=%d edges=%d direct_calls=%d" % (
-        sum(int(g.get("nodes", 0)) for g in gs),
-        sum(int(g.get("edges", 0)) for g in gs),
-        sum(int(g.get("direct_calls", 0)) for g in gs),
-    )
     return {
         "cmd": " ".join(cmd),
         "rc": p.returncode,
         "bytes": len(text),
         "sha256": hashlib.sha256(text.encode()).hexdigest(),
-        "counts": counts,
+        "stats": json.dumps(stats, sort_keys=True),
         "text": text,
         "stderr": (p.stderr.splitlines()[:2] if p.returncode != 0 else []),
     }
 
 seen = {}
-print("case=%s stage=%s" % (case, stage))
+print("case=%s stage=%s nostats=%s" % (case, stage, NO_STATS))
 for route, passes in ROUTES[stage]:
     m = measure(passes)
     seen[route] = m["text"]
     print("cmd[%s]=%s" % (route, m["cmd"]))
-    print("route=%s rc=%d bytes=%d sha256=%s %s" % (route, m["rc"], m["bytes"], m["sha256"], m["counts"]))
+    print("route=%s rc=%d bytes=%d sha256=%s" % (route, m["rc"], m["bytes"], m["sha256"]))
+    print("stats[%s]=%s" % (route, m["stats"]))
     if m["stderr"]:
         print("route=%s stderr=%s" % (route, m["stderr"]))
 if len(seen) == 2:
