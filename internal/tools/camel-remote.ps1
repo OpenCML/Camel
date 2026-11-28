@@ -561,6 +561,20 @@ if ($FromThisRun) {
 # The run registry's writer, shared with the local helpers so the append-and-compact rule exists
 # once (`internal/tools/run-registry.ps1`).
 . (Join-Path $PSScriptRoot 'run-registry.ps1')
+
+# The develop a change is read against is the repository's own, whatever this checkout calls the
+# remote that holds it: a lane's worktree names it `origin`, while a long-lived tree on the build
+# host keeps `origin` for the staging repository the transfer fetches from and names the upstream
+# `gh`. So an unstated -ChangedBase is the develop of the remote whose fetch URL is the upstream
+# repository; a checkout with no such remote keeps `origin/develop`, and a base that does not resolve
+# is still refused, by name, before anything is pushed.
+if (-not $PSBoundParameters.ContainsKey('ChangedBase')) {
+    $upstreamRemote = @(git -C $Path remote -v 2>$null) |
+        Where-Object { $_ -match '^(\S+)\s+\S*github\.com[:/]OpenCML/Camel(\.git)?\s+\(fetch\)$' } |
+        ForEach-Object { ($_ -split '\s+')[0] } |
+        Select-Object -First 1
+    if ($upstreamRemote) { $ChangedBase = "$upstreamRemote/develop" }
+}
 $cfg = Get-CamelGateConfig -LocalConfig $LocalConfig -ScriptRoot $PSScriptRoot -Override @{
     stateDir         = $StateDir
     hostLibStdCxxDir = $LibStdCxxDir
@@ -2289,11 +2303,11 @@ echo '__CAMEL_REMOTE_GOLDENS_END__'
         # checkout, before anything is transferred.
         if ($checkerSpec.changed) {
             $headSha = "$(& git -C $Path rev-parse HEAD 2>$null)".Trim()
-            $baseSha = "$(& git -C $Path merge-base 'origin/develop' HEAD 2>$null)".Trim()
+            $baseSha = "$(& git -C $Path merge-base $ChangedBase HEAD 2>$null)".Trim()
             if ($headSha -and $baseSha -and $headSha -eq $baseSha) {
                 Write-Host ''
                 Write-Host "[camel-remote] ${checkName}: the base and this tree are the same commit ($($headSha.Substring(0, 10))): there was no change to measure, so nothing was checked" -ForegroundColor Yellow
-                Write-Host "[camel-remote] this checkout's HEAD is already in origin/develop, so a diff against it is empty: the check can only pass by measuring nothing. Commit the change you want read (or read it against the commit it adds to) and run this again."
+                Write-Host "[camel-remote] this checkout's HEAD is already in $ChangedBase, so a diff against it is empty: the check can only pass by measuring nothing. Commit the change you want read (or read it against the commit it adds to) and run this again."
                 Write-Host ''
                 exit 2
             }

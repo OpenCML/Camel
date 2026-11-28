@@ -95,3 +95,27 @@ args = ["${case}", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "[eval] which=0 op=:op/add_l operands=2\nsubject runs\n[run] the edited function: 45\n"
 timeout_ms = 20000
+# A handle a draft answered names a session `commit` ends: the node is still a value the program
+# holds, and the draft it names is gone. Both doors answer that state the same way -- the edit
+# (`erase`, through `draftOf`) and the read (`nodes`, through `nodesKernel`) refuse it with the
+# message `commit` and `abort` leave behind, instead of reading the graph the commit freed. What is
+# pinned is the refusal: the same state read rather than refused was a crash in `GraphDraft::alive`.
+[[tests]]
+name = "erase_of_a_gone_draft_is_refused"
+desc = "A node read from a draft and used after the commit is refused by `graph.erase` with `the draft was committed or aborted already`, so the edit names no graph it would read from freed memory"
+kind = "negative"
+case = "../../../cases/modules/graph_function/draft_gone_erase_refused.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["graph.erase", "the draft was committed or aborted already"]
+timeout_ms = 20000
+
+[[tests]]
+name = "nodes_of_a_gone_draft_is_refused"
+desc = "`nodes` of a graph handle whose draft is over is refused with the same message as the edit operators, so a read of a closed draft answers the state instead of the graph the commit freed"
+kind = "negative"
+case = "../../../cases/modules/graph_function/draft_gone_nodes_refused.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["graph.nodes", "the draft was committed or aborted already"]
+timeout_ms = 20000

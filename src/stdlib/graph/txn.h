@@ -24,4 +24,10 @@ const std::unordered_map<std::string, operator_t> &txnKernels();
 /// (read.cpp) asks for them here.
 std::vector<Handle *> draftGraphHandles(const Handle *draft, const char *site);
 
+/// A handle that names a draft, refused when that draft is gone: `commit` and `abort` end the
+/// session the handles read from, and a read or an edit that still names it has no graph to answer
+/// about. The state `draftResource` faults on, asked of a handle that carries the draft without
+/// being the draft handle itself -- a node of a draft names its session too.
+void requireOpenDraft(const Handle *handle, const char *site);
+
 } // namespace camel::graphmod

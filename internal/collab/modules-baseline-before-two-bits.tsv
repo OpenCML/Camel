@@ -1,0 +1,29 @@
+name	in_table_141	known_cause
+op_stats.table.nvm	yes	未定位
+op_stats.table.fvm	yes	未定位
+export_unsupported_op	yes	未定位
+export_impure_op	yes	未定位
+pass_export_refusal_located.request_in_arm_json	yes	未定位
+as_refusal.constant_fails.pass	yes	未定位
+as_refusal.constant_fails.operator	yes	未定位
+slice_runtime	yes	未定位
+si_as_fails	yes	未定位
+si_as_fails_fvm	yes	未定位
+si_as_fails_jit	yes	未定位
+si_as_fails_prl	yes	未定位
+fusion_group.profile.none	yes	未定位
+npy_generic_wrapper_mismatch	yes	未定位
+rename.env_graph_identity	yes	未定位
+rename.process_graph_identity	yes	未定位
+types_and_node_kind	yes	未定位
+node_kinds_match_the_graph	yes	未定位
+constant_folding_makes_a_value	yes	未定位
+constant_folding_survives_a_safepoint	yes	未定位
+outline_delivers_the_graph_it_makes	yes	未定位
+outline_delivers_a_graph_the_bytecode_vm_can_compile	yes	未定位
+rules.repeat_counts_rounds	yes	schedulers 库编不过（'0 .. rounds' has type 'Range'）；根在"编 stdlib 库时 prelude 的导出表是空的"，lane-witness 正在修
+rules.repeat_honours_the_budget	yes	schedulers 库编不过（同上）
+rules.alternate_alternates_rounds	yes	schedulers 库编不过（同上）
+rules.until_reads_the_predicate_before_a_round	yes	schedulers 库编不过（同上）
+rules.until_honours_the_budget	yes	schedulers 库编不过（同上）
+xfail_probe	no	不是基线：本次运行开始前就已在本树里的未跟踪探针计划（test/plans/feat/modules/probe_xfail_probe.plan.toml），不属 feat/modules 基线

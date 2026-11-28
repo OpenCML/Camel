@@ -3200,6 +3200,8 @@ a45948295113b9b8 ok test/cases/modules/autodiff/jax_names/remat.cml
 153faf56b4924afe ok test/cases/modules/graph_facts/draft_effects_refused.cml
 bc050d891214f764 ok test/cases/modules/graph_facts/draft_facts.cml
 dbcd129fbbd73d44 ok test/cases/modules/graph_function/commit_effect.cml
+9f61241d18cc39bb ok test/cases/modules/graph_function/draft_gone_erase_refused.cml
+45adad02aca47bcf ok test/cases/modules/graph_function/draft_gone_nodes_refused.cml
 764ca84ab32241ed ok test/cases/modules/graph_function/edit.cml
 cb0bf332b4bf4de3 ok test/cases/modules/graph_function/erase_anchor_refused.cml
 a055ebc30df57a89 ok test/cases/modules/graph_function/eval_node.cml

@@ -1,0 +1,18 @@
+// The reading side of the same state: `nodes` of a graph handle whose draft is gone is refused with
+// the same message as `erase`, not answered from the graph the commit freed. A read and an edit name
+// the draft through different doors (`nodesKernel` and `draftOf`), and both have to answer the state
+// the same way.
+
+import { Graph, graphs, nodes, open, commit } from graph
+
+func subject(x: int) => int {
+    return x + 1
+}
+
+func main() sync {
+    let d = open(subject)
+    let g = graphs(d)[0]
+    let f = commit(d) !! subject
+    let n = len(nodes(g))
+    println(f(1) + n)
+}

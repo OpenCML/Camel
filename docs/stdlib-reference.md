@@ -2153,7 +2153,7 @@ lhs and rhs.
 #### `abs`
 
 ```camel
-abs: (t: float[...]) => float[...]
+abs: (t: T[...]) => T[...] when is_numeric::<T>()
 ```
 
 |x| per element: the sign cleared.
@@ -2231,7 +2231,7 @@ The hyperbolic tangent per element.
 #### `relu`
 
 ```camel
-relu: (t: float[...]) => float[...]
+relu: (t: T[...]) => T[...] when is_numeric::<T>()
 ```
 
 maximum(x, +0) per element: NaN gives the canonical NaN, and -0 gives +0.

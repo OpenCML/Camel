@@ -233,6 +233,9 @@ slot_t nodesKernel(ArgsView &, ArgsView &norm, Context &) {
     // in that order -- the order of the slots it holds, removed ones skipped -- and `id` of one of
     // them is what is refused (design principles 9.5).
     if (const auto *transaction = handle->transaction()) {
+        // The nodes of a session that is over: refused like every other read of a closed draft,
+        // not answered from a graph the commit freed.
+        requireOpenDraft(handle, "graph.nodes");
         const auto &draft = transaction->graph();
         for (size_t slot = 0; slot < draft.nodeSlotCount(); ++slot) {
             const auto ref     = static_cast<gc_node_ref_t>(slot);
@@ -262,6 +265,7 @@ slot_t paramsKernel(ArgsView &, ArgsView &norm, Context &) {
     std::vector<Handle *> items;
     std::vector<gc_node_ref_t> refs;
     if (const auto *transaction = handle->transaction()) {
+        requireOpenDraft(handle, "graph.params");
         const auto &draft = transaction->graph();
         const auto ports  = draft.normPorts();
         refs.assign(ports.begin(), ports.end());
@@ -1045,6 +1049,7 @@ GCRegion bodyRegion() { return GCRegion{}; }
 /// table, so there is nothing to return a reference to.
 GCRegion regionOf(const Handle *handle, const char *site) {
     if (const auto *transaction = handle->transaction()) {
+        requireOpenDraft(handle, site);
         const auto &draft = transaction->graph();
         if (handle->index() >= draft.regionCount()) {
             err::throwRuntimeFault(

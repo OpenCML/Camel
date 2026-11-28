@@ -124,7 +124,21 @@ std::vector<const graph::Graph *> graphsOf(std::span<const Anchor> anchors) {
     return graphs;
 }
 
-/// Whether two anchor lists name the same things, in the same order.
+/// The identity the store keys `graph` on, from the owner (`GraphAccess::identity`). 0 when the
+/// access states none: a store cannot invent an identity -- a pointer or a counter of its own would
+/// change when the graph is re-encoded, which is the defect the identity exists to remove -- so a
+/// graph it cannot name is a graph it cannot key, and the read says so (facts.h, `GraphAccess`).
+std::uint64_t identityOf(const GraphAccess &graphs, const graph::Graph &graph) {
+    return graphs.identity ? graphs.identity(graph) : 0;
+}
+
+/// Whether two anchor lists name the same things, in the same order: the same graph object at the
+/// same node. The object, not the identity, is what an entry is matched by -- two graphs can carry
+/// one identity and be two different graphs (a value transaction hands out a copy of a function
+/// while the original keeps running: design principles 9.1), and a fact taken while running one of
+/// them is not a fact about the other. What carries a fact from one version of a graph to the next
+/// is the version line itself: when a version ends, its entries are re-anchored on the version that
+/// is still there (`graphGone`), and only then is the entry found by the new object.
 bool sameAnchors(std::span<const Anchor> left, std::span<const Anchor> right) {
     if (left.size() != right.size()) {
         return false;
@@ -199,12 +213,19 @@ anchorsOf(const KindInfo &kind, const graph::Graph &graph, const graph::GraphVie
     return all;
 }
 
-/// The version of each anchored graph, one per distinct graph, in anchor order.
-std::vector<std::pair<const graph::Graph *, std::uint64_t>>
-versionsOf(std::span<const Anchor> anchors, const GraphAccess &graphs) {
-    std::vector<std::pair<const graph::Graph *, std::uint64_t>> versions;
+/// The identity and revision of each anchored graph, one per distinct graph, in anchor order. The
+/// distinctness is the identity's: two anchors on two versions of one graph are one graph read.
+std::vector<VersionMark> versionsOf(std::span<const Anchor> anchors, const GraphAccess &graphs) {
+    std::vector<VersionMark> versions;
     for (const graph::Graph *graph : graphsOf(anchors)) {
-        versions.emplace_back(graph, graphs.version ? graphs.version(*graph) : 0);
+        const std::uint64_t identity = identityOf(graphs, *graph);
+        const auto known = std::find_if(versions.begin(), versions.end(), [&](const auto &v) {
+            return v.identity == identity;
+        });
+        if (known != versions.end()) {
+            continue;
+        }
+        versions.push_back(VersionMark{identity, graphs.version ? graphs.version(*graph) : 0});
     }
     return versions;
 }
@@ -301,11 +322,13 @@ std::string factJson(
     }
     out += "{\"versions\":[";
     for (size_t i = 0; i < stored->versions.size(); ++i) {
+        // The graph's identity, as `anchors` print it: a stamp names the graph, not the object it
+        // was read from, and the object may be gone by the time a fact is printed.
         out += std::format(
             "{}{{\"graph\":{},\"version\":{}}}",
             i ? "," : "",
-            jsonString(labelOf(stored->versions[i].first)),
-            stored->versions[i].second);
+            jsonString(std::to_string(stored->versions[i].identity)),
+            stored->versions[i].revision);
     }
     out += "],\"reads\":{\"nodes\":[";
     for (size_t i = 0; i < stored->reads.nodes.size(); ++i) {
@@ -451,7 +474,12 @@ namespace {
 /// store is gone names nothing rather than a dead store.
 struct GraphHolds {
     std::mutex mutex;
-    std::unordered_map<const graph::Graph *, Store *> stores;
+    /// Every store that was told about a graph, by the graph's address. A graph is announced to
+    /// each store that answers about it (`holdGraph`), so this is a list and not one store per
+    /// graph: a second announcement must not displace the first, or the first store would never
+    /// hear that the graph ended -- its `alive_` would keep an address that the graph space gives
+    /// to the next graph, and it would clear a slot through it.
+    std::unordered_map<const graph::Graph *, std::vector<Store *>> stores;
     /// The stores the framework made for a graph and therefore owns (`storeHolding`: a draft has no
     /// program to announce it, so its store is made here). They are destroyed in `forgetGraph`,
     /// when the graph says it is gone.
@@ -463,12 +491,53 @@ GraphHolds &graphHolds() {
     return *holds;
 }
 
+/// Every store that exists. A graph says it is gone once (`forgetGraph`), and every store hears it:
+/// an entry names the graphs it read in its anchors, and a store told only about the graph it calls
+/// its own would keep an anchor on a graph that ended and read through it later. The list is short
+/// (one store per context plus the drafts) and a graph's end is not on any fast path.
+struct LiveStores {
+    std::mutex mutex;
+    std::vector<Store *> stores;
+};
+
+LiveStores &liveStores() {
+    static LiveStores *live = new LiveStores();
+    return *live;
+}
+
+void addLiveStore(Store *store) {
+    std::lock_guard lock(liveStores().mutex);
+    liveStores().stores.push_back(store);
+}
+
+void removeLiveStore(Store *store) {
+    std::lock_guard lock(liveStores().mutex);
+    std::erase(liveStores().stores, store);
+}
+
+std::vector<Store *> liveStoreList() {
+    std::lock_guard lock(liveStores().mutex);
+    return liveStores().stores;
+}
+
 } // namespace
 
 GraphAccess frozenGraphs(std::function<const graph::Graph *(const graph::Graph &, NodeId)> callee) {
     return GraphAccess{
-        .view    = [](const graph::Graph &graph) { return &graph.view(); },
-        .version = [](const graph::Graph &) { return std::uint64_t(0); },
+        .view = [](const graph::Graph &graph) { return &graph.view(); },
+        .identity =
+            [](const graph::Graph &graph) {
+                return std::uint64_t(runtime::toValue(runtime::graphIdentity(graph)));
+            },
+        .version = [](const graph::Graph &graph) { return runtime::graphRevision(graph); },
+        // What a fact of a kind that reports its reads is checked against: a frozen graph versions
+        // its nodes (`GCGraph::nodeContentHash`), so a fact holds while every node it read is
+        // unchanged although the graph was re-encoded around it. A region has no such number yet,
+        // so a fact that reported reading one keeps the conservative rule (facts.h).
+        .nodeVersion =
+            [](const graph::Graph &graph, NodeId node) {
+                return runtime::graphNodeVersion(graph, static_cast<runtime::gc_node_ref_t>(node));
+            },
         // The owner's answer, when it gave one: a graph does not know its program, so the walk
         // across a call asks whoever holds the graphs (facts.h, GraphAccess::callee).
         .callee = std::move(callee),
@@ -487,9 +556,15 @@ GraphAccess frozenGraphs(std::function<const graph::Graph *(const graph::Graph &
 GraphAccess draftGraphs() {
     return GraphAccess{
         .view = [](const graph::Graph &graph) { return &graph.view(); },
+        // A draft is a graph too: its id is the identity of the version line the session is
+        // editing, and the same id survives the commits a session makes.
+        .identity =
+            [](const graph::Graph &graph) {
+                return std::uint64_t(runtime::toValue(runtime::graphIdentity(graph)));
+            },
         // The draft's revision: a fact about a draft must be dropped when an edit makes what it
-        // read different, and a frozen graph's constant 0 would keep it forever (facts.h).
-        .version = [](const graph::Graph &graph) { return runtime::graphContentVersion(graph); },
+        // read different, and a constant would keep it forever (facts.h).
+        .version = [](const graph::Graph &graph) { return runtime::graphRevision(graph); },
         // Empty, and not for want of a resolver: a draft's callee is a `GraphId` whose graph is
         // held by a `Program`, and no program holds a draft (`Program::calleeOf`).
         .callee  = {},
@@ -503,10 +578,16 @@ GraphAccess draftGraphs() {
     };
 }
 
-void holdGraph(Store &store, const graph::Graph &graph) {
+void holdGraph(Store &store, const graph::Graph &graph, std::uint64_t identity) {
+    // The store's own record of the line: which versions of a graph are alive is what decides
+    // whether a fact survives the end of one of them (graphGone).
+    store.noteGraph(graph, identity);
     GraphHolds &holds = graphHolds();
     std::lock_guard lock(holds.mutex);
-    holds.stores[&graph] = &store;
+    std::vector<Store *> &told = holds.stores[&graph];
+    if (std::find(told.begin(), told.end(), &store) == told.end()) {
+        told.push_back(&store);
+    }
 }
 
 Store *storeHolding(const graph::Graph &graph) {
@@ -514,8 +595,8 @@ Store *storeHolding(const graph::Graph &graph) {
     {
         std::lock_guard lock(holds.mutex);
         const auto it = holds.stores.find(&graph);
-        if (it != holds.stores.end()) {
-            return it->second;
+        if (it != holds.stores.end() && !it->second.empty()) {
+            return it->second.front();
         }
         if (!runtime::graphIsDraft(graph)) {
             return nullptr;
@@ -524,47 +605,62 @@ Store *storeHolding(const graph::Graph &graph) {
         // (`program.cpp`, `holdGraph`) and its answers belong to the session it is being built in
         // (core abstractions section 2), so the framework keeps them itself and drops them with
         // the draft (`forgetGraph`, told from `~GraphDraft`).
-        Store *made          = new Store(draftGraphs(), /*persistent=*/false);
-        holds.stores[&graph] = made;
+        Store *made = new Store(draftGraphs(), /*persistent=*/false);
+        made->noteGraph(graph, runtime::toValue(runtime::graphIdentity(graph)));
+        holds.stores[&graph].push_back(made);
         holds.made.insert(made);
         return made;
     }
 }
 
-void forgetGraph(const graph::Graph *graph) {
+void forgetGraph(const graph::Graph *graph, std::uint64_t identity) {
     if (graph == nullptr) {
         return;
     }
-    Store *store = nullptr;
-    bool made    = false;
+    std::vector<Store *> owned;
+    std::vector<Store *> told;
     {
         GraphHolds &holds = graphHolds();
         std::lock_guard lock(holds.mutex);
-        const auto it = holds.stores.find(graph);
-        if (it != holds.stores.end()) {
-            store = it->second;
-            holds.stores.erase(it);
-            const auto own = holds.made.find(store);
-            if (own != holds.made.end()) {
-                holds.made.erase(own);
-                made = true;
+        if (const auto it = holds.stores.find(graph); it != holds.stores.end()) {
+            for (Store *store : it->second) {
+                if (const auto own = holds.made.find(store); own != holds.made.end()) {
+                    holds.made.erase(own);
+                    owned.push_back(store);
+                }
+                told.push_back(store);
             }
+            holds.stores.erase(it);
         }
     }
-    // Outside the holds' lock: the store takes its own (and its destructor takes this one again
-    // when it takes its rows out).
-    if (store != nullptr) {
-        store->invalidateGraph(graph);
-        if (made) {
-            delete store;
+    // Every store that named this graph hears it, not only the one it was announced to: an entry
+    // that named the graph in an anchor lives wherever it was computed, and a store that keeps
+    // such an anchor reads the graph's memory after it is gone. The stores that named it are
+    // known without a sweep (`Store::names`: one lookup per store, and the stores are few), so a
+    // graph's end costs the entries of the stores that actually hold it and not every entry of
+    // every store. Outside the holds' lock, because a store takes its own (and its destructor
+    // takes the holds' again when it takes its rows out).
+    for (Store *store : liveStoreList()) {
+        if (std::find(told.begin(), told.end(), store) != told.end()) {
+            continue;
         }
+        if (!store->names(graph)) {
+            continue;
+        }
+        told.push_back(store);
+    }
+    for (Store *store : told) {
+        store->graphGone(graph, identity);
+    }
+    for (Store *store : owned) {
+        delete store;
     }
 }
 
 // ---- Store -----------------------------------------------------------------------------------
 
 size_t Store::KeyHash::operator()(const Key &key) const {
-    size_t seed = std::hash<const graph::Graph *>{}(key.graph);
+    size_t seed = std::hash<std::uint64_t>{}(key.graph);
     seed ^=
         std::hash<std::uint32_t>{}(key.kind) + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
     seed ^= std::hash<NodeId>{}(key.node) + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
@@ -572,23 +668,171 @@ size_t Store::KeyHash::operator()(const Key &key) const {
 }
 
 Store::Store(GraphAccess graphs, bool persistent)
-    : graphs_(std::move(graphs)), persistent_(persistent) {}
+    : graphs_(std::move(graphs)), persistent_(persistent) {
+    addLiveStore(this);
+}
 
+bool Store::names(const graph::Graph *graph) const {
+    std::lock_guard lock(mutex_);
+    return named_.find(graph) != named_.end();
+}
+
+bool Store::aliveLocked(const graph::Graph *graph) const {
+    if (graph == nullptr) {
+        return false;
+    }
+    if (!toldAboutGraphs_) {
+        // A store nobody told about graphs (one a check keeps for itself) clears as it always did:
+        // its caller is the only one holding the graph, so the graph is there when it clears.
+        return true;
+    }
+    return alive_.find(graph) != alive_.end();
+}
+
+void Store::clearSlotsOfLocked(KindId kind, const Entry &entry) {
+    for (const Anchor &anchor : entry.anchors) {
+        // A graph that has ended is not cleared through: its slot went with it, and the entry that
+        // named it is dropped instead (camel/runtime/fact_slots.h, `clearSlot`).
+        if (!aliveLocked(anchor.graph)) {
+            continue;
+        }
+        const Anchor one = anchor;
+        clearSlot(graphs_, kind, std::span<const Anchor>(&one, 1));
+    }
+}
+
+void Store::noteGraph(const graph::Graph &graph, std::uint64_t identity) {
+    std::lock_guard lock(mutex_);
+    // From here on this store is not on its own: it clears only through the graphs it still knows
+    // are alive (`aliveLocked`), and it is told when each of them ends.
+    toldAboutGraphs_ = true;
+    if (identity == 0) {
+        // A graph announced while it is still being built has no identity to key a line with. It is
+        // still a graph this store must hear the end of, or it would clear a slot through the
+        // address after the space handed it to the next graph.
+        alive_[&graph] = 0;
+        return;
+    }
+    // An address is a graph only for as long as that graph is there. If this one was already known
+    // under another identity, its old line is stale and the address must leave it: the space gives
+    // an address to the next graph it builds, and a stale row would make this store re-anchor an
+    // entry onto whatever now lives there.
+    if (const auto previous = alive_.find(&graph); previous != alive_.end()) {
+        if (const auto line = lines_.find(previous->second); line != lines_.end()) {
+            line->second.erase(&graph);
+            if (line->second.empty()) {
+                lines_.erase(line);
+            }
+        }
+    }
+    alive_[&graph] = identity;
+    lines_[identity].insert(&graph);
+}
+
+void Store::graphGone(const graph::Graph *graph, std::uint64_t identity) {
+    if (graph == nullptr) {
+        return;
+    }
+    std::lock_guard lock(mutex_);
+    // Nothing of this store names the graph and it was never told about it: there is no entry to
+    // drop and no slot of this store to clear, so the sweep below would visit every entry to find
+    // that out.
+    if (named_.find(graph) == named_.end() && alive_.find(graph) == alive_.end()) {
+        return;
+    }
+    // The version that is still there, if any: a fact of this graph's own line moves to it instead
+    // of going with the object it was read from.
+    const graph::Graph *successor = nullptr;
+    if (identity != 0) {
+        if (const auto line = lines_.find(identity); line != lines_.end()) {
+            for (const graph::Graph *candidate : line->second) {
+                if (candidate != graph) {
+                    successor = candidate;
+                    break;
+                }
+            }
+        }
+    }
+    // Every entry that names this graph in any anchor, not only the ones keyed by its identity: a
+    // fact read across a call names several graphs, and the graphs it does not call its own were
+    // announced to *their* store, not this one. An anchor left naming a graph that is gone is read
+    // by `identityOf`/`versionsOf` -- a cast through freed memory -- and the space hands the
+    // address to the next graph it builds, so it is not a read that merely answers wrong.
+    for (auto row = entries_.begin(); row != entries_.end();) {
+        auto &list         = row->second;
+        const bool ownLine = identity != 0 && row->first.graph == identity;
+        for (auto entry = list.begin(); entry != list.end();) {
+            // The slot this entry published lives in the graph that is ending, and a slot that
+            // outlived its fact would name a value nobody owns. It is cleared here, while that
+            // graph is still there.
+            bool named = false;
+            for (const Anchor &anchor : entry->anchors) {
+                if (anchor.graph != graph) {
+                    continue;
+                }
+                named = true;
+                clearSlot(graphs_, row->first.kind, std::span<const Anchor>(&anchor, 1));
+            }
+            if (!named) {
+                ++entry;
+                continue;
+            }
+            if (!ownLine || successor == nullptr) {
+                // The fact keeps no way back to this graph: its value was computed with the graph
+                // that is now gone, so it goes with it.
+                entry = list.erase(entry);
+                continue;
+            }
+            // The fact is about the graph, not about the object that held it: it moves to the
+            // version that is still there. Its slot is not written there -- a node id is stable
+            // along a line only for the nodes the encoding kept, and a slot for a node that
+            // version does not carry is a write past the end of its table.
+            for (Anchor &anchor : entry->anchors) {
+                if (anchor.graph == graph) {
+                    anchor.graph = successor;
+                }
+            }
+            named_.insert(successor);
+            bool duplicate = false;
+            for (auto other = list.begin(); other != entry && !duplicate; ++other) {
+                duplicate = sameAnchors(other->anchors, entry->anchors);
+            }
+            if (duplicate) {
+                // The version that is still there already has this fact.
+                entry = list.erase(entry);
+                continue;
+            }
+            ++entry;
+        }
+        row = list.empty() ? entries_.erase(row) : std::next(row);
+    }
+    alive_.erase(graph);
+    named_.erase(graph);
+    if (const auto line = lines_.find(identity); line != lines_.end()) {
+        line->second.erase(graph);
+        if (line->second.empty()) {
+            lines_.erase(line);
+        }
+    }
+}
 Store::~Store() {
+    removeLiveStore(this);
     // A graph may outlive the store (the store goes with its context; a frozen graph can be freed
     // after it). Every slot this store published is cleared while the values it names are still
     // its own -- after this body they are released with the entries, and a slot left behind would
     // name a fact nobody owns (camel/runtime/fact_slots.h).
     for (const auto &[key, list] : entries_) {
         for (const Entry &entry : list) {
-            clearSlot(graphs_, key.kind, entry.anchors);
+            clearSlotsOfLocked(key.kind, entry);
         }
     }
     // A store that goes before the graphs it was told about stops being their answer: the graph's
     // end (`forgetGraph`) then names no store rather than a dead one.
     GraphHolds &holds = graphHolds();
     std::lock_guard lock(holds.mutex);
-    std::erase_if(holds.stores, [this](const auto &item) { return item.second == this; });
+    std::erase_if(holds.stores, [this](const auto &item) {
+        return std::find(item.second.begin(), item.second.end(), this) != item.second.end();
+    });
 }
 
 void Store::checkType(KindId kind, const std::type_info &type) {
@@ -603,7 +847,14 @@ void Store::checkType(KindId kind, const std::type_info &type) {
 Store::Entry *
 Store::find(KindId kind, std::span<const Anchor> anchors, std::uint64_t target, Status &status) {
     status      = Status::Absent;
-    auto bucket = entries_.find(Key{kind, anchors[0].graph, anchors[0].node});
+    if (anchors.empty() || anchors[0].graph == nullptr) {
+        return nullptr;
+    }
+    const std::uint64_t identity = identityOf(graphs_, *anchors[0].graph);
+    if (identity == 0) {
+        return nullptr; // no identity, so nothing can be keyed on it (facts.h, GraphAccess)
+    }
+    auto bucket = entries_.find(Key{kind, identity, anchors[0].node});
     if (bucket == entries_.end()) {
         return nullptr;
     }
@@ -651,7 +902,7 @@ Store::find(KindId kind, std::span<const Anchor> anchors, std::uint64_t target, 
         return &*it;
     }
     // The fact is gone: its slot goes first, while the value it names is still the entry's.
-    clearSlot(graphs_, kind, it->anchors);
+    clearSlotsOfLocked(kind, *it);
     list.erase(it);
     if (list.empty()) {
         entries_.erase(bucket);
@@ -680,6 +931,16 @@ void Store::putValue(
     if (!value) {
         reject(info.key, "no value");
     }
+    if (anchors.empty() || anchors[0].graph == nullptr) {
+        reject(info.key, "no anchor graph");
+    }
+    const std::uint64_t identity = identityOf(graphs_, *anchors[0].graph);
+    if (identity == 0) {
+        reject(
+            info.key,
+            "the store's owner states no identity for the anchor graph (GraphAccess::identity), "
+            "so a fact about it cannot be keyed");
+    }
     Entry entry;
     entry.anchors  = std::vector<Anchor>(anchors.begin(), anchors.end());
     entry.value    = std::move(value);
@@ -687,7 +948,7 @@ void Store::putValue(
     entry.target   = target;
     entry.epoch    = 0;
     std::lock_guard lock(mutex_);
-    auto &list = entries_[Key{kind, anchors[0].graph, anchors[0].node}];
+    auto &list = entries_[Key{kind, identity, anchors[0].node}];
     auto it    = std::find_if(list.begin(), list.end(), [&](const Entry &known) {
         return sameAnchors(known.anchors, anchors);
     });
@@ -697,6 +958,11 @@ void Store::putValue(
     } else {
         *it = std::move(entry);
         publishSlot(graphs_, kind, info.scope, anchors, it->value.get());
+    }
+    for (const Anchor &anchor : anchors) {
+        if (anchor.graph != nullptr) {
+            named_.insert(anchor.graph);
+        }
     }
     ++counts_.puts;
 }
@@ -742,6 +1008,13 @@ Store::obtainValue(KindId kind, std::span<const Anchor> anchors, std::uint64_t t
     // Stored with what it reported reading: the entry's stamp holds it, and the epoch it was
     // computed at is the registry's while those reads name records.
     const std::uint64_t epoch = reads.declarations() ? ops::Registry::instance().epoch() : 0;
+    const std::uint64_t identity = identityOf(graphs_, *anchors[0].graph);
+    if (identity == 0) {
+        // An access without an owner has no identity either (facts.h, GraphAccess): this read still
+        // answers, and what it computed is not stored -- a fact that cannot be keyed cannot be
+        // found again.
+        return value;
+    }
     Entry entry;
     entry.anchors  = std::vector<Anchor>(anchors.begin(), anchors.end());
     entry.value    = value;
@@ -768,7 +1041,7 @@ Store::obtainValue(KindId kind, std::span<const Anchor> anchors, std::uint64_t t
         }
     }
     std::lock_guard lock(mutex_);
-    auto &list = entries_[Key{kind, anchors[0].graph, anchors[0].node}];
+    auto &list = entries_[Key{kind, identity, anchors[0].node}];
     auto it    = std::find_if(list.begin(), list.end(), [&](const Entry &known) {
         return sameAnchors(known.anchors, anchors);
     });
@@ -778,6 +1051,11 @@ Store::obtainValue(KindId kind, std::span<const Anchor> anchors, std::uint64_t t
     } else {
         *it = std::move(entry);
         publishSlot(graphs_, kind, info.scope, anchors, it->value.get());
+    }
+    for (const Anchor &anchor : anchors) {
+        if (anchor.graph != nullptr) {
+            named_.insert(anchor.graph);
+        }
     }
     ++counts_.puts;
     return value;
@@ -823,15 +1101,22 @@ std::optional<bool> Store::verify(KindId kind, std::span<const Anchor> anchors) 
 void Store::invalidate(KindId kind, std::span<const Anchor> anchors) {
     const KindInfo &info = kindInfo(kind);
     checkAnchors(info, anchors, graphs_);
+    if (anchors.empty() || anchors[0].graph == nullptr) {
+        return;
+    }
+    const std::uint64_t identity = identityOf(graphs_, *anchors[0].graph);
+    if (identity == 0) {
+        return;
+    }
     std::lock_guard lock(mutex_);
-    auto bucket = entries_.find(Key{kind, anchors[0].graph, anchors[0].node});
+    auto bucket = entries_.find(Key{kind, identity, anchors[0].node});
     if (bucket == entries_.end()) {
         return;
     }
     auto &list = bucket->second;
     for (auto it = list.begin(); it != list.end();) {
         if (sameAnchors(it->anchors, anchors)) {
-            clearSlot(graphs_, kind, it->anchors);
+            clearSlotsOfLocked(kind, *it);
             it = list.erase(it);
         } else {
             ++it;
@@ -843,14 +1128,20 @@ void Store::invalidate(KindId kind, std::span<const Anchor> anchors) {
 }
 
 void Store::invalidateGraph(const graph::Graph *graph) {
+    if (graph == nullptr) {
+        return;
+    }
+    // The entries of this graph, by identity: every version of it the store answered for is one
+    // row of the map, and `graph` names that row whichever version it is.
+    const std::uint64_t identity = identityOf(graphs_, *graph);
     std::lock_guard lock(mutex_);
     for (auto it = entries_.begin(); it != entries_.end();) {
-        if (it->first.graph != graph) {
+        if (it->first.graph != identity) {
             ++it;
             continue;
         }
         for (const Entry &entry : it->second) {
-            clearSlot(graphs_, it->first.kind, entry.anchors);
+            clearSlotsOfLocked(it->first.kind, entry);
         }
         it = entries_.erase(it);
     }
@@ -860,7 +1151,7 @@ void Store::clear() {
     std::lock_guard lock(mutex_);
     for (const auto &[key, list] : entries_) {
         for (const Entry &entry : list) {
-            clearSlot(graphs_, key.kind, entry.anchors);
+            clearSlotsOfLocked(key.kind, entry);
         }
     }
     entries_.clear();

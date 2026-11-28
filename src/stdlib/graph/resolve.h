@@ -24,6 +24,8 @@
 
 #pragma once
 
+#include "txn.h"
+
 #include "handle.h"
 
 #include "camel/core/error/runtime.h"
@@ -91,6 +93,9 @@ inline NodeView viewOf(const Handle *handle, const char *site) {
     // there is no other way to be in a draft, and the handle keeps no draft pointer of its own.
     const auto *transaction = handle->transaction();
     if (transaction != nullptr) {
+        // A read through a session that is over has no graph to be answered about: the same state
+        // the edit operators refuse, refused here instead of read from a draft the commit freed.
+        requireOpenDraft(handle, site);
         view.transaction = transaction;
         view.ref         = handle->index();
         view.draftHeader = transaction->graph().header(view.ref);
