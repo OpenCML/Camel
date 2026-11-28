@@ -1,0 +1,61 @@
+{
+  "kind": "promotion",
+  "promotion": 82,
+  "tip": "0cffdccda2a59a19741503cec47fbac53455b4f4",
+  "measured_tip": "0cffdccda2a59a19741503cec47fbac53455b4f4",
+  "pushed_develop_sha": "0cffdccda2a59a19741503cec47fbac53455b4f4",
+  "landing_tip": "the record is a documentation commit and lands on whatever integration holds at push time; the tip this layer measured was taken with git rev-parse at the moment the run started, and integration was still moving every couple of minutes, so it is fixed there and anything after it is not part of this layer",
+  "note": "the layer was measured at 0cffdccda2a5 on the quietest host window of the day, 1m 23.76, and it covers what the eighty-first layer did not: seat/batch23 built and read at 38d521d8b34a, lane/opt-inline-pairs with the inliner stating why a pair is worth inlining, lane/cc-eval-prelim-2's second landing, and a new case that states one_hot's derivative is zero. None of it moved a verdict in either direction",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at 0cffdccda2a5; load 1m 23.76 at the start of the run, the lowest of the day",
+  "binary_built": "2026-11-28T16:33:50+08:00",
+  "readings": {
+    "total": 9930,
+    "pass": 9736,
+    "fail": 133,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 0,
+    "re_run": 0,
+    "re_run_passed": 0,
+    "load_before": "1m 23.76, 5m 24.14, 15m 24.67",
+    "load_warning": "[load] WARNING: 1m load 23.76 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth to eighty-first layers carried; a promotion does not wait on load, D-1128-36). This was nevertheless the quietest window of the day and the reading is the best-conditioned promotion reading since the sixty-sixth"
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-81-reds.tsv (the eighty-first promotion, 133 names)",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], with the plan aliases transforms/compile.transforms and stated_extents/compile.stated_extents read as the same plan; this reading writes the bare names transforms (9 rows this time, one more than before) and stated_extents (1 row)",
+    "still_red": 133,
+    "turned_green": 0,
+    "turned_green_names": [],
+    "new_reds": 0,
+    "new_reds_names": [],
+    "vanished_reds": 0,
+    "arithmetic": "133 names before: 0 turned green, 0 vanished, 0 appeared, 133 remain red; the two sets are the same set name for name",
+    "total_delta": "plus one: the layer declares 9930 entries against the eighty-first layer's 9929, and the one that appeared is transforms/transforms.derivative_of_one_hot_is_zero.nvm, a new case stating that one_hot's derivative is zero, and it passes. No case was removed and no case changed status",
+    "notes": [
+      "seat/batch23 and lane/opt-inline-pairs both change source and both left the red set untouched in either direction: the inliner's new diagnostics are not a verdict, and batch23's reading was plan-scoped",
+      "the layer ran in the quietest window of the day and produced the same 133 names, which is the useful part: a red set that does not move when the host is quiet and does not move when it is busy is a red set that is not load-driven",
+      "no case timed out in this layer and none was re-run; fault_deep.prl_off is absent for the sixteenth round running because the scheduler root-cause fix holds"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 0,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [],
+    "how": "the layer reported timed_out 0 and re_run 0, so there was no timeout to run alone"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-82-reds.tsv",
+  "red_table_rows": 133,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-82-reds.tsv (133 names)",
+  "new_red_names": [],
+  "pushed_as": "develop, fast-forwarded from fbdc5de8e1f4 to 0cffdccda2a5, the tip this layer measured",
+  "develop_before": "fbdc5de8e1f499739a3de2778823243a9767f0a4",
+  "develop_after": "0cffdccda2a59a19741503cec47fbac53455b4f4",
+  "commits_brought_in": 41,
+  "commits_touching_src": 4
+}
