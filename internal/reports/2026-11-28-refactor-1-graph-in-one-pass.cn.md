@@ -172,6 +172,7 @@
 | `examples/` | `test/plans/feat/examples.plan.toml` 里的全部用例 | 人手写的小程序，覆盖语言表面（`var`、`if`、循环、闭包、`match`），是"新路径不能把常见写法做坏"的第一道 |
 | `feat/compile` | `test/plans/feat/compile/**` 全部用例 | 编译器的自家用例：诊断、类型、期望行为都在这儿；`var` 降低换路径最容易碰坏的就是这一批 |
 | **臂里写 / 循环体里写 / 被闭包捕获**的 `var` 最小程序（各一条，人手写） | 3–6 个程序 | **这才是新旧路径真的会出差异的地方**：平直 `var` 今天已折叠成 SSA（§二·一），差异只会出现在这三类边界上；它们各自正对 `addArm`/`setArmResult`、`carriedVersions_`、`captures.cpp`。**同一条规矩：归不了因算新路径的错** |
+| **`foreach` 作用在 `Range` 上**（`(0 .. 3)->foreach<show>`，9 行） | 1 个程序 | 每日审查第 2 条点名的形状：`builder_call.cpp` 的 `withParameterOfSelectedEntry` 在 `signatureForArgumentContext` 之外再扫一遍候选条目，**第二条"选哪个条目"的路径在这里被走到**。今天它是**绿的**（读数见下）⇒ 它是**护栏**：新旧路径都要绿，且两条路径若给出不同条目，按 §3.4 归因 |
 
 ## 三、比对方法（可执行步骤）
 
@@ -273,6 +274,33 @@ Get-ChildItem out/migrate/corpus/*.cml | ForEach-Object {
 **规矩不变**：每类的差异**逐个归因**（§3.4），**归不了因的一律算新路径的错**。
 
 ## 不做什么
+### 3.7 `foreach` / `Range` 这条护栏（每日审查第 2 条的一半）
+
+每日审查（`internal/plans/2026-11-28-daily-review.cn.md`，`fsh-dev@1188fb1b0d`）第 2 条的修法原句：**"`foreach` 对 `Range` 这个例子进回归用例，答案归那一个解析器。"** 另一半（`builder_call.cpp` 的 `withParameterOfSelectedEntry` 在 `signatureForArgumentContext` 之外再扫一遍候选条目）**归"前端类型检查"那件重构**，不在①的范围里，本车道不碰 `builder_call.cpp`。
+
+**今天的读数（`lane/progen` 上现跑的，探针已删）**：
+
+```
+foreach_range [gir]: exit=0 lines=119      （产物首行 digraph GraphIR {）
+foreach_range [run]: exit=0 → 0 / 1 / …
+```
+
+程序（9 行）：
+
+```cml
+func show(x: int) => void sync {
+    println(x)
+}
+
+func main() sync {
+    (0 .. 3)->foreach<show>
+}
+```
+
+**结论**：今天**不是红的** ⇒ 它不进 §3.4 的"旧路径缺陷"行，而是**护栏行**：新旧路径下都必须 `exit=0` 且 canonical 一致。**自纠一条**：我第一版写成 `for x in 0..4 { … }`，解析器报 `Unexpected 'for'; expected '}'.` —— 语言里没有 `for` 关键字，`foreach` 是库函数（`(0 .. 6)->foreach<show>`，见 `test/cases/consistency/faults/fault_in_foreach.cml`），页里按后者的形状写。
+
+---
+
 
 - **不打第三轮打印**（定位到行不产出修法）。
 - **不动 `src/`**（这一笔只交材料）。
