@@ -1,0 +1,88 @@
+{
+  "kind": "promotion",
+  "promotion": 80,
+  "tip": "8a8c5e9843b82de976b74a50c4bac87c41c76bdc",
+  "measured_tip": "8a8c5e9843b82de976b74a50c4bac87c41c76bdc",
+  "pushed_develop_sha": null,
+  "landing_tip": "the record is a documentation commit and lands on whatever integration holds at push time. This layer did not fast-forward develop: it found one new red, and a promotion with a new red does not promote (the promotion-seat rule, and the coordinator's instruction for this run)",
+  "note": "the layer was measured at 8a8c5e9843b8, the tip of the seventeenth merge batch, and it is the reading that covers what the seventy-ninth layer could not: seat/batch16 with the tensor power law, the autodiff pullback and jvp work, the transpose walk and split changes and seven plan files, and seat/batch17 with the whole fsh-dev branch (one line of the graph-editing page) and lane/cc-eval-prelim-2. It also declares eight new cases from that work, all passing. It found exactly one new red, docs.headers/docs.headers.canonical, and that red is not a semantic regression of any batch: it is a missing file header that a plan-scoped reading cannot see",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at 8a8c5e9843b8; load 1m 34.93 at the start of the run",
+  "binary_built": "2026-11-28T15:40:59+08:00",
+  "readings": {
+    "total": 9929,
+    "pass": 9734,
+    "fail": 134,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 0,
+    "re_run": 0,
+    "re_run_passed": 0,
+    "load_before": "1m 34.93, 5m 35.94, 15m 38.01",
+    "load_warning": "[load] WARNING: 1m load 34.93 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth to seventy-ninth layers carried; a promotion does not wait on load, D-1128-36)."
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-79-reds.tsv (the seventy-ninth promotion, 141 names)",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], with the plan aliases transforms/compile.transforms and stated_extents/compile.stated_extents read as the same plan; this reading writes the bare names transforms (8 rows) and stated_extents (1 row), the same spelling the seventy-ninth table holds",
+    "still_red": 133,
+    "turned_green": 8,
+    "turned_green_names": [
+      "modules.graph|constant_folding_makes_a_value",
+      "modules.graph|constant_folding_survives_a_safepoint",
+      "modules.rules|rules.alternate_alternates_rounds",
+      "modules.rules|rules.repeat_counts_rounds",
+      "modules.rules|rules.repeat_honours_the_budget",
+      "modules.rules|rules.until_honours_the_budget",
+      "modules.rules|rules.until_reads_the_predicate_before_a_round",
+      "opt.commit_refusal|commit_refusal.loop_body_read"
+    ],
+    "turned_green_kind": {
+      "modules.graph|constant_folding_makes_a_value": "fixed: the constant-folding lane corrected the behaviour these two cases state, so they now pass on their own assertions",
+      "modules.graph|constant_folding_survives_a_safepoint": "fixed: same lane, same reason",
+      "modules.rules|rules.alternate_alternates_rounds": "fixed: the rules lane's correction, these five state round counting and budget arithmetic that the lane repaired",
+      "modules.rules|rules.repeat_counts_rounds": "fixed: same lane",
+      "modules.rules|rules.repeat_honours_the_budget": "fixed: same lane",
+      "modules.rules|rules.until_honours_the_budget": "fixed: same lane",
+      "modules.rules|rules.until_reads_the_predicate_before_a_round": "fixed: same lane",
+      "opt.commit_refusal|commit_refusal.loop_body_read": "fixed: the case material was re-pinned by lane/cc-eval-prelim-2, so the case now reads what the refusal actually names; this is a fixed case, not a changed verdict and not a deleted one"
+    },
+    "new_reds": 1,
+    "new_reds_names": [
+      "docs.headers|docs.headers.canonical"
+    ],
+    "new_reds_kind": {
+      "docs.headers|docs.headers.canonical": "a repository-wide header guard, which states that every member file carries a canonical header and names the ones that do not: internal/reports/cc-eval-prelim/2026-11-28/make-C-gen.py arrived with the seventeenth batch's lane/cc-eval-prelim-2 without its two header lines, and headers.mjs --check reported 1 of 1839 member files with a header that is not canonical. It is real and it is in this tree, and it reached this reading unnoticed because the seventeenth batch was read at plan scope -- only the four plans its paths touch -- and a repository-wide guard is not among them. So the red is a missing header, not a semantic regression of batch sixteen or seventeen, and the fix is the guard's own --fix, not a code change"
+    },
+    "vanished_reds": 0,
+    "arithmetic": "141 names before: 8 turned green, 0 vanished, 1 appeared, 133 remain red; 134 red in this layer",
+    "total_delta": "plus eight: the layer declares 9929 entries against the seventy-ninth layer's 9921, and the eight that appeared all pass: modules.autodiff/grad_discrete_zero, probe.t301/a_bool_result_keeps_its_zero, probe.t301/a_string_result_still_has_no_tangent, probe.t301/an_int_result_keeps_its_zero, transforms/transforms.gradient_of_array_pow_through_the_library.{fvm,jit,nvm} and transforms/vjp.cotangent_of_a_discrete_result.nvm. They come with the tensor power law, the autodiff pullback and jvp work and the probe plan file that batch sixteen brought. No case was removed and no case changed status other than the nine the comparison names",
+    "notes": [
+      "the plan tree grew from 418 to 419 files with test/plans/probe/t301_tangent.plan.toml",
+      "this is the first layer in the day whose red total went below 141 on the strength of real fixes rather than a retired case",
+      "the six colours this layer turned green had been red since before the sixty-ninth promotion, so their green is the first evidence in a promoted reading that those two lanes landed",
+      "no case timed out in this layer and none was re-run; fault_deep.prl_off is absent for the fourteenth round running because the scheduler root-cause fix holds"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 0,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [],
+    "how": "the layer reported timed_out 0 and re_run 0, so there was no timeout to run alone"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-80-reds.tsv",
+  "red_table_rows": 134,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-80-reds.tsv (134 names). Note that this record has no pushed_develop_sha, so a tool that selects the newest table by a landed promotion will fall back to the seventy-ninth table; the next layer may compare against either -- the same nine names turn green and the same one appears either way, so both baselines agree on the outcome of the next reading",
+  "new_red_names": [
+    "docs.headers|docs.headers.canonical"
+  ],
+  "pushed_as": "not pushed: this layer found one new red, so develop stayed at 35c115adbd472f8e307d6d3c3115924770f5874e",
+  "develop_before": "35c115adbd472f8e307d6d3c3115924770f5874e",
+  "develop_after": "35c115adbd472f8e307d6d3c3115924770f5874e",
+  "commits_brought_in": 103,
+  "commits_touching_src": 26
+}
