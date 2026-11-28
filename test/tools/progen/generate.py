@@ -21,7 +21,7 @@ from __future__ import annotations
 import random
 from typing import List, Optional
 
-from model import (ARR, BOOL, FLOAT, FN, INT, MAX_HEAVY, N, OPT, REC, STR, TUP, Reject, capture_write_violations,
+from model import (ARR, BOOL, FLOAT, FN, INT, MAX_HEAVY, N, OPT, REC, REF, STR, TUP, Reject, capture_write_violations,
                    carries_a_function, effect_violations, escape_violations, evaluate, heavy_graphs,
                    static_faults, walk)
 
@@ -129,6 +129,7 @@ class Gen:
         self.funcs: List[N] = []
         self.label = 0
         self.operators = False     # the overloads of operator_overloads() are declared
+        self.uses_ref = False      # the program reads and writes a `state` handle (`ref`/`get`/`set`)
         if "struct" in features:
             self.types["P"] = [("x", INT), ("y", INT)]
             second = [("n", INT)]
@@ -995,41 +996,61 @@ class Gen:
         self.add_func(name, params, INT, body, sym, syncfn=True)
 
     def stateful_function(self):
-        """A function whose body owns a `var`, makes a closure over it, and calls that closure a
-        few times: the counter -- each call sees the write of the one before -- and the readings
-        are printed here.
+        """A function whose body owns a handle (`let r = ref(n)`, module `state`), makes a closure
+        over it, and calls that closure a few times: the counter -- each call reads through `get`
+        what the call before wrote through `set` -- and the readings are printed here, together
+        with the handle read once more after the calls.
 
-        It used to return the closure, a counter a caller could keep; a closure may capture a
-        `var` by reference only while it stays inside the call that declares the cell (design
-        principles 3.5, rule two), and returning it carried the cell out. What leaves this
-        function is a value."""
+        The cell cannot be a `var`: a closure holds the value a name had when it was made, not the
+        name, so a closure that assigns a captured `var` is refused
+        (SemanticDiag::ClosureAssignsCapturedName). A handle is a value, so the closure may capture
+        it, and `get`/`set` are the writes the language keeps (`Ref` is one of the three exits the
+        diagnostic itself names; the other that carries state is a value in and out, `state_thread`).
+        The programs written this way are also the samples for reading a key that is written: the
+        handle is a cell one place writes and another reads."""
         name, start = self.fresh("k"), self.fresh("a")
         params = [(start, INT, False)]
 
         def make():
-            v = Sym(self.fresh("v"), INT, "var")
-            decl = N("var", [self.expr(INT, 1)], name=v.name)
-            self.scope.append(v)
+            r = Sym(self.fresh("r"), REF(INT), "let")
+            # The handle's content is a value whose type is spelled out. A `Ref` may not be
+            # instantiated with a type that only a projection implies: `ref((loop ...).0)` is
+            # refused with SemanticDiag::RefContentHoldsRef -- "a value it holds is projected from
+            # a value this program does not spell out" -- so the initial value gets a name and an
+            # annotation of its own here.
+            v = Sym(self.fresh("v"), INT, "let")
+            decl_v = N("let", [lit(INT, self.r.choice([0, 1, 2, 3, 5, -1]))], name=v.name, ann=INT)
+            decl = N("let", [N("mkref", [ref(v)], t=REF(INT))], name=r.name)
+            self.scope.append(r)
             # The parameter is in scope only while the lambda's own body is written.
             x = Sym(self.fresh("p"), INT, "let")
             mark = len(self.scope)
             self.scope.append(x)
-            stmts = [self.write(v, 1)]
-            inner = N("blk", [stmts, self.expr(INT, 1)], t=INT, sync=True)
+            written = bin_("+", N("getref", [ref(r)], t=INT), ref(x), INT) if self.chance(0.5) else ref(x)
+            step = N("setref", [ref(r), written], t=None)
+            inner = N("blk", [[N("expr", [step])], N("getref", [ref(r)], t=INT)], t=INT, sync=True)
             del self.scope[mark:]
             lam = N("lam", [inner], t=FN([INT], INT), params=[(x.name, INT, False)], ret=INT, syncfn=True)
-            f = Sym(self.fresh("h"), FN([INT], INT), "let", eff=True)
+            f = Sym(self.fresh("c"), FN([INT], INT), "let", eff=True)
             self.scope.append(f)
-            out = [decl, N("let", [lam], name=f.name)]
+            out = [decl_v, decl, N("let", [lam], name=f.name)]
             reads = []
             for _ in range(self.r.choice([2, 2, 3])):
-                r = Sym(self.fresh("n"), INT, "let", eff=True)
-                self.scope.append(r)
-                out.append(N("let", [N("call", [ref(f), self.expr(INT, 1)], t=INT, eff=True)], name=r.name))
-                reads.append(r)
+                s = Sym(self.fresh("n"), INT, "let", eff=True)
+                self.scope.append(s)
+                out.append(N("let", [N("call", [ref(f), self.expr(INT, 1)], t=INT, eff=True)], name=s.name))
+                reads.append(s)
+            # The same cell, read once more where the handle was made: the last write the closure
+            # made is what this reads, which is what makes the program a "read a key that was
+            # written" sample rather than a chain of values.
+            tail = Sym(self.fresh("g"), INT, "let")
+            self.scope.append(tail)
+            out.append(N("let", [N("getref", [ref(r)], t=INT)], name=tail.name))
+            reads.append(tail)
             self.label += 1
             text = f"L{self.label}" + "".join(" {}" for _ in reads)
-            out.append(N("expr", [N("println", [N("fmt", [ref(r) for r in reads], t=STR, s=text)])]))
+            out.append(N("expr", [N("println", [N("fmt", [ref(s) for s in reads], t=STR, s=text)])]))
+            self.uses_ref = True
             # The value the call answers with: the last reading, one step on.
             return N("blk", [out, bin_("+", ref(reads[-1]), lit(INT, 1), INT)], t=INT, sync=True)
         body = self.with_params(params, make)
@@ -1534,8 +1555,9 @@ class Gen:
         body = N("blk", [stmts, None], t=None, sync=True)
         main = N("func", [body], name="main", params=[], ret=None)
         if not self.on("modules"):
-            return N("prog", [self.funcs + [main]], module=module, types=dict(self.types), env=dict(self.env))
-        return N("prog", [self.funcs + [main], globals_], module=module, types=dict(self.types),
+            return N("prog", [self.funcs + [main]], module=module, types=dict(self.types), env=dict(self.env),
+                     refs=self.uses_ref)
+        return N("prog", [self.funcs + [main], globals_], module=module, types=dict(self.types), refs=self.uses_ref,
                  env=dict(self.env), split=self.split(), global_order=self.global_order)
 
 
