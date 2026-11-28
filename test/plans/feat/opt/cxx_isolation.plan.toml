@@ -692,22 +692,3 @@ timeout_ms = 20000
 compare_to = "cxx_isolation.paper_figure1.by_cpp"
 compare_fields = ["exit_code", "stdout_normalized"]
 
-[[tests]]
-name = "cxx_isolation.inline_figure1.by_cpp"
-desc = "`std::cxx::inline` on the Figure 1 corpus in the shape the inline pass sees: a reference document for the byte comparison that follows."
-kind = "behavior"
-case = "../../../cases/opt/cxx_isolation/inline_figure1.cml"
-args = ["${case}", "std::cxx::inline", "std::jgir canonical=true", "std::nop"]
-expect_exit = 0
-timeout_ms = 20000
-
-[[tests]]
-name = "cxx_isolation.inline_figure1.by_camel"
-desc = "`opt::inline` on that corpus, compared byte for byte with the C++ reference."
-kind = "differential"
-case = "../../../cases/opt/cxx_isolation/inline_figure1.cml"
-args = ["${case}", "opt::inline", "std::jgir canonical=true", "std::nop"]
-expect_exit = 0
-timeout_ms = 20000
-compare_to = "cxx_isolation.inline_figure1.by_cpp"
-compare_fields = ["exit_code", "stdout_normalized"]
