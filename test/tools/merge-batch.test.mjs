@@ -28,6 +28,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { isRedStatus } from './run-tests.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const tool = path.resolve(here, '..', '..', 'scripts', 'merge-batch.mjs');
@@ -247,7 +248,7 @@ check(
 fs.writeFileSync(path.join(root, 'infra.lanes.json'), JSON.stringify([{ branch: 'lane/breaks', reading: 'adds b.txt' }]));
 const infra = spawnSync(
     process.execPath,
-    [tool, '--seat', seat, '--lanes', path.join(root, 'infra.lanes.json'), '--build', 'node -e "process.exit(4)"', '--base', 'origin/integration'],
+    [tool, '--seat', seat, '--lanes', path.join(root, 'infra.lanes.json'), '--build', 'node -e "process.exit(5)"', '--base', 'origin/integration'],
     { encoding: 'utf8' },
 );
 check(
@@ -401,7 +402,7 @@ function runRead(rows, extra = []) {
     return { status: result.status ?? -1, out };
 }
 
-const row = (plan, test, status, tier = 'fast', plan_path = 'test/plans/feat/compile.plan.toml') => ({ plan, test, status, tier, plan_path });
+const row = (plan, test, status, tier = 'fast', plan_path = 'test/plans/feat/compile.plan.toml') => ({ plan, test, status, red: isRedStatus(status), tier, plan_path });
 const common = path.resolve(readSeat, git(readSeat, ['rev-parse', '--git-common-dir']));
 const remoteTip = () => git(readRemote, ['rev-parse', 'integration']);
 
@@ -479,6 +480,16 @@ check(
         !flakyOnly.out.includes('new red') &&
         flakyRecord.includes('flaky=plan_a/sometimes\nnew=0\n'),
     `${flakyOnly.out}${flakyRecord}`,
+);
+// A flaky case that passed on its second attempt is green: it is not printed as a red and the
+// record does not count it.
+const flakyPassed = runRead([{ ...row('plan_a', 'sometimes', 'flaky'), flaky: 'the scheduler crash (backlog row)' }], ['--base', readBase, '--no-fetch']);
+const flakyPassedTip = flakyPassed.out.split('\n').find((one) => one.startsWith('  tip '))?.trim().split(/\s+/)[1];
+const flakyPassedRecord = flakyPassedTip && fs.existsSync(path.join(common, 'camel-read', flakyPassedTip)) ? fs.readFileSync(path.join(common, 'camel-read', flakyPassedTip), 'utf8') : '';
+check(
+    'a flaky case that passed on its second attempt is not a red',
+    flakyPassed.status === 0 && !flakyPassed.out.includes('flaky red') && flakyPassedRecord.includes('reds=0\n'),
+    `${flakyPassed.out}${flakyPassedRecord}`,
 );
 const flakyBeside = runRead(
     [{ ...row('plan_a', 'sometimes', 'fail'), flaky: 'the scheduler crash (backlog row)' }, row('plan_a', 'fast_new', 'fail')],

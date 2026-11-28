@@ -23,6 +23,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { isRedStatus } from './run-tests.mjs'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
@@ -127,7 +128,7 @@ fs.appendFileSync(process.argv[2], 'cleaned\\n')
 `,
 )
 
-const row = (plan, test, status, extra = {}) => ({ plan, plan_path: `test/plans/${plan}.plan.toml`, test, status, timed_out: false, child_ms: 10, slot_ms: 12, ...extra })
+const row = (plan, test, status, extra = {}) => ({ plan, plan_path: `test/plans/${plan}.plan.toml`, test, status, red: isRedStatus(status), timed_out: false, child_ms: 10, slot_ms: 12, ...extra })
 const BASE_ROWS = [
     row('p', 'ok', 'pass'),
     row('p', 'old_red', 'fail'),
