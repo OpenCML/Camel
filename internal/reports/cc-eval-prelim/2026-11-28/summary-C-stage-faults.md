@@ -1,13 +1,20 @@
 # RQ3 · stage faults (`tab:stage-faults`) — preliminary, partial
 
-`tip 353d36e3d1` (`lane/cc-eval-prelim-2`) · build host `zjwei@camel-work` · `[load]` 21–31 (1m) during these runs ·
-2026-11-28 · **preliminary, not final**.
+`tip 353d36e3d1` (`lane/cc-eval-prelim-2`) · build host `zjwei@camel-work` ·
+`[load]` 21–31（其中约 3 核非 Camel：qemu/sidekiq/llm_server）during these runs · 2026-11-28 · **preliminary, not final**.
 
 **Not reached, first line: n=100 is not reached** — the tree's generator produces programs this tip refuses, so the
 100-program matrix ran to 300 cells and 0 pass (§2). **Of the ten injection shapes, five (class 1) are covered by the
 repository's own injection passes and were read here (§3); three (class 2) I injected myself (§4); two class-2 shapes are
 not attempted and are recorded as "—", with structural reasons.**
-**The one red of the class-1 plan is not fixed: what differs is not only a drifted constant (see §3).**
+**The one red of the class-1 plan is not fixed here: what differs is not only a drifted constant (see §3).** It has since
+been re-pinned in its own commit (only the exit code and the reader's rendering), so this reading's "red" is the state
+before that re-pin, and the reading is kept as measured.
+
+**The hundred programs are not in the repository, on purpose, and nothing is missing: they are regenerated
+deterministically from their seeds by one command** — `python internal/reports/cc-eval-prelim/2026-11-28/make-C-gen.py 100`
+— which rewrites `gen/prog_001.cml` … `gen/prog_100.cml` and the instrument plan from the same inputs. §7 states the
+version dependence of that command.
 
 ## 1. The archive harness, and what it expects
 

@@ -1,7 +1,8 @@
 # RQ3 · rewrite quality (`fig:rewrite-quality`) — preliminary
 
 `tip 353d36e3d1` (`lane/cc-eval-prelim-2`, based on `origin/develop fd950804d6`) · build host `zjwei@camel-work` ·
-load 24.8 → 30 (1m) while these runs went · 2026-11-28 · **preliminary, not final**.
+load 24.8 → 30 (1m)（其中约 3 核非 Camel：qemu/sidekiq/llm_server）while these runs went · 2026-11-28 ·
+**preliminary, not final**.
 
 ## What was read
 
