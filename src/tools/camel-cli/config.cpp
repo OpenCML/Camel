@@ -1044,10 +1044,15 @@ bool parseArgs(int argc, char *argv[]) {
     startupMark("warnings");
 
     // The grammar that reads the line is the one the word picked: a subcommand's group holds its
-    // own settings, and a line without a word is a run's.
-    const parsing_result parsed = [&]() -> parsing_result {
+    // own settings, and a line without a word is a run's. It is a named object, not the temporary
+    // `run | infoFlags` was: `parsing_result` keeps the readings it made of the group it parsed
+    // with, so a group destroyed at the end of the call leaves `parsed` pointing into freed storage
+    // -- every command read it once more in `operator bool` (ASAN: heap-use-after-free, read of
+    // size 1, `clipp::group::child_t::is_param()` from `config.cpp#parseArgs`).
+    const clipp::group runGrammar = run | infoFlags;
+    const parsing_result parsed   = [&]() -> parsing_result {
         if (named == nullptr) {
-            return parse(argc, argv, run | infoFlags);
+            return parse(argc, argv, runGrammar);
         }
         if (named->nameIsTheArgument) {
             // The name is the argument the word introduced, so it is read here and the parser
