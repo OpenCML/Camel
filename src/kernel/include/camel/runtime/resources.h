@@ -507,7 +507,7 @@ struct CommitViolation {
 /// `chain` and its caller in the same commit, and the caller's old version is lawful in the old
 /// program and beyond in the new one. A caller whose two programs are the same object passes
 /// nothing, which is the whole answer there.
-/// sksEffects and sksOrder are the tier (GraphDraft::editTier): which of the two questions
+/// AsksEffects and AsksOrder are the tier (GraphDraft::editTier): which of the two questions
 /// the edit record says this draft owes. Both true is the reading a caller that has no record gets
 /// -- it asks both, as the commit always has; a draft whose record names only the kinds that keep
 /// both promises passes both false and this reading returns nothing, in every build. The record is

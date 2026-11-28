@@ -18,7 +18,7 @@ release made them ask, and twenty-eight cases answered no. Both families have on
 is not in an optimizer:
 
 **A node that only passes a function through declares no resources, so the analysis reads it as
-writing every resource.** ` utodiff:with_grad ` takes a function value and returns a function
+writing every resource.** ` autodiff:with_grad ` takes a function value and returns a function
 value; its kernel is ` return gradFunction(...) `. It runs no body. It writes nothing. But it is
 declared ` pure=false ` and never declares a resource set, which the analysis reads as "touches
 anything", which meets ` `:var/after` ` reading a cell, which makes a pair with no dependency
