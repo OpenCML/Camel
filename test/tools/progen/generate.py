@@ -21,8 +21,9 @@ from __future__ import annotations
 import random
 from typing import List, Optional
 
-from model import (ARR, BOOL, FLOAT, FN, INT, MAX_HEAVY, N, OPT, REC, STR, TUP, Reject, carries_a_function,
-                   effect_violations, escape_violations, evaluate, heavy_graphs, static_faults, walk)
+from model import (ARR, BOOL, FLOAT, FN, INT, MAX_HEAVY, N, OPT, REC, STR, TUP, Reject, capture_write_violations,
+                   carries_a_function, effect_violations, escape_violations, evaluate, heavy_graphs,
+                   static_faults, walk)
 
 FEATURES = {
     "float": "float arithmetic (exact values only), float(int), int(float), precision placeholders",
@@ -62,7 +63,7 @@ DEFAULT_FEATURES = frozenset(FEATURES) - {"modules"}
 
 # Part of the random stream: a change of the generator that changes the programs of existing
 # seeds gets a new number, so that "seed N" of an old report is not silently another program.
-VERSION = 8
+VERSION = 9
 
 
 def parse_features(text: Optional[str]) -> frozenset:
@@ -631,10 +632,16 @@ class Gen:
                 o.append((2.4, comp_))
             if e == INT:
                 def range_():
+                    # `lo..hi` is a Range, and a Range is not an array (the front end refuses
+                    # `(int, Range)` where `(int, int[])` is declared, LoopBodyTypeMismatch and
+                    # ReturnTypeMismatch). The generator's reference types it as an array, so the
+                    # coverage the range gave -- a sequence of ints written without a literal --
+                    # is kept as a list literal of the same elements instead. Never empty: an
+                    # empty literal states no element type, and `filter([], ...)` is refused with
+                    # FunctionTypeArgumentNotInferred.
                     lo = self.r.choice([0, 0, 1, 2, -2])
-                    if named and self.chance(0.3):
-                        return N("range", [lit(INT, 0), N("conv", [ref(self.r.choice(named))], t=INT, fn="len")], t=t)
-                    return N("range", [lit(INT, lo), lit(INT, lo + self.r.choice([0, 1, 2, 3, 4, 5]))], t=t)
+                    n = self.r.choice([1, 2, 3, 4, 5])
+                    return N("arr", [lit(INT, lo + i) for i in range(n)], t=t)
                 o.append((2.2, range_))
             if e[0] == "tup" and len(e[1]) == 2:
                 def zip_():
@@ -1521,8 +1528,11 @@ class Gen:
                 self.label += 1
                 s.shown = True
                 stmts.append(N("expr", [N("println", [N("fmt", [ref(s)], t=STR, s=f"L{self.label} {{}}")])]))
-        body = N("blk", [stmts, lit(INT, 0)], t=INT, sync=True)
-        main = N("func", [body], name="main", params=[], ret=INT)
+        # `main` declares no return value: a declared one is printed as a line of the program's
+        # output, and the reference (model.py) computes the lines the program prints, not that
+        # one. The body is still a sync block, because it calls sync functions and prints.
+        body = N("blk", [stmts, None], t=None, sync=True)
+        main = N("func", [body], name="main", params=[], ret=None)
         if not self.on("modules"):
             return N("prog", [self.funcs + [main]], module=module, types=dict(self.types), env=dict(self.env))
         return N("prog", [self.funcs + [main], globals_], module=module, types=dict(self.types),
@@ -1571,6 +1581,8 @@ def generate(seed: int, features: frozenset = DEFAULT_FEATURES, module: Optional
             raise AssertionError(f"seed {seed}: generated an effect outside an effect position")
         if escape_violations(prog):
             continue                                   # a closure the front end would refuse
+        if capture_write_violations(prog):
+            continue                                   # a closure that assigns a name it does not hold
         if static_faults(prog):
             continue
         try:

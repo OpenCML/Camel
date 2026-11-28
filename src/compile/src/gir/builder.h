@@ -3005,6 +3005,11 @@ class Builder {
     bool handleKeyOf(
         BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
         draft_node_ref_t value, std::string &key) const;
+    // The key a handle access puts on its body: the key of the container the handle names
+    // (`handleKeyOf`), and an empty key when the value cannot be pinned to one handle.
+    void handleAccessKey(
+        BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
+        draft_node_ref_t value) const;
     // How a node's result relates to its operands' resources, read from the operator or the callee
     // the node names -- the reading handleKeyOf needs to see through a value handed back.
     std::optional<camel::core::sem::ResultAlias> resultAliasOf(
