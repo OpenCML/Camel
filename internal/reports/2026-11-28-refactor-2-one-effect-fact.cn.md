@@ -329,5 +329,8 @@ bool Record::accessesOutsideProgram() const {
 | `test/plans/feat/modules/fusion_group.plan.toml` | 1 | `fusion_group.profile.none` |
 | **合计** | **20** | |
 
-  - **两条 `graph_outline` 的红要单独盯**：`outline_delivers_the_graph_it_makes`、`outline_delivers_a_graph_the_bytecode_vm_can_compile` 与本件平行的 `lane-editview-commit`（"被 outline 造在外层程序之外的图没进提交的 closure"）同族 —— 第 1 刀后若它们**变绿或变红**，单独点名报给负责人；**不去修**（不在 ② 范围）。
-- **注意**：这组底不是最新 integration（`c4-round-source` 未落地，integration 已到 `a5b8663744`）；换底后按 §7 的规矩**重取**一遍再把行号/读数改掉。
+  - **两条 `graph_outline` 的红已改判**（原先"与 `lane-editview-commit` 同族、单独盯"的猜测**被读数证伪**，下一个人别再按那个方向查）：这两条的断言是 `expect_stdout_exact`（`graph_outline.plan.toml:33` / `:43`；`expect_exit = 0` 那一侧**没报差异**），两侧输出**都是 633 字符**，只在 `offset 194` 差**一位数字**（期望 `new_id=81`，实得 `new_id=82`），`stderr` 空 ⇒ **"造出的图进了提交"这一侧本来就是对的**（`in_committed=true`、`graphs=1->2`、`made_graph=subject$outline6 nodes=3 exit_reads=2` 全对），红的是 **id 计数器漂了一位**：**不是交付缺陷，不修，也不改期望**。
+  - 负责人原话（记在这里当同族假设的墓碑）：
+    > "读数收到，而且它**证伪了我的同族猜测** —— 这两条不是'图没进提交'，是**期望把 id 的具体数值钉死了**……这与'提交把新图收进新程序'**不同族**，那条修完这两条**不会**变绿。"
+  - 第 1 刀后照旧**逐名比**：这两条仍红、名字不变就**照实报、不解释**；若它们的 `new_id` 从 `82` 变成别的数（说明有别的位移），**单独点名**报负责人。
+- **注意**：这组底不是最新 integration（`c4-round-source` 未落地；取这组读数时 integration 到了 `a5b8663744`，随后又到 `0fb33bc32f`）；换底后按 §7 的规矩**重取**一遍再把行号/读数改掉。
