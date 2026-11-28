@@ -16,9 +16,11 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #elif defined(__linux__)
+#include <dlfcn.h>
 #include <limits.h>
 #include <unistd.h>
 #elif defined(__APPLE__)
+#include <dlfcn.h>
 #include <limits.h>
 #include <mach-o/dyld.h>
 #include <stdlib.h>
@@ -109,6 +111,41 @@ inline void pushUniquePath(
     }
 }
 
+/// The directory holding the running copy of `libcamel`, or an empty path when it cannot be read.
+///
+/// A program that linked the runtime is not asking which executable it is: it is asking which
+/// installation its own library came from. The address of this function is inside `libcamel`, so
+/// the loader knows the file it was mapped from, and that file's directory is the installation's
+/// `libs` (or `bin`, where a Windows build puts the DLL).
+inline std::filesystem::path libraryDirectoryRaw() {
+#if defined(_WIN32)
+    HMODULE module  = nullptr;
+    const auto self = reinterpret_cast<LPCWSTR>(&libraryDirectoryRaw);
+    if (!GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            self,
+            &module)) {
+        return {};
+    }
+    wchar_t path[MAX_PATH];
+    if (!GetModuleFileNameW(module, path, MAX_PATH)) {
+        return {};
+    }
+    const std::filesystem::path p(path);
+    return p.has_filename() ? p.parent_path() : p;
+#elif defined(__linux__) || defined(__APPLE__)
+    Dl_info info{};
+    if (dladdr(reinterpret_cast<void *>(&libraryDirectoryRaw), &info) == 0 ||
+        info.dli_fname == nullptr) {
+        return {};
+    }
+    const std::filesystem::path p(info.dli_fname);
+    return p.has_filename() ? p.parent_path() : p;
+#else
+    return {};
+#endif
+}
+
 } // namespace detail
 
 struct ModuleSearchPathOptions {
@@ -174,6 +211,18 @@ inline std::filesystem::path resolveInstallRoot() {
     std::string envRoot = getEnv("CAMEL_HOME");
     if (!envRoot.empty()) {
         return fs::absolute(pathFromUtf8(envRoot)).lexically_normal();
+    }
+
+    // The library the program linked carries the installation with it: `libcamel` was loaded from
+    // an installation's `libs` (or `bin` on Windows), so the directory above the one it sits in is
+    // the root its standard library is found under. A program built against one runs from any
+    // directory then, which is what a products's own binary needs: it is placed wherever the user
+    // keeps it, and nothing in it names the installation.
+    if (const fs::path libDir = detail::libraryDirectoryRaw(); !libDir.empty()) {
+        const fs::path norm = fs::absolute(libDir).lexically_normal();
+        if (norm.filename() == "libs" || norm.filename() == "bin") {
+            return norm.parent_path();
+        }
     }
 
     fs::path exeDir = detail::executableDirectoryRaw();
