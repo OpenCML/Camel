@@ -1939,6 +1939,7 @@ a054316f3df77a1a no test/cases/compile/tags/tag_argument_named.cml
 a52972a6e411eca9 ok test/cases/compile/tags/tag_on_unnamed_field.cml
 87017a02d5f4f994 ok test/cases/compile/transforms/a_refusal_keeps_stdout_to_the_program.cml
 6ae33073bbca1d59 ok test/cases/compile/transforms/abs_gradient_both_legs.cml
+63a42f767061ae51 ok test/cases/compile/transforms/add_gradient_both_legs.cml
 3fc12d94ec38dfd4 ok test/cases/compile/transforms/broadcast_add_subtract_gradient.cml
 c6c237a3f8abfc20 ok test/cases/compile/transforms/broadcast_difference_through_vjp.cml
 8b00bd09ce17165b ok test/cases/compile/transforms/broadcast_product_gradient_of_a_stated_shape.cml
@@ -1990,6 +1991,7 @@ c5193a9d8a7c1f44 ok test/cases/compile/transforms/grad_array_two_elements_first.
 7339aca9cfd155c7 ok test/cases/compile/transforms/grad_of_an_array_parameter.cml
 8935014ebdc88a44 ok test/cases/compile/transforms/grad_where_the_tangent_ignores_the_operands.cml
 e10dcd1660b7723d ok test/cases/compile/transforms/gradient_of_array_pow_through_the_library.cml
+9b336b94c1f97a38 ok test/cases/compile/transforms/idx_take_forward_both_legs.cml
 ce30dc5b0fc0c929 ok test/cases/compile/transforms/jvp_a_value_is_not_a_structural_zero.cml
 67212b454045a35f ok test/cases/compile/transforms/jvp_branch.cml
 bb72ddd886fdb122 ok test/cases/compile/transforms/jvp_call.cml
@@ -2042,6 +2044,7 @@ e8630ea3cd8df583 ok test/cases/compile/transforms/mean_axis_negative_axis_throug
 48a126dd6b5af81f ok test/cases/compile/transforms/pick_at_forward_rule.cml
 17c3624f49db2c59 ok test/cases/compile/transforms/pick_at_gradient_answered_by_the_engine.cml
 306a07062a95ebc3 ok test/cases/compile/transforms/pow_cube_gradient_through_the_engine.cml
+782d89d984e229c2 ok test/cases/compile/transforms/pow_forward_both_legs.cml
 bf857a78f342900e ok test/cases/compile/transforms/pow_gradient_of_a_caret_through_the_library.cml
 10ce22055e8146ed ok test/cases/compile/transforms/pow_gradient_through_the_engine.cml
 f3155ad7468e0e86 ok test/cases/compile/transforms/pow_gradient_through_the_library.cml
