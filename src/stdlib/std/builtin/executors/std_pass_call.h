@@ -9,7 +9,7 @@
 #include "camel/execute/executor.h"
 
 /// The operators the `std` protocol answers: the optimization passes a program may name as
-/// values (`std.cml`, `namespace cxx`; internal/plans/2026-11-26-pass-as-function step 1). Nothing
+/// values (`std.cml`, `namespace cxx`). Nothing
 /// runs them yet -- each kernel reports that and throws (plan step 3) -- so a call that resolves
 /// is answered by a message rather than by silence.
 ///

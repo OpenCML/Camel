@@ -6,7 +6,7 @@ tags = ["feat", "modules", "pass", "module"]
 # A pass is a function value: its declaration in `stdlib/std.cml` gives it a type, so a program
 # may name it the way it names any function of the library. Taking the value and giving it to
 # nothing is silent -- the declaration resolved -- and a name the module does not export is still
-# refused. Calling one is the next step (internal/plans/2026-11-26-pass-as-function), and the
+# refused. Calling one is the next step, and the
 # kernel reports it as an internal error there rather than pretending the pass ran.
 
 [defaults]

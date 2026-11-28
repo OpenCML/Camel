@@ -2468,7 +2468,7 @@ bool GlobalsBuiltinModule::load() {
     });
     declareArrayOperatorFacts();
     // The `std` protocol answers the passes a program may name as values (`std.cml`'s `namespace
-    // cxx`, internal/plans/2026-11-26-pass-as-function step 1). Its operator map holds those six
+    // cxx`). Its operator map holds those six
     // and nothing else, so every other name of `std` is answered exactly as before: the protocol
     // has an executor, the executor has no such operator, and the caller hears "no operator".
     context_->registerExecutorFactory("std", [ctx = context_]() {

@@ -13,7 +13,7 @@ using namespace camel::core::context;
 namespace {
 
 /// The pass-as-function call path is not implemented yet
-/// (internal/plans/2026-11-26-pass-as-function, step 3): a program that names one of the C++
+/// A program that names one of the C++
 /// optimization passes now reaches the declaration, the type checker accepts the call and the graph
 /// holds an operator node, so the one thing missing is the path that runs a pass from a function
 /// value. It says so, naming the pass it was asked for, and throws. It never returns a value: a
