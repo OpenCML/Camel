@@ -215,7 +215,6 @@ class Document:
             g,
             {
                 "k": "graph",
-                "flags": graph.get("flags", 0),
                 "root": bool(graph.get("root")),
                 "entry": self.entry == gid,
             },

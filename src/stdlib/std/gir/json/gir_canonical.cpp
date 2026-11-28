@@ -1221,7 +1221,6 @@ class CanonicalDocument {
         buildCanonicalRegions(graph);
         json value{
             {"id", graphIds_.at(graph)},
-            {"flags", graph->flags()},
             {"signature", addType(graph->funcType())},
             {"nodes", json::array()},
             {"regions", json::array()},
