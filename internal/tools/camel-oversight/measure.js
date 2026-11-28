@@ -275,6 +275,13 @@ export async function measure({ repo, fetch = true, stateDir = '', buildHost = '
                 developBehind: Number(await git(['rev-list', '--count', 'origin/develop..origin/integration'])),
             }
         }),
+        // The newest whole-tree reading (every layer, the slow one included), by the commit that
+        // published its record on integration: the fast layer has the promotion's table, and a case
+        // in the slow layer is watched by nothing else.
+        dailyAll: await remote(async () => {
+            const at = await git(['log', '-1', '--format=%ct', 'origin/integration', '--', 'internal/reports/*-daily-all.record.json'])
+            return at === '' ? { none: true } : { ageMinutes: Math.round((Date.now() / 1000 - Number(at)) / 60) }
+        }),
         // What the other side pushed that has landed on neither shared line.
         fshDev: await remote(async () => {
             const hasIntegration = await git(['rev-parse', '--verify', '--quiet', 'origin/integration']).then(() => true, () => false)

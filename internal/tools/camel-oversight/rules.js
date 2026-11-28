@@ -187,6 +187,24 @@ export const RULES = [
         },
     },
     {
+        // The slow layer has no table of its own beyond the whole-tree reading, so a day without
+        // one is a day a slow case can turn red unseen.
+        id: 'daily-all-due',
+        level: 'quiet',
+        hold: 0,
+        cooldown: 180,
+        check: ({ m, limits }) => {
+            const a = readable(m.dailyAll) && m.dailyAll
+            if (!a || (!a.none && a.ageMinutes <= limits.dailyAllMinutes)) return null
+            return {
+                key: a.none ? 'none' : `age:${Math.floor(a.ageMinutes / limits.dailyAllMinutes)}`,
+                text: a.none
+                    ? '还没有一份全量读数（-Tier all）发布在 internal/reports/：慢层的红没有任何表在看。挑负载低的窗口跑一次，红表与 record 照晋级的格式发布（*-daily-all-reds.tsv、*-daily-all.record.json）。'
+                    : `上一份全量读数（-Tier all）发布在 ${Math.round(a.ageMinutes / 60)} 小时前：今天的还没跑。挑负载低的窗口跑一次，照晋级的格式发布，并与上一份逐名比，新增的才是甲。`,
+            }
+        },
+    },
+    {
         id: 'fsh-dev-ahead',
         level: 'quiet',
         hold: 30,
@@ -441,6 +459,7 @@ export const DEFAULT_LIMITS = {
     developStallMinutes: 25,
     staleMinutes: 120,
     promotionMinutes: 180,
+    dailyAllMinutes: 26 * 60,
     staleShown: 5,
     slotWaitMinutes: 30,
     dmOfflineMinutes: 60,
