@@ -28,7 +28,7 @@ Figure 1 于 `d0539fba99433c6a9208584e854665ade60fba14`（16:14:05）。
 
 | # | 句子 | 状态与理由 |
 |---|---|---|
-| B1 | "6/6 对图相同、四对两侧都不内联、两对两侧各展开一个普通调用（nodes +9 / edges +10 / operators +6）" | **无出处**。搜法：`git grep -l "7067" -- internal docs test`→6 文件，唯一 figure 页是 3 对（`figure1-two-inliners.md:46`–`:51`，用 `direct_calls`、无 `operators`）；`git grep -l "nodes +9"` / `"edges +10"` / `"operators +6"`→**零命中**；`test/cases/opt/cxx_isolation/` 只有 `paper_figure1.cml` 一份，无六份成对 case。⇒ 撤回，或提供六份 case 名 + `operators` 定义后重测。 |
+| B1 | "6/6 对图相同、四对两侧都不内联、两对两侧各展开一个普通调用（nodes +9 / edges +10 / operators +6）" | **有出处（早先判"无出处"是我搜错）**：`internal/reports/cc-eval-prelim/2026-11-28/opt-inline-scale.csv`（`e205a08cc5` 那次读）—— 六份语料两侧逐项相同、四份不展开、`inline_figure1 21→30 / 19→29 / 7→13`、`paper_figure1 19→28 / 16→26 / 6→12`，正好 `+9 / +10 / +6`。我当时按字符串 `+9` 搜，而 CSV 里是**单独一列数字、没有加号**，所以零命中。⇒ 可进正文，须标该 CSV 与它自己的尖端（不是本轮尖端）。 |
 | B2 | "三张图的体积是 7067 / 6155 / 4431" | **已被取代**。那是 tip `b25dcda7a2b3` 的渲染（旧页 `figure1-two-inliners.md:47`–`:51`）；新尖端同图同 nodes/edges，文本更长 ⇒ **7431 / 6463 / 4627**（`readings-at-integration.md:43`–`:47`）。 |
 | ~~B3~~ | ~~"起点 4976 → 内联 7067"~~ | **已解决**：两端已在 `d0539fba99` 的树上重量为 **5214 → 7431**（`readings-at-integration.md:44`、`:43`）；旧页的 4976/7067 都不要再引用。 |
 | B4 | "比较字段是 `[exit_code, stdout_normalized, stderr_normalized]` 且输出是 canonical jgir" | **无出处（仪器描述错）**：19 条里只有 1 条三项，其余 18 条两项，且没有一对在 `jgir canonical` 下比（`readings-at-integration.md:26`–`:33`）。改为 A1/A3/A4。 |
