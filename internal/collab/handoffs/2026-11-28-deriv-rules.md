@@ -80,7 +80,7 @@ $ git grep -ln 'with_grad' -- test/cases/modules/transforms → 0
 
 做法：
 
-1. 同一个程序两条路：`x->std::jvp` 与 `with_grad` **同式**，把两侧数值都打出来、贴原文（不写"一致"两个字）。
+1. 同一个程序两条路，把两侧数值都打出来、贴原文（不写"一致"两个字）。两条路的名字是：前向一侧是 **`jvp`（`transforms` 模块）+ `import rulesets.jvp`**（`jvp(f)(x, dx)` 走 `src/stdlib/transforms/jvp.cpp` 的变换，规则来自 `src/stdlib/rulesets/jvp.cml`；它是模块里的一个函数，不是一个 `std::` 开头的 pass —— 全仓没有那个名字的 pass，也没有那个符号），引擎一侧是 **`with_grad`（`autodiff` 模块）**，它返回 `(value, gradient)`，区分的是第一个 `with` 参数。
 2. 容差抄 `test/cases/compile/transforms/` 里既有用例的写法（`f64`/`f32` 各自），不自创。
 3. **数值不一致就停手报**：可能是规则错，也可能是 `with_grad` 错，两边都可以怀疑。
 4. 不造新工具（造工具是元层，归决策者）；不改 `with_grad` 语义去迁就规则；不碰调度遍与后端。
