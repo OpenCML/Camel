@@ -11,7 +11,7 @@
 
 "会漂"不是推测，本枝量到过两次：
 
-1. **第五项问的是整张算子表**：程序里一次 `set` 都没有，`state::get` 的节点仍被写成 `reads a resource a write reaches` —— 因为 `mayBeWritten`（`src/kernel/core/operator_table.cpp:146`）扫的是全部声明，而 `state:set` 一注册，`Ref` 就有写者（`/tmp/refprobe/pc_write_away.cml` 读数，见 §3.5）。
+1. **第五项问的是整张算子表**：第五项这一位（`noAccessToWrittenResource`，`facts.cpp:1332` = `!record->accessesWritableResource()`）问的是"这条读访问的资源，有没有**任何声明**写它" —— `mayBeWritten`（`src/kernel/core/operator_table.cpp:146`）扫的是全部声明，而 `state:set` 一注册，`Ref` 就有写者。所以一个**程序里一次 `set` 都没有**的 `state::get`，它的第五项**位**仍是假（`/tmp/refprobe/pc_write_away.cml`，读数与"为什么它今天分不出答案"见 §4.4：**整条 `all()` 早被第四项定死，不是第五项漏答**）。
 2. **"纯"有两份**：`ops::Record::pure()`（`src/kernel/ops/include/camel/ops/operator_record.h:487`）说"子句没声明写"，`sem::ResourceSignature::pure()`（`src/kernel/include/camel/core/resource_semantics.h:378`）说"签名上没有访问"，`OperatorTraits::pure`（`operator_table.cpp:96-115` 推、`operator_table.h:253` 存）说"效应等于 Pure" —— 三处都在回答"纯不纯"，条件不同。38 个查询那一笔就是撞在这上面：声明了 `Read` 之后，记录说 `pure`（`clause_pure: true`），显示说 `state`（`effect()` 由访问列表现推），而编译器的自检说"纯算子不许碰资源"并拒绝装载。
 
 ## 1 今天有几份答案（都在这棵树上，file:line 是底提交的）
@@ -133,14 +133,23 @@
 
 `test/plans/feat/tools/arrangeable_families.plan.toml`：在 `6b5c132e8f` 上 **7/7**（换底前是 5/7，两条红是 `facts.cpp:1483/1493` 的聚合初始化缺陷）。第五项改成"按值"之后，这 7 条必须逐名仍绿；任何一条变红都要说清是"答案变了"还是"实现变了"。
 
-### 4.4 两个新探针（**唯一被要求改变的答案**）
+### 4.4 两个新探针：**今天分不出答案，原因在第四项，不在第五项**
 
-| 探针 | 内容 | 今天 | 换完之后必须 |
+| 探针 | 内容 | 今天 | 第一批实现之后必须 |
 |---|---|---|---|
-| `/tmp/refprobe/pc_write_away.cml` | 循环里只 `state::get`，**程序里没有 `set`** | `core.arrangeable` = `reads a resource a write reaches`（**错**） | **可摆**（第五项为真） |
-| `/tmp/refprobe/pc_write_before.cml` | 同类循环，循环前有一处 `state::set` | 同上（今天两条**一样**） | **不可摆**（第五项为假） |
+| `/tmp/refprobe/pc_write_away.cml` | 循环里只 `state::get`，**程序里没有 `set`** | `core.arrangeable` = `reads a resource a write reaches`，但这是**每图一条**的聚合（见下） | **可摆**（第五项为真） |
+| `/tmp/refprobe/pc_write_before.cml` | 同类循环，循环前有一处 `state::set` | 同上：两条**分不出** | **不可摆**（第五项为假） |
 
-两个探针今天给出**相同**的事实 —— 这就是 `mayBeWritten` 是表级的证据；换完之后两者必须**分开**。这两个程序进 `test/cases/` 的那一天，就是这条的回归用例（本件不建用例，只登记）。
+**分不出的原因（`lane-editview-a` 的 A/B 读数，Lead 已核其推导）**：不是第五项被跳过，而是**第四项先定了答案**。
+
+- 算子侧：`:var/get` 的两边都是 `free=0 kept=1`，而 `camel inspect --ops` 的原文是 `":var/get","purity":"state",…,"clause_pure":true,…,"may_fault":true` ⇒ **"不能故障"先答 no，第五项没轮到**。
+- **判据今天本身不漏**：`facts.cpp:1332` 的第五项就是 `!record->accessesWritableResource()`；`operator_table.cpp:1285` 只把**读**算进来（`374c15fde7` 改的正是这一句）。
+- 真"漏掉写"在 `16:58` 之前：`operator_record.h:482` 的旧 `pure()` 问的是"有没有**一次访问**"而不是"有没有**写**"，这一笔**已被 `fc66a33e09` 修掉**。
+- **全表只有 4 个算子声明了读**（`:var/after`、`:var/get`、`:var/peek`、`:op/mem_blocks`），**四个都 `may_fault=true`** ⇒ 今天**不存在**"纯、不故障、又读某资源"的算子。
+
+**⇒ 语料的前提（必须写在前面）**：要验第五项，**先在表上造出一个"纯、不故障、且读某资源"的算子** —— 这恰好就是本件（"效应事实只有一份"）要交付的东西（§2.1/§2.2 把两份声明合一份，`pure` 与 `Read` 不再互斥）。所以这条探针**排在第 1 刀（两个 `pure()` 合一）之后**，不是之前；今天拿它当判据会得出错结论。
+
+**另一条现在就能用的观测面**：图层的 `core.arrangeable`（§4.6 那四个程序走的就是这一层）—— 它按图聚合、不因某个算子的 `may_fault` 而失去读数能力，现在就能量。**但它对这两个探针今天也给出相同的事实**（我量的原文：两个程序的 `main` 节点都是 `not pure, external effect, may fault, may not terminate, reads a resource a write reaches`），因为这条事实是**每图一条**、且 `external effect` / `may fault` 早把它定死。⇒ 图层能用来量"没有位移"（§4.6 那组），**不能**用来量"只有 `get` / 再加 `set` 的差别"；那个差别要等写集按值算出来（第 2 刀）才可测。
 
 ### 4.5 另外几条现成的读数
 
@@ -164,7 +173,7 @@
 ## 5 顺序与判据（本件落地时的自检）
 
 1. **先去 3、4 的重复**（§2.1、§2.2）：一处定义"没写"，其余读者改成调它。判据：`resources.plan.toml` 逐条仍按同一句期望；`inspect --ops` 的 `clause_pure` 与 `purity` 两列不再互相矛盾地出现在同一个算子上（38 个查询是现成的例子）。
-2. **再把第五项从"扫表"改成"按值"**（§2.3、§3.2）：判据 = §4.4 两个探针**分开**，且 §4.3 的 7 条、§4.1 的 17 个计划逐名不变。
+2. **再把第五项从"扫表"改成"按值"**（§2.3、§3.2）：判据 = §4.4 那两个探针**分开** —— 但**这一步之前必须先有"纯、不故障、且读某资源"的算子**（今天全表 4 个读资源的算子都 `may_fault=true`，第四项先定，§4.4），所以第 2 刀的判据链是：第 1 刀把两份 `pure()` 合一处 → 造出那样的算子 → 探针才分得开；同时 §4.3 的 7 条、§4.1 的 17 个计划逐名不变。
 3. **最后收各遍的判断**（§2.4）：`git grep` 清单里每一处要么收进 §3.3 的五个判定，要么写明为什么它不是同一件事（例如 `isWrittenInPlace`、`readsVariable`）。
 4. 全程：`BUILD_EXIT=0`、`dirty 0`、不 push；读数在宿主 `88zjwei` 上取，标题带 sha。
 
