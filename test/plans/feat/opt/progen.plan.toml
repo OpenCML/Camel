@@ -5,7 +5,7 @@ tags = ["feat", "opt", "progen", "differential"]
 
 [[tests]]
 name = "progen_check"
-desc = "Random programs with a reference output computed outside the compiler (test/tools/progen): a fixed batch of seeds over integer, float, bool and string arithmetic, arrays, tuples, structs, let and var (written through var parameters and captures), if and match, functions, bounded recursion, closures, higher-order functions, map / filter / reduce / foreach / zip / range, sync blocks with println, and wait. Each program runs without passes and under every cell of the cross matrix (25 rewrite sequences on the node VM; no rewrite, std::cxx::inline, std::opt, std::opt and std::macro std::opt also on the bytecode VM, the JIT and the parallel scheduler) and every run must print exactly the reference output or decline with a located diagnostic of a pass. The batch holds only seeds whose every cell passes today; the seeds left out and the defects they show are recorded in test/cases/opt/progen/README.md and in CHECK_EXCLUDED of progen.py. **Re-pointed to `generate.VERSION` 9 on 2026-11-28: the batch is red until the seeds are re-picked** -- seed 25 now names a program on which `std::opt`'s specialization breaks the edge invariants of its own graph (`passes a string as ordinary argument 0 of 'r1$spec40', which takes a int`), 35 of 1025 cells, a defect that is not one of the two recorded in internal/reports/2026-11-28-progen-findings/."
+desc = "Random programs with a reference output computed outside the compiler (test/tools/progen): a fixed batch of seeds over integer, float, bool and string arithmetic, arrays, tuples, structs, let and var (written through var parameters and captures), if and match, functions, bounded recursion, closures, higher-order functions, map / filter / reduce / foreach / zip / range, sync blocks with println, and wait. Each program runs without passes and under every cell of the cross matrix (25 rewrite sequences on the node VM; no rewrite, std::cxx::inline, std::opt, std::opt and std::macro std::opt also on the bytecode VM, the JIT and the parallel scheduler) and every run must print exactly the reference output or decline with a located diagnostic of a pass. The batch holds only seeds whose every cell passes today; the seeds left out and the defects they show are recorded in test/cases/opt/progen/README.md and in CHECK_EXCLUDED of progen.py. **Re-pointed to `generate.VERSION` 9: the batch is red until the seeds are re-picked** -- seed 25 now names a program on which `std::opt`'s specialization breaks the edge invariants of its own graph (`passes a string as ordinary argument 0 of 'r1$spec40', which takes a int`), 35 of 1025 cells, a defect that is not one of the two the findings pages record."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/progen/progen.py"
@@ -47,7 +47,7 @@ timeout_ms = 300000
 #
 # The seed number alone does not name a program: `generate.VERSION` 7 -> 8 ("existing
 # seeds are other programs") re-pointed every seed at another program, and 8 -> 9 did it again
-# (2026-11-28: `main` no longer returns a value, a closure may not assign a captured name, a range is
+# (in this version: `main` no longer returns a value, a closure may not assign a captured name, a range is
 # not an array, and the counter writes through a `state` handle). Any entry that records a seed
 # records the generator version with it, or it names a program the next version will not generate.
 [[tests]]
