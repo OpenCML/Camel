@@ -138,6 +138,10 @@ the archive's matrix.
 
 - §2, §3, §5 and §4: **run by this lane** in this session; the run ids are in `C-stage-faults.csv`, one row per reading.
 - §1: `docker ps` here, and `git ls-files` at `353d36e3d1`.
+- The counts of the form "201 stderr lines" and "114 lines" in §2 are **lines of the run's own log**: counted with
+  `Select-String -Path <log> -Pattern '\[stderr\]'` and then grouped by the message they carry (PowerShell's
+  `Group-Object`), so they are log lines, not source lines — a source-line count in this batch always states its
+  instrument (`wc -l`, `Measure-Object -Line`, `(Get-Content).Count`), because the three disagree.
 - No timings are quoted: `[load]` was 21–31 on a shared host, and this item asks for none.
 
 ## 7. How to replay §2, and what it is pinned to
