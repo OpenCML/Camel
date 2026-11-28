@@ -103,6 +103,19 @@ if (!rows.length) {
   process.exit(2)
 }
 
+// `--dump` prints the record itself: every row, every field, in one stable order, so two runs (before
+// and after a change to declarations or tables) compare with a plain diff and a field that moved is
+// a line that differs. It judges nothing.
+if (process.argv.includes('--dump')) {
+  const key = (row) => `${row.module}\u0000${row.uri}\u0000${row.name}\u0000${row.signature}`
+  for (const row of [...rows].sort((a, b) => key(a).localeCompare(key(b)))) {
+    const ordered = Object.fromEntries(Object.keys(row).sort().map((field) => [field, row[field]]))
+    console.log(`OPERATOR ${JSON.stringify(ordered)}`)
+  }
+  console.log(`[${NAME}] ${rows.length} operator row(s) from ${PROGRAM}`)
+  process.exit(0)
+}
+
 const withRecord = rows.filter(row => row.record)
 const stated = rows.filter(row => row.uses_stated)
 const silent = rows.filter(row => row.record && !row.uses_stated)

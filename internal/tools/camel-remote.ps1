@@ -221,8 +221,8 @@
 # So the gate reads them, and decides only what is news. `gpu-plans` reuses the `reportOnly` shape of
 # the table below -- one machine-readable line, an exit code kept out of `checkfail` -- but it is a
 # plan run and not a checker, so it is emitted as a block of its own after the checkers instead of a
-# table row. `N run` in the closing summary is the static layer's count (20 under `-Check all`), and
-# a twenty-first row would have changed a number every lane compares. The number it prints is the
+# table row. `N run` in the closing summary is the static layer's count (the rows `-Check all` runs), and
+# one more row would have changed a number every lane compares. The number it prints is the
 # runner's own [SUMMARY] reduced to one line, never a second count kept here, and it is `unknown` --
 # not zero -- when the runner printed no summary at all. It runs on the caller's -Jobs, after the
 # checkers, and through the host's token pool like any plan run: it *is* a plan run and not a reader
@@ -786,7 +786,11 @@ $checkers = [ordered]@{
     # the statement to an operator -- `scripts/check-operator-uses.mjs` states the measurement that
     # settled it. The day the list is empty the check stops printing a finding and the row becomes a
     # wall by having nothing left to say, the same way every other `reportOnly` entry turns over.
-    'operator-uses'         = @{ script = 'scripts/check-operator-uses.mjs'; args = @(); compiler = $true; reportOnly = $true; findings = 's/.*check-operator-uses: ([0-9]+) operator\(s\) with no effect statement.*/\1/p' }
+    # The operator record itself, one sorted line per row with every field: what a change to the
+    # declarations or the tables is compared by, run once before and once after and diffed. It reads
+    # and judges nothing, so it runs only when named.
+    'ops-table'             = @{ script = 'scripts/check-operator-uses.mjs'; args = @('--dump'); compiler = $true; namedOnly = $true }
+    'operator-uses'         = @{ script = 'scripts/check-operator-uses.mjs'; args = @(); compiler = $true; reportOnly = $true; findings = 's/.*check-operator-uses: ([0-9]+) operator\(s\) with no effect statement.*/\1/p'}
 }
 
 # The same "a,b can arrive as one string" split as -Plan, so `-Check all` and `-Check a,b` both
@@ -833,8 +837,8 @@ $namedOnlyNames = @($checkers.Keys | Where-Object { $checkers[$_].namedOnly })
 $namedOnlySkipped = @($namedOnlyNames | Where-Object { $checkNames -notcontains $_ })
 
 # The gpu observation, beside the table and deliberately not in it: it is a plan run, so it is no
-# row of `$checkers` -- and `N run` in the closing summary must stay the static layer's count (20
-# under -Check all), which a twenty-first row would have changed for every lane that compares that
+# row of `$checkers` -- and `N run` in the closing summary must stay the static layer's count (the
+# rows -Check all runs), which one more row would have changed for every lane that compares that
 # number. It reuses the report-only shape instead (one machine-readable line, an exit code that never
 # reaches `checkfail`) and is emitted as a block of its own after the checkers; the header section
 # "the gpu layer is observed, and never gates a known red" states what it is, what it is not, and how
