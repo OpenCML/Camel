@@ -1,3 +1,6 @@
+# Instrument, not a test: its entries are read once and pasted into the report beside it;
+# it belongs to no layer. One entry (semantic_fault.differs) carries an expectation the
+# injected fault contradicts on purpose, so it fails by design.
 id = "cc-eval-prelim.C-prefix"
 order = 997
 tier = "fast"
@@ -97,15 +100,16 @@ expect_stderr_contains = ["std::opt::fold"]
 [[tests]]
 name = "C_pfx.semantic_fault.before"
 desc = "The program with no rewrite: what the differential comparison treats as the reference."
-case = "../C-semantic-fault.cml"
+case = "C-semantic-fault.cml"
 args = ["${case}", "std::nvm"]
 expect_stdout_exact = "6\n4\n"
 
 [[tests]]
 name = "C_pfx.semantic_fault.differs"
 desc = "The same program whose function is rewritten by a rule that turns the addition into a subtraction: the graph is legal, so nothing refuses it, and the value it prints is the second one."
-case = "../C-semantic-fault.cml"
+case = "C-semantic-fault.cml"
 args = ["${case}", "std::nvm"]
 compare_to = "C_pfx.semantic_fault.before"
 compare_fields = ["exit_code", "stdout_normalized"]
 expect_stdout_not_contains = ["6"]
+
