@@ -2937,13 +2937,13 @@ timeout_ms = 8000
 
 [[tests]]
 name = "grad_refuse_return"
-desc = "Refused at compile time with NotDifferentiable: the function returns an int, not a float."
+desc = "Refused at compile time with NotDifferentiable: the function returns a string, and a string holds no gradient."
 kind = "negative"
 case = "../../../cases/modules/autodiff/grad_refuse_return.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 1
-expect_diagnostic_line = 10
-expect_output_contains = ["SemanticDiag::NotDifferentiable", "it returns int, not a float"]
+expect_diagnostic_line = 11
+expect_output_contains = ["SemanticDiag::NotDifferentiable", "it returns string, not a float"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -3770,3 +3770,13 @@ expect_exit = 0
 expect_stdout_contains = ["tape.reverse", "forward.fwd"]
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 30000
+[[tests]]
+name = "grad_discrete_zero"
+desc = "`grad` of a function whose result is discrete answers the zero of the weight's gradient: `side` compares its `with` weight against its parameter and answers a `bool`, so the reverse pass takes the differential of a discrete result -- the zero, so no seed -- and every contribution it can make is that zero, which is what the weight's `float` gradient is (design principles 9.9). Red when `grad` refuses the function or answers another type or a non-zero value."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_discrete_zero.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+expect_stdout_exact = "0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

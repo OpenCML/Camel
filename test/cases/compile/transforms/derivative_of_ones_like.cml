@@ -1,0 +1,31 @@
+/**
+ * The forward derivative of `ones_like(xs)` is zero: the array it answers does not read its
+ * argument's value.
+ *
+ * `ones_like` carries the argument's shape and element type and none of its value, so as a function
+ * of what it was made from it is constant (design principles 9.9), and the derivative of a constant
+ * is the zero of the tangent type. The product reads the constant as a factor and the derivative
+ * does not carry it: `times_ones(xs) = xs * ones_like(xs)` is `xs` itself, so the tangent of the
+ * product is the argument's own tangent, `[0.5, 0.25, 0.125]`, and the value is `[1.0, 2.0, 3.0]`.
+ *
+ * The case reads the **forward** half alone, for the reason the `zeros_like` case beside it states:
+ * the reverse half of a body holding one of these nodes does not build yet, because the cut refuses
+ * a lifted graph that holds a `tensor:ones_like` node, and that refusal is a property of the cut
+ * and not of this law.
+ *
+ * Red when: `jvp` refuses `tensor:ones_like`, or the pair it answers is anything but the argument's
+ * own value and tangent.
+ */
+import rulesets.jvp
+import { jvp } from transforms
+import { ones_like } from tensor
+
+func times_ones(xs: float[...]) => float[...] {
+    return xs * ones_like(xs)
+}
+
+func main() sync {
+    let (value, tangent) = jvp(times_ones)([1.0, 2.0, 3.0], [0.5, 0.25, 0.125])
+    println(value)
+    println(tangent)
+}

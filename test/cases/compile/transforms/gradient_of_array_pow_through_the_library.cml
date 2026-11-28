@@ -1,0 +1,57 @@
+/**
+ * The array power, both halves: `pow(lhs, rhs)` on two tensors is `tensor:pow`, the elementwise
+ * power whose record the engine answers with `powVjp`, and this case pins the numbers the library's
+ * `jvp_pow_tensor` (forward) and `pow_tensor_t` (reverse) answer for it.
+ *
+ * The power is a *third* operator beside the two number spellings: `^` on two numbers is
+ * `:op/pow_d`, `math`'s `pow` is `math:pow_d`, and the elementwise power over arrays is
+ * `tensor:pow`. Its signature is computed from its operands (`TensorOrScalar`), so both operands
+ * here are tensors: that is the form the operator's record states.
+ *
+ * Six readings, three programs, each with the value first and the cotangent of ones second:
+ *   - `sum(xs ^ [3, 3, 3])` at `xs = [1.0, 2.0, 3.0]`: value `36.0`, base cotangent
+ *     `3 * x^2 = [3.0, 12.0, 27.0]`.
+ *   - `sum([2, 2] ^ ys)` at `ys = [1.0, 2.0]`: value `6.0`, exponent cotangent
+ *     `2^y * ln(2) = [1.3862943611198906, 2.772588722239781]` -- the branch the engine's own rule
+ *     refuses (it needs a constant exponent) and the branch the library states.
+ *   - `sum(xs ^ [2, 2, 2])` at `xs = [1.0, 2.0, 3.0]`: value `14.0` (`1 + 4 + 9`), base cotangent
+ *     `2 * x = [2.0, 4.0, 6.0]`.
+ *
+ * `vjp` is `split(jvp(f))` and `transpose` of the linear half, so both halves are read by one
+ * program: a missing forward rule stops it before the reverse question, and a wrong reverse rule
+ * moves the cotangent lines alone.
+ */
+import rulesets.jvp
+import rulesets.transpose
+import tensor
+import { sum } from tensor
+import { vjp } from vjp
+
+func cube_of_array(xs: float[3]) => float {
+    let exponent: float[3] = [3.0, 3.0, 3.0]
+    return sum(xs ^ exponent)
+}
+
+func two_to_the_array(ys: float[2]) => float {
+    let base: float[2] = [2.0, 2.0]
+    return sum(base ^ ys)
+}
+
+func square_of_array(xs: float[3]) => float {
+    let exponent: float[3] = [2.0, 2.0, 2.0]
+    return sum(xs ^ exponent)
+}
+
+func main() sync {
+    let (cube_value, cube_pullback) = vjp(cube_of_array)([1.0, 2.0, 3.0])
+    println(cube_value)
+    println(cube_pullback(1.0))
+
+    let (power_value, power_pullback) = vjp(two_to_the_array)([1.0, 2.0])
+    println(power_value)
+    println(power_pullback(1.0))
+
+    let (square_value, square_pullback) = vjp(square_of_array)([1.0, 2.0, 3.0])
+    println(square_value)
+    println(square_pullback(1.0))
+}

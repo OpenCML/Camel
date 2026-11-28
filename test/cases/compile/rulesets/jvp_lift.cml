@@ -1,5 +1,6 @@
 /// `lift` of the `jvp` ruleset: a value and the zero tangent of its type. A float takes the zero
-/// number, and a value with no tangent takes the empty tuple.
+/// number, a number and a `bool` take the zero of their own type, and a value with no tangent
+/// space (a `string`, a function) takes the empty tuple.
 import { Lift, lift, div_jvp, mul_jvp, sub_jvp } from rulesets.jvp
 
 // Rank zero is the element itself: an open-rank pattern selects a plain `f32` too.
@@ -16,7 +17,7 @@ func main() sync {
     println(a.0)
     println(a.1)
     let b = lift(7)
-    let b_has_no_tangent: () = b.1
+    let b_zero: int = b.1
     println(b.0)
     let h = lift(f16(0.5))
     let h_zero: f16 = h.1

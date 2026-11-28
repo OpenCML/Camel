@@ -322,8 +322,14 @@ FunctionType *liftSignature(FunctionType *function) {
         params.emplace_back(type, false);
     }
     for (camel::core::type::Type *type : values) {
-        const camel::core::TangentSpaceAnswer answer = camel::core::tangentSpaceOf(type);
-        params.emplace_back(answer.hasSpace() ? answer.space : emptyTupleType(), false);
+        // The tangent half is the **user's** tangent (`gradientTypeOf`, principle 9.9), not the
+        // machinery's space: a number and a boolean keep their own type at zero, because a space
+        // that exists is not the same statement as a space with a place to accumulate in, and
+        // `Lift<T>` is `(T, Tangent<T>)`. The slot is given even when no rule writes in it -- the
+        // halves must stay two lists of one length -- and what it is typed is the law's answer.
+        camel::core::type::Type *const tangent =
+            camel::core::gradientTypeOf(const_cast<camel::core::type::Type *>(type));
+        params.emplace_back(tangent != nullptr ? tangent : emptyTupleType(), false);
     }
     if (params.empty()) {
         return nullptr;
@@ -371,12 +377,12 @@ LiftedShape liftedShapeOf(Type *type) {
     if (type == nullptr) {
         return shape;
     }
-    const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(type);
-    if (space.hasSpace()) {
-        if (space.space == nullptr) {
-            return shape;
-        }
-        shape.type = TupleType::create(std::vector<Type *>{type, space.space});
+    // The tangent a caller receives is the user's answer (design principles 9.9): a number
+    // or a boolean is its own tangent, with the value zero. The machinery's narrower answer
+    // is what the graph walk below uses, not what the lifted signature promises.
+    camel::core::type::Type *space = camel::core::gradientTypeOf(type);
+    if (space != nullptr) {
+        shape.type = TupleType::create(std::vector<Type *>{type, space});
         shape.pair = true;
         return shape;
     }
@@ -902,8 +908,19 @@ bool liftGraph(
             // get is a tangent to walk with -- `tangentPorts` holds the invalid ref, so the chain
             // below reads "nothing to differentiate" and answers a zero contribution rather than a
             // `()`-typed node where a direction belongs.
+            // The slot's type is the signature's -- the **user's** tangent (`gradientTypeOf`,
+            // principle 9.9), which is the parameter's own type for a discrete one. It is a port so
+            // that the graph and the declared type line up position by position, and whether the
+            // chain may *read* it is still the machinery's question (`tangentPorts` below keeps the
+            // invalid ref when no direction can be handed in): a slot typed `()` where the
+            // signature says `int` made every reader after the cut read the wrong half.
+            camel::core::type::Type *const userTangent = camel::core::gradientTypeOf(valueType);
+            const auto *userTuple = tt::as_ptr<camel::core::type::TupleType>(userTangent);
+            const bool typedSlot =
+                userTangent != nullptr && !(userTuple != nullptr && userTuple->size() == 0);
             camel::core::type::Type *tangentType =
-                tangentSpace.hasSpace() ? tangentSpace.space : emptyTupleType();
+                typedSlot ? userTangent
+                          : (tangentSpace.hasSpace() ? tangentSpace.space : emptyTupleType());
             const gc_node_ref_t slot =
                 draft.addPortNode(tangentType, draft.allocateRuntimeSlot(tangentType));
             draft.appendNormPort(slot);
@@ -1178,6 +1195,22 @@ bool liftGraph(
             [&pairOf,
              &fillTupleOf](Type *valueType, gc_node_ref_t half, gc_node_ref_t halfTangent) {
                 TupleType *pairType = pairOf(valueType);
+                if (pairType == nullptr) {
+                    // The machinery's tangent space answers nothing for a value the **user's** law
+                    // still pairs: a `bool` or an `int` result keeps its own type, at zero (design
+                    // principles 9.9), and its lift is `(value, zero)`. The law's answer is the one
+                    // the lifted signature declares, so the pair is written from it -- a fill with
+                    // no type is a graph the encoder rejects far from here, and the exit would
+                    // disagree with the signature it was built to satisfy.
+                    //
+                    // Every other shape keeps `pairOf`'s answer, which is the one the walk's
+                    // `pairIsTheCopy` bookkeeping was filled with.
+                    const LiftedShape shape = liftedShapeOf(valueType);
+                    if (!shape.pair || shape.type == nullptr) {
+                        return rt::kInvalidNodeRef;
+                    }
+                    pairType = static_cast<TupleType *>(shape.type);
+                }
                 const std::array<gc_node_ref_t, 2> halves{half, halfTangent};
                 return fillTupleOf(pairType, halves);
             };
@@ -1643,6 +1676,20 @@ bool liftGraph(
                 return tangentOf[input];
             }
             if (emptyTangent == rt::kInvalidNodeRef) {
+                // A discrete value is its own tangent space, and its cotangent is the zero of that
+                // type (design principles 9.9 and 7.18): the machinery keeps
+                // no place to accumulate in for such a value, which is its own choice, but the
+                // answer it hands to a reader is a zero, not a refusal and not a value with no
+                // data. Only a type with no tangent space at all -- a `string`, a function -- gets
+                // the empty tuple.
+                Type *const valueType = in != nullptr ? in->dataType() : nullptr;
+                if (const std::optional<slot_t> discreteZero =
+                        camel::core::discreteZeroSlot(valueType)) {
+                    return draft.materializeStaticValue(
+                        *discreteZero,
+                        valueType,
+                        rt::kGCNodeFlagConstant);
+                }
                 emptyTangent = draft.materializeStaticValue(
                     camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(
                         ::Tuple::create(0, mm::autoSpace())),
@@ -3369,8 +3416,8 @@ bool liftGraph(
             noteRefusal(RefusalReading("jvp", name, RefusalCause::Value));
             return fail(refusal);
         }
-        const gc_node_ref_t chainValue   = copyOf[oldValue];
-        const gc_node_ref_t chainTangent = tangentOf[oldValue];
+        const gc_node_ref_t chainValue = copyOf[oldValue];
+        gc_node_ref_t chainTangent     = tangentOf[oldValue];
         // A body that ends at a branch already yields the pair -- the Join's type is the pair of
         // the value it yields -- so the exit is that value itself. A straight-line body yields a
         // value the rules gave a tangent for, and the exit is the pair built from the two.
@@ -3388,6 +3435,30 @@ bool liftGraph(
         // the pair of the whole value, so only `pairIsTheCopy` knows which of the two this is.
         const bool alreadyLifted = chain != nullptr && exitPair != nullptr &&
                                    chain->dataType == exitPair && pairIsTheCopy.contains(oldValue);
+        if (chainTangent == rt::kInvalidNodeRef && !alreadyLifted && !exitIsLiftedValue) {
+            // A **discrete** answer -- a comparison's `bool`, a count's `int` -- is the one shape
+            // where the walk has no tangent to hand over and the answer is still the law's: the
+            // user's rule gives such a value a gradient of its own type, at zero (design
+            // principles 9.9, `gradientTypeOf`), while the machinery's rule gives it no tangent
+            // space at all, which is why the walk copied it without one (a zero nobody read was
+            // not worth a node). The pair the lifted signature promises is closed here with that
+            // zero, written as the constant its own type states -- the same zero the reverse
+            // transform writes for a discrete member (`camel::core::discreteZeroSlot`).
+            //
+            // The condition is exactly that disagreement, not "the tangent is missing": a `float`
+            // whose tangent the walk failed to make is a defect, and it is still refused below.
+            Type *exitValueType = valueTypeOf(oldValue);
+            const bool discreteWithUserGradient =
+                exitValueType != nullptr && camel::core::gradientTypeOf(exitValueType) != nullptr &&
+                !camel::core::tangentSpaceOf(exitValueType).hasSpace();
+            if (discreteWithUserGradient) {
+                if (const std::optional<slot_t> zero =
+                        camel::core::discreteZeroSlot(exitValueType)) {
+                    chainTangent =
+                        draft.materializeStaticValue(*zero, exitValueType, rt::kGCNodeFlagConstant);
+                }
+            }
+        }
         if (chainTangent == rt::kInvalidNodeRef && !alreadyLifted && !exitIsLiftedValue) {
             os << "REINTERP jvp function=" << name
                << " skip=" << refusalCauseName(RefusalCause::Tangent) << '\n';
