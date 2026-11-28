@@ -67,7 +67,7 @@ throw new Error('JGIR ' + JSON.stringify({key: 'KEY', name: 'NAME', len: enc.len
 ## 结论怎么用
 
 - **可以说**：在这 19 对上，两侧 `std::jgir canonical=true` 的整份输出**长度相同**、**17 对哈希相同**。
-- **不能说**：17/19 是"逐字节相同"—— 哈希是 32 位滚动和，只作筛子；第 13、17 对是真不同，其余 17 对**尚未逐字节确认**。
+- **不能说**：这些对"逐字节相同"—— 本轮的判据是 32 位滚动和，只作筛子；两处差异的真读数来自 host 直连 CLI 的真字节比较（见下节）。
 - 要把这句坐实，先补上"整份文本能落地"的通道（见页首三条选项之一），我再跑一遍同样的 38 条 run 并给出偏移与存档。
 
 ## 分母的证据（原文行，`test/plans/feat/opt/camel_passes.plan.toml`）
@@ -120,6 +120,37 @@ L259: compare_to = "camel_passes.fold_fault.by_cpp"
 ```
 （先前本页按"19 对里 17 对相同、2 对差记账位、1 对不产图"记 —— 那个数把 **17 当成了图对**。
 按计划原文，17 的两侧只印 `std::stats`，所以它是**不产图**的一对；修正后就是上面的 `16 + 1 + 2`。）
+
+## 那两对到底差在哪（Lead 的 host 直连读数，不经 runner）
+
+```
+树 /home/zjwei/camel-work/promote = fbdc5de8e1（晋级 81 尖端），out/latest 二进制 built 16:02:03，16:26–16:27
+每条一次 CLI：camel <case> <遍按计划原文> std::jgir canonical=true，两侧 rc 0
+
+对 13  fold.same_text（opt::fold）  vs  fold.by_cpp（std::cxx::fold）   case fold_subject.cml
+      18613 / 18613 字节    sha256 A `4cc0ebb7c2a79040b70a39fe45766247b2cf5ea121f4b799178a60059c36fe3a` / B `ff84e9cdc468ebe5f5f2ba8e8d0f5b20041689d6df7e54ec32363f39b21e3622`
+      第一处差异 offset 15639（84% 处）
+        A(opt::fold)  .."exit": "n7",  "flags": 0,  "id": "g4"..
+        B(cxx::fold)  .."exit": "n7",  "flags": 2,  "id": "g4"..
+
+对 17  cse.after_inline.by_camel（opt::cse） vs .by_cpp（std::cxx::cse）  case cse_after_inline.cml
+      8250 / 8250 字节       sha256 A `a360c366402944763eb42c094eb46c1f01bdf80d73ade95134fb841cb3c59b45` / B `e8d3f32e416103e283d2208c1feb13f5469f8d0552b4f057d463fa960cedafb7`
+      第一处差异 offset 4192
+        A(opt::cse)   .."exit": "n2",  "flags": 0,  "id": "g2"..
+        B(cxx::cse)   .."exit": "n2",  "flags": 2,  "id": "g2"..
+```
+
+**`flags = 2` 是什么**：`src/kernel/include/camel/runtime/graph.h#GCGraphFlag` 里 `kGraphFlagGatesDissolved = 1 << 1`，
+注释原文："A commit looked at the graph's gates: none waits on nothing (`GraphDraft::dissolveUnorderedGates`).
+A graph without it is looked at by the first commit that reaches it; a graph with it is left as it is unless it is edited."
+⇒ 这是"**提交是否已经看过这张图的 gate**"的记账位：C++ 版那遍设了它、Lang 写的遍没设。按注释，
+没有这个位的图**会被下一个到它的提交再看一次**，有就跳过 —— **不是语义差异，是谁扫过 gate 的记账差异**。
+
+## 分类（已被上面的"逐对清单"取代）
+
+原来这里按"三类/四类"记（`图相同` / `图相同、只差记账位` / `图不同` / `不产出图`），并写"排除 16 后 17 / 18"。
+那两句话都**没有把"这一对比的是图还是一段程序输出"分开**，所以数会漂（`17/18`、`17/19`、`16/18` 各出现过一次）。
+**定稿只有一处**：`逐对清单` 的 **N = 19 = 16 + 1 + 2**，且"产出同一张图"的分母是 **17 = 16 + 1**（16、17 两对不进这个分母）。
 
 ## 那两对到底差在哪（Lead 的 host 直连读数，不经 runner）
 
