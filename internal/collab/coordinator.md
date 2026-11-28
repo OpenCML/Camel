@@ -568,7 +568,7 @@ git worktree add --detach <旧提交>
 
 **22. "`src/**` 零改动 ⇒ 不用跑整层"不等于"不用重录 AST"。**
 `docs/notes6` 落地时合并位踩到（`seat-merge-1`，`db77af3b49`）：那枝 `src/**` 零改动，可它**改了 `test/cases/modules/rules/check_when.cml`、加了 `test/cases/modules/stdlib/abs_smallest_int.cml`** —— 两条都在 AST 记录里 ⇒ 首趟 `parse.frontend frontend.ast_record` 报甲（`recorded 04da6afb… now 4835f1d1…` / `missing … recorded -`）。按金标纪律"只读 check → `-UpdateAstHashes` → 只读 check"补 `4704 lines recorded, 2 added and 1 removed`，再 check `4704 file(s) checked, 0 stale`，单列一笔只动 `ast_hashes.txt`。
-**判据分两件事**：判**要不要跑整层**看 `src/**`；判**要不要重录 AST**看有没有动 `test/cases/**` 与 `docs/tutorial/examples/**`（注释也参与哈希，改注释同样要重录）。
+**判据分两件事**：判**要不要跑整层**看 `src/**`；判**要不要重录 AST**看有没有动 `src/**/*.cml`、`test/cases/**`、`docs/tutorial/examples/**`（三者任一都要看；`ast_hashes.txt` 收的是 `.cml` 内容哈希，含 `src/stdlib/**`，注释也参与）。**同一族第二次踩**：`opt-inline` 改了 `src/stdlib/opt.cml` ⇒ 下一批 `frontend.ast_record` 报 `mismatch src/stdlib/opt.cml recorded 8e30555972 now f1d50ae81a`。
 
 **23. 派工里写的工作树路径不存在时，车道会落在主检出上 —— 派工前先核路径。**
 `lane-oper-shape-guard` 接 `jvp` 那条活时，我写的树是 `D:\Projects\Camel-wt\op-guard`（**不存在**）；它 `Set-Location` 报错后，后续 `git switch -c lane/jvp-through-loop origin/integration` 落进了**主检出 `D:\Projects\Camel`**（会话默认目录），主树 HEAD 就此离开负责人位置，插件当场报 `main-checkout-touched` 并列出 3555 个"改动"（其实是换枝造成的文件差异，不是脏）。车道没动代码、没提交；恢复三行：`git -C <主树> switch --detach <原游离 sha>`、`git -C <主树> branch -D <误建的枝>`、再各报一次 `status` 与 `rev-parse --abbrev-ref HEAD`。
