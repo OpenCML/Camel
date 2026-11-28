@@ -89,6 +89,11 @@ struct ReverseRoundCount {
         TapeLength,
         /// A value the caller computed by re-running the loop's control (no recording involved).
         Recomputed,
+        /// A counter carried beside a loop's own states while the loop's body is replayed: the
+        /// condition reads a value the body produced, so the rounds are known only by running them
+        /// (`transpose/walk.cpp`). The number is the counter's last value, not a length taken off
+        /// an array.
+        Replayed,
     };
     Source source = Source::TapeLength;
     /// The residual array, when the source is TapeLength.

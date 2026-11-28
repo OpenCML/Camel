@@ -5644,6 +5644,9 @@ void buildReverseCondRegion(
 }
 gc_node_ref_t
 reverseFirstRound(rt::GraphTransaction &transaction, const ReverseRoundCount &rounds) {
+    // Two of the three sources hand the number over directly: a recomputation of the control and a
+    // replay of the body both count rounds as they run them, so the value is the count. Only the
+    // tape is not a number -- it is one residual per round, and its length is the count.
     gc_node_ref_t count = rounds.value;
     if (rounds.source == ReverseRoundCount::Source::TapeLength) {
         const std::array<gc_node_ref_t, 1> tape{rounds.tape};

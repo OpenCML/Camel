@@ -21,6 +21,11 @@ func halve(x: float) => float {
 
 func main() sync {
     let back = transpose(halve)
+    // x = 16: four rounds, the function is x/16 there, so its derivative is 1/16.
     println(halve(16.0))
     println(back(16.0))
+    // x = 48: six rounds (48, 24, 12, 6, 3, 1.5 -> 0.75), the function is x/64 there, so the
+    // cotangent 64.0 pulls back to 1.0 and the value itself is 0.75.
+    println(halve(48.0))
+    println(back(64.0))
 }

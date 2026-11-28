@@ -2939,6 +2939,10 @@ bool buildTransposeMember(
                 // nothing else: subtracting the two machine values a stream loop has would answer
                 // one state for a loop that carries three.
                 const size_t stateCount = iterates ? regionPorts.size() - 1 : regionPorts.size();
+                // Where the states begin in that list: a loop that iterates keeps its element first,
+                // and a `while` loop has nothing before its states -- the same two readings the
+                // runtime makes of the same port list (`runtime/loop.cpp`).
+                const size_t stateBase = iterates ? 1 : 0;
                 if (regionPorts.size() > 0 && regionPorts.size() < (iterates ? 2u : 3u)) {
                     refuse(TransposeRefusalCause::State);
                     os << " node=" << ref << " origin=" << regionOrigin
@@ -3075,13 +3079,308 @@ bool buildTransposeMember(
                             }
                         }
                         if (readsAState) {
-                            refuse(TransposeRefusalCause::State);
-                            os << " node=" << ref << " origin=" << regionOrigin
-                               << " why=this-version-does-not-yet-recompute-the-rounds-of-a-loop-"
-                                  "whose-condition-reads-a-state\n";
-                            return false;
+                            // The number of rounds is the number the condition itself decided, and
+                            // the only way to know it is to run the rounds again: the condition
+                            // reads a value the body produced, so re-running the condition alone
+                            // -- what the counting loop below does for a control -- would ask it
+                            // about a state that never existed. So the body is replayed: the two
+                            // regions the loop states its rounds in are copied into a counting
+                            // loop of this graph, the states are carried through them, and a
+                            // counter beside the states ends on the number of rounds the forward
+                            // loop ran.
+                            //
+                            // The copy is deliberately narrow. It knows a port (mapped onto the
+                            // counting loop's own), a constant, and an operator; a node kind it does
+                            // not know -- a call, or a region of its own -- is not guessed at, and
+                            // the loop keeps the refusal it has always got: the change can only
+                            // widen what is answered, never answer a count it did not compute.
+                            const auto condPortsOld = function->regionPorts(condRegionOld);
+                            const auto bodyPortsOld = function->regionPorts(bodyRegionOld);
+                            std::vector<Type *> replayTypes;
+                            bool replayOk = stateCount > 0 &&
+                                            condPortsOld.size() == stateCount &&
+                                            bodyPortsOld.size() == stateCount;
+                            for (size_t i = 0; replayOk && i < stateCount; ++i) {
+                                const camel::runtime::GCNode *const port =
+                                    function->node(bodyPortsOld[i]);
+                                Type *const type =
+                                    port != nullptr ? const_cast<Type *>(port->dataType()) : nullptr;
+                                if (type == nullptr) {
+                                    replayOk = false;
+                                    break;
+                                }
+                                replayTypes.push_back(type);
+                            }
+                            if (replayOk) {
+                                replayTypes.push_back(Type::Int64());
+                                const uint32_t replayCondRegion =
+                                    draft.addRegion(rt::GCRegionKind::LoopCond, 0);
+                                const uint32_t replayBodyRegion =
+                                    draft.addRegion(rt::GCRegionKind::LoopBody, 0);
+                                std::vector<gc_node_ref_t> replayCondPorts;
+                                draft.setInsertRegion(replayCondRegion);
+                                for (Type *const type : replayTypes) {
+                                    replayCondPorts.push_back(
+                                        draft.addPortNode(type, draft.allocateRuntimeSlot(type)));
+                                }
+                                draft.setRegionPorts(replayCondRegion, replayCondPorts);
+                                std::vector<gc_node_ref_t> replayBodyPorts;
+                                draft.setInsertRegion(replayBodyRegion);
+                                for (Type *const type : replayTypes) {
+                                    replayBodyPorts.push_back(
+                                        draft.addPortNode(type, draft.allocateRuntimeSlot(type)));
+                                }
+                                draft.setRegionPorts(replayBodyRegion, replayBodyPorts);
+                                // One node of a region, as a node of the counting loop: a port is
+                                // the counting loop's port at the same place, a constant is the
+                                // same constant, an operator is the same operator over the copied
+                                // inputs, and a value from outside the region is the primal value
+                                // the transposed graph already holds (`forward`). Anything else
+                                // stops the copy and the loop is refused as it was.
+                                std::unordered_map<gc_node_ref_t, gc_node_ref_t> replayed;
+                                std::function<gc_node_ref_t(
+                                    gc_node_ref_t, uint32_t, const std::vector<gc_node_ref_t> &)>
+                                    replayValue;
+                                replayValue = [&](gc_node_ref_t source,
+                                                  uint32_t sourceRegion,
+                                                  const std::vector<gc_node_ref_t> &newPorts)
+                                    -> gc_node_ref_t {
+                                    if (!replayOk || source >= nodeCount) {
+                                        replayOk = false;
+                                        return rt::kInvalidNodeRef;
+                                    }
+                                    if (const auto done = replayed.find(source);
+                                        done != replayed.end()) {
+                                        return done->second;
+                                    }
+                                    if (function->nodeRegion(source) != sourceRegion) {
+                                        const gc_node_ref_t outside = forward(source);
+                                        if (outside == rt::kInvalidNodeRef) {
+                                            replayOk = false;
+                                        }
+                                        return outside;
+                                    }
+                                    const camel::runtime::GCNode *const node =
+                                        function->node(source);
+                                    if (node == nullptr) {
+                                        replayOk = false;
+                                        return rt::kInvalidNodeRef;
+                                    }
+                                    gc_node_ref_t made = rt::kInvalidNodeRef;
+                                    switch (node->kind) {
+                                        case rt::GCNodeKind::Port: {
+                                            const auto ports =
+                                                function->regionPorts(sourceRegion);
+                                            const auto at =
+                                                std::find(ports.begin(), ports.end(), source);
+                                            if (at == ports.end()) {
+                                                replayOk = false;
+                                                break;
+                                            }
+                                            const size_t index =
+                                                static_cast<size_t>(at - ports.begin());
+                                            if (index >= stateCount) {
+                                                replayOk = false;
+                                                break;
+                                            }
+                                            made = newPorts[index];
+                                            break;
+                                        }
+                                        case rt::GCNodeKind::Data:
+                                            made = constantValue(source);
+                                            if (made == rt::kInvalidNodeRef) {
+                                                replayOk = false;
+                                            }
+                                            break;
+                                        case rt::GCNodeKind::Oper: {
+                                            // The operator is the node's payload, not its debug
+                                            // name: the identity is copied, and nothing is looked
+                                            // up (the `OperId` overload of `addOperNode`).
+                                            const auto *const operBody =
+                                                function->nodeBodyAs<camel::runtime::GCOperBody>(
+                                                    source);
+                                            if (operBody == nullptr) {
+                                                replayOk = false;
+                                                break;
+                                            }
+                                            made = draft.addOperNode(
+                                                const_cast<Type *>(node->dataType()),
+                                                operBody->op,
+                                                operBody->oper);
+                                            std::vector<gc_node_ref_t> norm;
+                                            std::vector<gc_node_ref_t> with;
+                                            for (const gc_node_ref_t input :
+                                                 function->normInputsOf(source)) {
+                                                norm.push_back(
+                                                    replayValue(input, sourceRegion, newPorts));
+                                            }
+                                            for (const gc_node_ref_t input :
+                                                 function->withInputsOf(source)) {
+                                                with.push_back(
+                                                    replayValue(input, sourceRegion, newPorts));
+                                            }
+                                            if (!replayOk) {
+                                                break;
+                                            }
+                                            draft.setNormInputs(
+                                                made,
+                                                std::span<const gc_node_ref_t>(norm));
+                                            draft.setWithInputs(
+                                                made,
+                                                std::span<const gc_node_ref_t>(with));
+                                            break;
+                                        }
+                                        case rt::GCNodeKind::Fill: {
+                                            // A tuple of values the round computed: the body hands
+                                            // its next state back as one, so the copy has to make
+                                            // the same tuple out of the copied parts.
+                                            Type *const type = const_cast<Type *>(node->dataType());
+                                            const auto parts = function->normInputsOf(source);
+                                            std::vector<gc_node_ref_t> copiedParts;
+                                            std::vector<Type *> partTypes;
+                                            for (const gc_node_ref_t input : parts) {
+                                                copiedParts.push_back(
+                                                    replayValue(input, sourceRegion, newPorts));
+                                                const camel::runtime::GCNode *const part =
+                                                    function->node(input);
+                                                partTypes.push_back(
+                                                    part != nullptr
+                                                        ? const_cast<Type *>(part->dataType())
+                                                        : nullptr);
+                                            }
+                                            if (!replayOk || type == nullptr ||
+                                                type->code() != camel::core::type::TypeCode::Tuple ||
+                                                std::find(partTypes.begin(),
+                                                          partTypes.end(),
+                                                          nullptr) != partTypes.end()) {
+                                                
+                                                replayOk = false;
+                                                break;
+                                            }
+                                            made = tupleOf(copiedParts, partTypes).first;
+                                            break;
+                                        }
+                                        default:
+
+                                            replayOk = false;
+                                            break;
+                                    }
+                                    if (!replayOk) {
+                                        return rt::kInvalidNodeRef;
+                                    }
+                                    replayed[source] = made;
+                                    return made;
+                                };
+                                draft.setInsertRegion(replayCondRegion);
+                                const gc_node_ref_t replayCondition =
+                                    replayValue(function->region(condRegionOld)->result,
+                                                condRegionOld,
+                                                replayCondPorts);
+                                draft.setInsertRegion(replayBodyRegion);
+                                const gc_node_ref_t replayNext =
+                                    replayValue(function->region(bodyRegionOld)->result,
+                                                bodyRegionOld,
+                                                replayBodyPorts);
+                                // The counter goes up by one per round, after the round's own
+                                // state update -- and it is not taken off the end the way the pull
+                                // count is (`Source::Recomputed` subtracts the round that read
+                                // null): a loop whose condition reads a state runs no round that
+                                // ends it, the condition is asked at the head of each round, so the
+                                // counter's last value is the number of rounds and nothing more.
+                                const gc_node_ref_t replayMore =
+                                    draft.addOperNode(Type::Int64(), nullptr, ":op/add_l");
+                                const std::array<gc_node_ref_t, 2> oneMore{
+                                    replayBodyPorts[stateCount],
+                                    intConstantNode(walkCtx, 1)};
+                                draft.setNormInputs(
+                                    replayMore,
+                                    std::span<const gc_node_ref_t>(oneMore.data(),
+                                                                   oneMore.size()));
+                                std::vector<gc_node_ref_t> replayParts;
+                                if (stateCount == 1) {
+                                    replayParts.push_back(replayNext);
+                                } else {
+                                    for (size_t i = 0; i < stateCount; ++i) {
+                                        const gc_node_ref_t part = draft.addAccsNode(
+                                            replayTypes[i], static_cast<uint32_t>(i));
+                                        draft.setNormInputs(
+                                            part,
+                                            std::span<const gc_node_ref_t>(&replayNext, 1));
+                                        replayParts.push_back(part);
+                                    }
+                                }
+                                replayParts.push_back(replayMore);
+                                const auto replayState = tupleOf(replayParts, replayTypes);
+                                if (replayOk) {
+                                    draft.setRegionResult(replayCondRegion, replayCondition);
+                                    draft.setRegionResult(replayBodyRegion, replayState.first);
+                                }
+                                draft.setInsertRegion(0);
+                                if (replayOk) {
+                                    Type *const replayValueType =
+                                        camel::core::type::TupleType::create(replayTypes);
+                                    const gc_node_ref_t replayLoop = draft.addLoopNode(
+                                        rt::GCLoopBody{
+                                            .kind = camel::core::LoopKind::While,
+                                            .collectionCount = 0},
+                                        replayValueType);
+                                    std::vector<gc_node_ref_t> replayInitial;
+                                    for (const gc_node_ref_t input : oldNorm) {
+                                        replayInitial.push_back(forward(input));
+                                    }
+                                    replayInitial.push_back(intConstantNode(walkCtx, 0));
+                                    draft.setNormInputs(
+                                        replayLoop,
+                                        std::span<const gc_node_ref_t>(replayInitial));
+                                    const gc_node_ref_t replayRound = draft.addPortNode(
+                                        Type::Int64(),
+                                        draft.allocateRuntimeSlot(Type::Int64()));
+                                    const std::array<gc_node_ref_t, 3> replayWith{
+                                        replayCondition, replayState.first, replayRound};
+                                    draft.setWithInputs(
+                                        replayLoop,
+                                        std::span<const gc_node_ref_t>(replayWith));
+                                    draft.setRegionOwner(replayCondRegion, replayLoop, 0);
+                                    draft.setRegionOwner(replayBodyRegion, replayLoop, 1);
+                                    const gc_node_ref_t counted = draft.addAccsNode(
+                                        Type::Int64(), static_cast<uint32_t>(stateCount));
+                                    draft.setNormInputs(
+                                        counted,
+                                        std::span<const gc_node_ref_t>(&replayLoop, 1));
+                                    firstRound = camel::autodiff::reverseFirstRound(
+                                        *transaction,
+                                        camel::autodiff::ReverseRoundCount{
+                                            .source = camel::autodiff::ReverseRoundCount::Source::
+                                                Replayed,
+                                            .value = counted});
+                                }
+                            }
+                            for (gc_node_ref_t dbg = 0; dbg < draft.nodeSlotCount(); ++dbg) {
+                                for (const gc_node_ref_t input : draft.normInputsOf(dbg)) {
+                                    if (input == rt::kInvalidNodeRef) {
+                                        os << "DEBUGBAD norm node=" << dbg << "\n";
+                                    }
+                                }
+                                for (const gc_node_ref_t input : draft.withInputsOf(dbg)) {
+                                    if (input == rt::kInvalidNodeRef) {
+                                        os << "DEBUGBAD with node=" << dbg << "\n";
+                                    }
+                                }
+                            }
+                    if (!replayOk) {
+                                refuse(TransposeRefusalCause::State);
+                                os << " node=" << ref << " origin=" << regionOrigin
+                                   << " why=this-version-does-not-yet-recompute-the-rounds-of-a-"
+                                      "loop-whose-condition-reads-a-state\n";
+                                return false;
+                            }
                         }
                     }
+                    // The count is already known when the loop's condition reads a state: the replay
+                    // above ran the rounds and left their number in `firstRound`. A loop with no
+                    // condition to pull from has nothing for the block below to count by pulling,
+                    // and a loop whose condition was replayed needs no pull at all.
+                    if (firstRound == rt::kInvalidNodeRef) {
                     const gc_node_ref_t streamValue =
                         oldNorm.empty() ? rt::kInvalidNodeRef : forward(oldNorm.front());
                     if (streamValue == rt::kInvalidNodeRef) {
@@ -3308,6 +3607,7 @@ bool buildTransposeMember(
                             .source = camel::autodiff::ReverseRoundCount::Source::Recomputed,
                             .value  = rounds});
                 }
+                    }
                 const uint32_t newRegion = draft.addRegion(rt::GCRegionKind::LoopBody, 0);
                 draft.setInsertRegion(newRegion);
                 // The body takes the round number first and the states after it; each state becomes
@@ -3368,7 +3668,7 @@ bool buildTransposeMember(
                 stateCotangentTypes.reserve(stateCount);
                 carriedStates.reserve(stateCount);
                 for (size_t i = 0; i < stateCount; ++i) {
-                    const size_t portIndex = (iterates ? 1 : 2) + i;
+                    const size_t portIndex = stateBase + i;
                     // A state port this loop does not have is a count that disagrees with the
                     // region's ports -- the walk's own defect, not the program's -- so it refuses
                     // rather than reading a space off nothing.
@@ -3562,7 +3862,7 @@ bool buildTransposeMember(
                     }
                 }
                 std::vector<gc_node_ref_t> statePorts(
-                    regionPorts.begin() + (iterates ? 1 : 2),
+                    regionPorts.begin() + stateBase,
                     regionPorts.end());
                 // The seeds can stand in more than one region: a round's states are answered by
                 // the arms of a branch, and an arm is a region of its own, so the member a state
@@ -3632,7 +3932,7 @@ bool buildTransposeMember(
                 // also a value the body may have read -- an escape can land on one of them.
                 std::vector<gc_node_ref_t> stateInitials;
                 for (size_t i = 0; i < stateCount; ++i) {
-                    const size_t at = (iterates ? 1 : 2) + i;
+                    const size_t at = stateBase + i;
                     stateInitials.push_back(
                         at < oldNorm.size() ? oldNorm[at] : rt::kInvalidNodeRef);
                 }
@@ -3744,8 +4044,8 @@ bool buildTransposeMember(
                     // zeros for an array.
                     const gc_node_ref_t part = i < back.size() ? back[i] : rt::kInvalidNodeRef;
                     regionParts.push_back(
-                        part == rt::kInvalidNodeRef && (iterates ? 1 : 2) + i < regionPorts.size()
-                            ? zeroOf(regionPorts[(iterates ? 1 : 2) + i])
+                        part == rt::kInvalidNodeRef && stateBase + i < regionPorts.size()
+                            ? zeroOf(regionPorts[stateBase + i])
                             : part);
                     componentTypes.push_back(stateCotangentTypes[i]);
                 }
@@ -3916,6 +4216,19 @@ bool buildTransposeMember(
                         roundSlot};
                     draft.setWithInputs(loopNode, std::span<const gc_node_ref_t>(loopWith));
                 }
+                os << "DEBUGLOOPNODE " << loopNode << " norm=" << draft.normInputsOf(loopNode).size() << " with=" << draft.withInputsOf(loopNode).size() << " of=" << draft.nodeSlotCount() << "\n";
+                for (gc_node_ref_t dbg = 0; dbg < draft.nodeSlotCount(); ++dbg) {
+                    for (const gc_node_ref_t input : draft.normInputsOf(dbg)) {
+                        if (input == rt::kInvalidNodeRef) {
+                            os << "DEBUGBAD norm node=" << dbg << "\n";
+                        }
+                    }
+                    for (const gc_node_ref_t input : draft.withInputsOf(dbg)) {
+                        if (input == rt::kInvalidNodeRef) {
+                            os << "DEBUGBAD with node=" << dbg << "\n";
+                        }
+                    }
+                }
                 if (carries || carriedCount > 1 || componentTypes.size() > 1) {
                     // The loop's value is one cotangent per state followed by one sum per escaped
                     // value, so each component goes where its own value's cotangent goes: a state's
@@ -4007,6 +4320,14 @@ bool buildTransposeMember(
                         // node of the draft, the types belong to the source).
                     }
                 }
+                    for (gc_node_ref_t dbg = 0; dbg < draft.nodeSlotCount(); ++dbg) {
+                        for (const gc_node_ref_t input : draft.normInputsOf(dbg)) {
+                            if (input == rt::kInvalidNodeRef) { os << "DEBUGEND norm node=" << dbg << " of=" << draft.nodeSlotCount() << "\n"; }
+                        }
+                        for (const gc_node_ref_t input : draft.withInputsOf(dbg)) {
+                            if (input == rt::kInvalidNodeRef) { os << "DEBUGEND with node=" << dbg << " of=" << draft.nodeSlotCount() << "\n"; }
+                        }
+                    }
                 break;
             }
             case NodeCase::Call:
