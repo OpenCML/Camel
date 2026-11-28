@@ -3557,3 +3557,15 @@ expect_exit = 0
 expect_output_contains = ["idx_take forward value=[3.0, 1.0] tangent=[3.0, 1.0]", "idx_take engine value=4.0 gradient=[1.0, 0.0, 1.0]", "idx_take: forward=4.0 engine=4.0 same=true"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+[[tests]]
+name = "add_gradient_both_legs"
+desc = "`+` through both legs, the one pair of the ten rule-index keys that had no reading putting both legs on one number (`jvp_add` and `add_t`; `broadcast_add_subtract_gradient.cml` reads the library's `transpose` alone, and the difference has its both-legs case). `e = x + b`, `loss = sum(e * e)` with `x = [1.0, 2.0, 3.0]` and `b = [0.5, 1.0, 2.0]`: `loss = 36.25` and both legs answer `dL/db = [3.0, 6.0, 10.0] = 2e`, exactly. The engine's leg is `with_grad`, the library's is `vjp` (`jvp_add` forward, `add_t` reverse, both named at the case's head). A law that gave the cotangent to one operand and zero to the other answers `[0.0, 0.0, 0.0]`, one that answered `e` as the cotangent answers `[1.5, 3.0, 5.0]`, and one that flipped a sign answers the negative -- three shapes a wrong sum would take, each off this line. The reading is `max_abs_diff ... {:.12e} = 0.000000000000e+00`, the form `broadcast_difference_through_vjp.cml` takes."
+kind = "behavior"
+case = "../../../cases/compile/transforms/add_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["add library value=36.25 dL/db=[3.0, 6.0, 10.0]", "add engine value=36.25 dL/db=[3.0, 6.0, 10.0]", "add max_abs_diff library_vs_engine=0.000000000000e+00"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

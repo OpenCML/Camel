@@ -1,0 +1,55 @@
+// `+`'s gradient through both legs, on one program: the library's reverse rules (`vjp`, which is
+// `transpose . split . jvp` over `rulesets.jvp` and `rulesets.transpose`) and the engine's own walk
+// with the differentiated value as the `with` parameter.
+//
+// `+` was the one pair of the ten rule-index keys with no reading that puts both legs on one number
+// (`jvp_add` and `add_t`; `broadcast_add_subtract_gradient.cml` reads the library's `transpose`
+// alone, `first_step_tensor.cml` and `broadcast_difference_through_vjp.cml` read the difference).
+// This case is that reading for the sum.
+//
+//     e    = x + b        two `float[3]`s, lane for lane
+//     loss = sum(e * e)
+//
+//     x = [1.0, 2.0, 3.0]     b = [0.5, 1.0, 2.0]
+//     e = [1.5, 3.0, 5.0]     loss = 2.25 + 9 + 25 = 36.25
+//     dL/db = dL/dx = 2e = [3.0, 6.0, 10.0]
+//
+// Both answers are named, and the numbers separate the wrong laws a sum invites: a law that gave the
+// cotangent to one operand and zero to the other answers `[0.0, 0.0, 0.0]` on that side, a law that
+// answered `e` as the cotangent answers `[1.5, 3.0, 5.0]`, and a law that flipped a sign answers
+// `[-3.0, -6.0, -10.0]`. The two legs must agree to the last bit -- `max_abs_diff ... {:.12e}` is
+// the reading `broadcast_difference_through_vjp.cml` takes -- and every number here is exact in
+// binary floating point.
+import { with_grad } from autodiff
+import { abs, max } from math
+import { sum } from tensor
+import { vjp } from vjp
+
+/// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
+with <b: float[3]>
+func loss_with(x: float[3]) => float {
+    let e = x + b
+    return sum(e * e)
+}
+
+func main() sync {
+    let x: float[3] = [1.0, 2.0, 3.0]
+    let b: float[3] = [0.5, 1.0, 2.0]
+
+    // The library's leg: a closure that captures the batch, differentiated by `vjp`.
+    let step = func (bb: float[3]) => float {
+        let e = x + bb
+        return sum(e * e)
+    }
+    let (value, pullback) = vjp(step)(b)
+    let library = pullback(1.0).0
+
+    // The engine's leg: the same arithmetic with the weight as the `with` parameter.
+    let (engineValue, engine) = with_grad(loss_with)<b>(x)
+
+    `add library value={} dL/db={}`->format<value, library>->println
+    `add engine value={} dL/db={}`->format<engineValue, engine>->println
+    let d = max(max(abs(library[0] - engine[0]), abs(library[1] - engine[1])),
+                abs(library[2] - engine[2]))
+    `add max_abs_diff library_vs_engine={:.12e}`->format<d>->println
+}
