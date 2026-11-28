@@ -3365,8 +3365,8 @@ a537791e3f44f596 ok test/cases/modules/onnx/export_impure.cml
 383081ab67a51a97 ok test/cases/modules/onnx/export_index_axis.cml
 eb3e6a1c4aa4ade4 ok test/cases/modules/onnx/export_linear_recursion.cml
 42e76ea695408072 ok test/cases/modules/onnx/export_loop.cml
-1e98f26c2ed94bdf ok test/cases/modules/onnx/export_loop_carried_array.cml
-c653b5635950f5f0 ok test/cases/modules/onnx/export_loop_carried_array_field.cml
+3d8cd01b7e074f58 ok test/cases/modules/onnx/export_loop_carried_array.cml
+d42ecc22929faa27 ok test/cases/modules/onnx/export_loop_carried_array_field.cml
 003155535bccdd49 ok test/cases/modules/onnx/export_loop_node.cml
 5cafb70d6b4cb281 ok test/cases/modules/onnx/export_loop_pass.cml
 25d2db2bc0f423c9 ok test/cases/modules/onnx/export_loop_tuple_argument.cml

@@ -2222,7 +2222,7 @@ timeout_ms = 240000
 
 [[tests]]
 name = "export_loop_values_array"
-desc = "A tail recursion whose depth depends on the model input returns, next to its state, an int array built from the counter (`[k, k + 1]`, two elements on every round), so the export succeeds and the model keeps both outputs: whether a Loop can hand a value out is the same fact as for its state — the shape does not change from one round to the next  — not what the type prints. The case reads `ks[1]` out of the returned array at run time (7 at k = 6), and the export lowers that read to a Gather; the trip count is a constant here (`k >= 6`), so the recursion is unrolled rather than emitted as a Loop."
+desc = "A tail recursion whose depth depends on the model input returns, next to its state, an int array built from the counter (`[k, k + 1]`, two elements on every round), so the export succeeds and the model keeps both outputs: whether a Loop can hand a value out is the same requirement as for its state -- the value is carried as a tensor, so its extent is the one the state has, and a value whose length changed would take a sequence, which this exporter does not build yet -- and not what the type prints. The case reads `ks[1]` out of the returned array at run time (7 at k = 6), and the export lowers that read to a Gather; the trip count is a constant here (`k >= 6`), so the recursion is unrolled rather than emitted as a Loop."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_values_array.cml"
 args = ["${case}"]
@@ -2272,7 +2272,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_loop_carried_array"
-desc = "A tail recursion whose depth depends on the model input carries an int array whose length is the same on every call (`[k]` is one element each round), so the export succeeds: whether a Loop can keep a value is a fact about the loop body — the shape of the carried state does not change from one round to the next — not what its type prints. The type printer's `[]` spelling used to refuse this case. The trip count is a constant here (`k >= 3`), so the export unrolls the recursion and the model keeps the input-dependent If; the case locks that the array spelling no longer refuses it."
+desc = "A tail recursion whose depth depends on the model input carries an int array whose length is the same on every call (`[k]` is one element each round), so the export succeeds: a Loop carries a state as a tensor, so one extent for every round is what a carried value needs, and this body keeps it -- a value the body grew would take a sequence, which this exporter does not build yet -- and what the type prints decides nothing. The type printer's `[]` spelling used to refuse this case. The trip count is a constant here (`k >= 3`), so the export unrolls the recursion and the model keeps the input-dependent If; the case locks that the array spelling no longer refuses it."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_carried_array.cml"
 args = ["${case}"]
@@ -2297,7 +2297,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_loop_carried_array_field"
-desc = "A tail recursion whose depth depends on the model input and whose carried state is a struct with an int[] field the body appends to is refused by export_model at the recursive call: a Loop's state input has one shape for every round, so the criterion is the fact the rule asks for — the body appends to this value, so its length changes from one round to the next (growable-array-vs-tensor-in-the-onnx-exporter). The refusal is the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it; the diagnostic names the array field and the fact, and no model file is written. (The refusal used to be justified by what the type printer spelled, not by the fact.)"
+desc = "A tail recursion whose depth depends on the model input and whose carried state is a struct with an int[] field the body appends to is refused by export_model at the recursive call, and the reason the diagnostic gives is the exporter's own state, not a rule of ONNX: this exporter does not yet carry an array whose length changes between rounds as an ONNX sequence. The refusal is the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it; the diagnostic names the array field and says what the exporter does not yet do, and no model file is written. (The refusal was once justified by a premise about a Loop's state; that premise is retracted, because a Loop carries a changing-length state as a sequence.) This entry is the transition case: when the export becomes positive, it turns over and asserts the exported model."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_carried_array_field.cml"
 args = ["${case}"]
@@ -2317,7 +2317,7 @@ const path = await import('path')
 const text = input.normalized.output
 assert(text.includes("a recursive call changes argument 2 of a recursion whose depth depends on the model input"), 'missing the argument: ' + text)
 assert(text.includes("the leaf 'xs', an int array"), 'the diagnostic must name the array field: ' + text)
-assert(text.includes('whose length changes from one round to the next (the body appends to it or concatenates it), and a Loop carries a state whose shape is the same on every round'), 'the diagnostic must state the fact: ' + text)
+assert(text.includes('this exporter does not yet carry an array whose length changes between rounds as an ONNX sequence'), 'the diagnostic must say what the exporter does not yet do: ' + text)
 assert(text.includes('ExportUnsupported'), 'the refusal must be the error value of the export_model call')
 assert(!fs.existsSync(path.join(input.test_tmp, 'export_loop_carried_array_field.onnx')), 'a refused export must not write a model')
 }
