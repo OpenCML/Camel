@@ -55,7 +55,14 @@ FACT {"library":"facts","kind":"core.arrangeable",...,"anchors":[{"graph":"root"
 ```
 理由串**只有**这一项 —— 若 ① 承诺为假，`toString` 会先打 `not pure`（逐个列出不成立者），所以这一行同时是"`pure` 仍为真"的读数；同一用例四个后端全绿（`loops.edges.nvm/.fvm/.jit/.prl` PASS）⇒ **"不可摆"不妨碍它被丢弃、被重算**。
 
-**缺口（"读只读资源仍可摆"：**无实例**）**：把 `test/cases` 全 4200 个 `.cml` 用 `camel inspect --fact core.arrangeable` 扫过，只得到上一条"仅第五项不成立"的节点；`camel inspect --ops` 显示**当前标准库被声明的可写资源只有 `graph::draft`（`class: handle`，`mode: rmw`：`graph::erase`/`add_constant`/`add_param`/`commit`）与 `profiler`（`class: ambient`）**，语料里**没有"读一个没人写的 `handle` / `graph` / `spelling`"的算子**（`src/stdlib/graph.cml:72 resource spelling readonly` 这类只读资源**有声明、没有算子读它**）。⇒ 第五项**目前只会因为"读草稿"而为假**；"读只读资源仍可摆"这条**等有人写出那样的算子**，取第一例的现成命令：
+**读只读资源仍可摆：语料里无实例；一条临时探针给出答案后已撤，不进仓库。** 探针读数（模型格，临时声明 `graph:probe_reads_graph` / `graph:probe_reads_draft`，跑完即撤）：
+```
+PROBE graph:probe_reads_graph pure=true  awr=false writes=false outside=false n=1 accesses=[ambient/graph read]
+PROBE graph:probe_reads_draft pure=true  awr=true  writes=false outside=false n=1 accesses=[handle/graph::draft read]
+```
+⇒ **同一类资源的两个实例给出不同答案**（`awr=false` vs `awr=true`），答案来自**声明**（`mayBeWritten`）而不是资源类。
+
+**以下是"语料里为什么没有实例"的现场（扫过一遍，成立）**：把 `test/cases` 全 4200 个 `.cml` 用 `camel inspect --fact core.arrangeable` 扫过，只得到上一条"仅第五项不成立"的节点；`camel inspect --ops` 显示**当前标准库被声明的可写资源只有 `graph::draft`（`class: handle`，`mode: rmw`：`graph::erase`/`add_constant`/`add_param`/`commit`）与 `profiler`（`class: ambient`）**，语料里**没有"读一个没人写的 `handle` / `graph` / `spelling`"的算子**（`src/stdlib/graph.cml:72 resource spelling readonly` 这类只读资源**有声明、没有算子读它**）。⇒ 第五项**目前只会因为"读草稿"而为假**；"读只读资源仍可摆"这条**等有人写出那样的算子**，取第一例的现成命令：
 ```
 camel inspect --fact core.arrangeable <case>
 ```
