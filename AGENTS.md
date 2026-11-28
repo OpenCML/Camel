@@ -9,7 +9,7 @@ In particular, before any `develop` -> `main` release merge, you must confirm th
 - It is normative: when it conflicts with the code, with other documents or with a test result, it prevails, and the conflict is recorded as a defect or a to-do. Do not change semantics to make a test pass.
 - Questions it lists as undecided, or does not cover, go to the language author. Do not decide them ad hoc.
 - Its section 14 lists misreadings that have actually happened; check your change against them.
-- `docs/design/architecture/` is the target shape of the code (start at `README.cn.md`). Before fixing a defect, find out whether the architecture keeps or replaces the mechanism it lives in, and fix it the way `agents/refactor.md` says for that case. Do not patch a mechanism that is being replaced.
+- `docs/design/architecture/` is the target shape of the code (start at `docs/design/architecture/README.cn.md`). Before fixing a defect, find out whether the architecture keeps or replaces the mechanism it lives in, and fix it the way `agents/refactor.md` says for that case. Do not patch a mechanism that is being replaced.
 
 ## Core Rules
 - Runtime shell: Windows PowerShell.

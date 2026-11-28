@@ -3533,3 +3533,39 @@ expect_exit = 0
 expect_stdout_exact = "[[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]\n[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+[[tests]]
+name = "pow_forward_both_legs"
+desc = "`^` on one program, through both routes. `p(x) = x ^ 2.0` at 3.0 with `dx = 1`: the forward route (`jvp` on `transforms`, walking `rulesets.jvp`'s `jvp_pow`) and the engine's `with_grad` both answer `9.0` and `6.0`, and the library's `vjp` answers the same 6.0 -- three routes, one program. `s(x) = x ^ x` at 3.0 is the group that separates the law's second term: the tangent is `x^x (ln x + 1) = 27 * 2.0986122886681098 = 56.66253179403897`, while a law that dropped the exponent's term answers the value 27.0 there. The engine is not on that group on purpose: `with_grad` refuses a varying exponent (`Derivative of ':op/pow_d' requires a constant exponent`), so that group's second route is `vjp`, whose reverse law is `pow_t`. Both comparisons are `== 0.0` and every number is exact in binary floating point, so equal means equal."
+kind = "behavior"
+case = "../../../cases/compile/transforms/pow_forward_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["pow p value=9.0 tangent=6.0", "pow p engine value=9.0 tangent=6.0", "pow p: forward=6.0 engine=6.0 same=true library=6.0 same_library=true", "pow s value=27.0 tangent=56.66253179403897", "pow s: forward=56.66253179403897 library=56.66253179403897 same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+[[tests]]
+name = "idx_take_forward_both_legs"
+desc = "`xs[[2, 0]]` (`:op/idx_take`) through both legs on one program. The forward route takes the tangent at the positions in the order written -- `[3.0, 1.0]` for `xs = [1, 2, 3]` with `dxs = [1, 2, 3]`, which is `dxs[2]` then `dxs[0]` -- and the engine's `with_grad` answers the gradient of the whole array, `[1.0, 0.0, 1.0]`. The two currencies are bridged by the tangent itself: the forward tangent's lanes summed is 4.0, and the gradient taken along the same tangent is 4.0. A take that sorted its positions answers `[1.0, 3.0]`, and a reverse that handed every position the cotangent answers `[1.0, 1.0, 1.0]` -- 5.0 along the tangent, not 4.0. The comparison is `abs(...) == 0.0` and every number is exact in binary floating point."
+kind = "behavior"
+case = "../../../cases/compile/transforms/idx_take_forward_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["idx_take forward value=[3.0, 1.0] tangent=[3.0, 1.0]", "idx_take engine value=4.0 gradient=[1.0, 0.0, 1.0]", "idx_take: forward=4.0 engine=4.0 same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+[[tests]]
+name = "add_gradient_both_legs"
+desc = "`+` through both legs, the one pair of the ten rule-index keys that had no reading putting both legs on one number (`jvp_add` and `add_t`; `broadcast_add_subtract_gradient.cml` reads the library's `transpose` alone, and the difference has its both-legs case). `e = x + b`, `loss = sum(e * e)` with `x = [1.0, 2.0, 3.0]` and `b = [0.5, 1.0, 2.0]`: `loss = 36.25` and both legs answer `dL/db = [3.0, 6.0, 10.0] = 2e`, exactly. The engine's leg is `with_grad`, the library's is `vjp` (`jvp_add` forward, `add_t` reverse, both named at the case's head). A law that gave the cotangent to one operand and zero to the other answers `[0.0, 0.0, 0.0]`, one that answered `e` as the cotangent answers `[1.5, 3.0, 5.0]`, and one that flipped a sign answers the negative -- three shapes a wrong sum would take, each off this line. The reading is `max_abs_diff ... {:.12e} = 0.000000000000e+00`, the form `broadcast_difference_through_vjp.cml` takes."
+kind = "behavior"
+case = "../../../cases/compile/transforms/add_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["add library value=36.25 dL/db=[3.0, 6.0, 10.0]", "add engine value=36.25 dL/db=[3.0, 6.0, 10.0]", "add max_abs_diff library_vs_engine=0.000000000000e+00"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
