@@ -26,6 +26,7 @@
 #include "transpose/rules.h"
 #include "transpose/signature.h"
 
+#include "camel/core/derivative.h"
 #include "camel/core/mm.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/operator_table.h"
@@ -377,7 +378,23 @@ bool holdsACotangent(const WalkContext &ctx, gc_node_ref_t ref) {
         return true;
     }
     const Type *type = node->dataType();
-    return type == nullptr || camel::core::tangentSpaceOf(type).hasSpace();
+    if (type == nullptr) {
+        return true;
+    }
+    // The **user's** question (`gradientTypeOf`, principle 9.9): a discrete value is its own
+    // tangent space, so it holds a cotangent -- the zero of its own type -- and only a type that
+    // answers `()` (a `string`, a function) holds none. This is the judgement the signature
+    // (`transpose/signature.cpp`) and the answer assembly (`walk.cpp#answerTypeOf`) already make;
+    // asking the machinery's question here (`hasSpace()`) read "a space with a place to accumulate
+    // in" as "no cotangent at all" and dropped a discrete place the answer still has.
+    Type *const gradient = camel::core::gradientTypeOf(const_cast<Type *>(type));
+    if (gradient == nullptr) {
+        return false;
+    }
+    const auto *const asTuple = gradient->code() == camel::core::type::TypeCode::Tuple
+                                    ? static_cast<const camel::core::type::TupleType *>(gradient)
+                                    : nullptr;
+    return !(asTuple != nullptr && asTuple->size() == 0);
 }
 
 void noteZeroContribution(WalkContext &ctx, gc_node_ref_t target, gc_node_ref_t from) {
