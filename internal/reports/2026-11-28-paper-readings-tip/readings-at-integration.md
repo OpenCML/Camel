@@ -40,7 +40,6 @@
 
 | 步 | 遍列表 | 体积 字节（Camel / C++） | nodes | edges | opers | direct_calls | indirect_calls |
 |---|---|---|---|---|---|---|---|
-| efore（起点，不过内联器） | std::stats std::gir std::nop | **5214**（单侧） | 19 | 16 | 6 | 2 | 1 |
 | `before`（起点，不过内联器） | `std::stats std::gir std::nop` | **5214**（单侧） | 19 | 16 | 6 | 2 | 1 |
 | ① `inline` | [opt::inline] 或 [std::cxx::inline] | **7431 / 7431** | 28 / 28 | 26 / 26 | 12 / 12 | 0 / 0 | 1 / 1 |
 | ② `inline_cse` | `+ opt::cse` | **6463 / 6463** | 24 / 24 | 22 / 22 | 10 / 10 | 0 / 0 | 1 / 1 |
