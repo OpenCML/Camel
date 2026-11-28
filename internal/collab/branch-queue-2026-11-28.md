@@ -35,3 +35,23 @@
 2. 判删只认 `git cherry` 全等价（`+0 / -N`），且**删前先打 `archive/<枝名>-<日期>` 本地标签**、贴标签 sha 与删除输出。
 3. 超过 100 笔落后的枝由 `lane-parked-rebase` 点名处理（换底或判删）；**>"落后就删"不是判据**，`cc-loop-forward` 就是反例。
 4. 一棵树同时只归一条车道；枝被别的树检出时，那条车道不得在同一枝上开工（`lane/std-run` 在 `backend-speed` 树、`lane/arg-parse-uaf-w` 在 `kinds-oper` 树）。
+## 08:25 更新：一批落地（`689c2fecc9` → 台账 `4805281f59`），未合枝 20 → 14
+
+**落地的**：`seat/g17`（`carrier-item13b` + `conditional-samples` 换底版 + `17_fact.txt` 重录 1 行）+ `lane/main-effects`（4058 文件）⇒ `4064 files changed, 9443 insertions(+), 13284 deletions(-)`、`9887 / 9683 / 143 red / 甲 0`、`578.3 s`。`lane/main-effects` 的 `docs_links` 27/27、`PENDING_ALL` 2 条（新 key `cd76bbae032a82b2` + `D-1128-60` 的新 reason）。
+
+**删掉的四支**（`git cherry` 全等价 + `archive/` 标签存底）：`lane/pass-decl`、`lane/pass-as-value-crash`、`lane/sum-to-decl`、`lane/resource-wordtable`；**另删 `lane/ssa-residue`**（`git cherry -v lane/onnx-run lane/ssa-residue` **空输出** = 7 笔全被 `lane/onnx-run` 吸收；`archive/ssa-residue-20261128 = 8365776c09`，该树已切到同提交 detached）。
+
+**合并队列（顺序与枝尖，全部要等晋级 69 出数后再推）**
+
+| # | 分支 | 枝尖 | 前置条件 |
+|---|------|------|----------|
+| ② | `lane/opt-inline` | 探针现取 | 净 diff 10 文件；不 re-add 从 integration 拿走的两张卡；`merge-tree` 再探 |
+| ③ | `lane/editview-commit` | 待 `lane-editview-a` | 缺两条读数（17 条用例原样 + 反向不成立新例）就后置 |
+| ④ | `lane/task-229` | `3886530eb5` | rebase + `capacity×2`/`harness×5` soak；`residual_mlp` 保留"load-sensitive, not 甲" |
+| ⑤ | — | — | **`conditional-samples` 已随这批落地，不要再合 `20673f1e1e`** |
+| ⑥ | `lane/nvm-int-compare` | `40964bdb4a`（含 `lane-oper-shape-guard` 的 docs 提交） | `lane-backend-speed` 换底后 `int_compare` 3/3 + `feat/compile` 甲 0 |
+| ⑦ | `lane/index-axis` | `e46300eb77` 一带 | — |
+| ⑧ | `lane/cc-loop-forward` | `5a7333795f` | **`0c7422ac31` + `5a7333795f` 必须同笔到达**（上游 `2721637d07` 的口径） |
+| ⑨ | `lane/pass-decl-3` | **`c457eec80e`** | 纯删 `test/plans/probe/t323_passes.plan.toml`（debug-only 遍 + 这条线没有 Debug 二进制）；`t323_behavior` 7/7 |
+
+**晋级**：69 于 08:18:59 起跑，尖端 `2689335c47ed`（分母 = 68 表 147 行），约 08:40 出数。
