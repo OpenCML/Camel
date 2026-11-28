@@ -3511,3 +3511,14 @@ expect_exit = 0
 expect_stdout_exact = "true\nfalse\ntrue\n0.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+[[tests]]
+name = "transforms.derivative_of_zeros_like_is_zero"
+desc = "The forward derivative of `zeros_like(xs)` is the zero of the tangent type (design principles 9.9): the array it answers does not read its argument's value, so the term is constant and adds nothing to the tangent. `plus_zeroes(xs) = xs + zeros_like(xs)` at `xs = [1.0, 2.0, 3.0]` along `dxs = [0.5, 0.25, 0.125]` answers the argument's own value and the argument's own tangent -- the sum's derivative is the identity and the constant's is zero, so `jvp` hands back `[1.0, 2.0, 3.0]` and `[0.5, 0.25, 0.125]`. The entry reads the **forward** half alone: the reverse half of this body does not build yet, because the cut refuses a lifted graph that holds a `tensor:zeros_like` node, and that is a property of the cut rather than of the law. Red when `jvp` refuses `tensor:zeros_like` or answers any other pair."
+kind = "behavior"
+case = "../../../cases/compile/transforms/derivative_of_zeros_like.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_exact = "[1.0, 2.0, 3.0]\n[0.5, 0.25, 0.125]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

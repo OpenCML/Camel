@@ -1900,6 +1900,34 @@ export rule jvp_log_d(x: float) { log_d(x) => func (dx: float) {
     dx / x
 } }
 
+// ---- the forward rule of `zeros_like` ----
+//
+// `zeros_like(t)` answers the zeros of `t`'s shape and element type and reads nothing of its
+// *value*, so as a function of what it was made from it is constant, and the derivative of a
+// constant is the zero of the tangent type (design principles 9.9). The tangent the rule hands
+// back is therefore the zero, in the tangent's own type and shape.
+//
+// The zero is written `dt * 0.0` and not built from the shape: a tensor's extents are not in its
+// type (design principles 5.4), so the zero has to be carried by a value in hand, and the only
+// value this rule may read is the tangent it was handed -- a node derived from the *primal* cannot
+// be placed on either side of the cut (`jvp_matmul` above records the reason: `split does not
+// build this function`). Scaling the tangent by zero reads no number of it: whatever arrived, the
+// result is the zero of its shape.
+//
+// The right side may not name `zeros_like` again -- a name the left side binds is a pattern
+// variable to the right side (`jvp_subtract` above says the same about `subtract`) -- and it takes
+// one parameter per value the left side binds, or the rule is refused at the match ("the rule's
+// right side does not take the values and tangents the rule binds").
+//
+// The engine registers `tensor:zeros_like` with a tangent space whose zero is the operator itself
+// (`TangentSpace::zerosLikeUri`), so the zero this rule answers and the zero the machinery writes
+// are one value by construction rather than two tables that happen to agree.
+export rule jvp_zeros_like(t: float[...]) {
+    zeros_like(t) => func (dt: float[...]) {
+        dt * 0.0
+    }
+}
+
 // ---- the `nn` module's primitives ----
 //
 // The operators of `nn` the engine's table answered and this library did not: `conv2d`,

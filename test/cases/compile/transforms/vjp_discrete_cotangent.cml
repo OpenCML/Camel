@@ -18,12 +18,11 @@ func gt(a: float) => bool {
     return a > 0.0
 }
 
-func main() => int sync {
+func main() sync {
     let (value, tangent) = jvp(gt)(2.0, 1.0)
     println(value)
     println(tangent)
     let (answer, pullback) = vjp(gt)(2.0)
     println(answer)
     println(pullback(true).0)
-    return 0
 }

@@ -105,8 +105,12 @@ cast	engine-autodiff	the conversion the front end introduces (`:op/cast`); the d
 # time: `#vmap_rule_dim` files `dim<axis>(x)` under `dim@1`, so the key is one both tables answer
 # and the row had stopped holding a difference. The engine keeps its rule, and 9.9 is still why it
 # answers zero; what changed is that the file states that fact and the comparison now reads it.
+#
+# `zeros_like` left it the same way, for the same reason: `rulesets.jvp` now files `jvp_zeros_like`
+# under `zeros_like`, so the forward half states the fact in a law instead of stating it by filing
+# nothing, and the key is one both tables answer. The engine keeps its rule, and 9.9 is still why
+# both answer zero -- what changed is that the library's side of the comparison carries the law.
 
-zeros_like	engine-autodiff	locally constant in its operand: the zero array is the same for every value
 ones_like	engine-autodiff	locally constant in its operand: the ones array is the same for every value
 one_hot	engine-autodiff	its input is a label: locally constant, the rows do not move with it
 

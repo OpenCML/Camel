@@ -16,7 +16,6 @@ func side(a: float) => bool {
     return w > a
 }
 
-func main() => int sync {
+func main() sync {
     println(grad(side)<2.0>(1.0))
-    return 0
 }
