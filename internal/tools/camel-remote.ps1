@@ -3491,6 +3491,13 @@ if [ '$NoBuild' != 'True' ]; then
     # a line for each one -- so the bound is the time since the last line. The outer bound only
     # keeps a build from outliving the working day. The build runs in a session of its own so that
     # stopping it stops every compiler under it.
+    # Where the build's time goes, so a slow build arrives with its cause: ccache writes this run's
+    # own statistics log (concurrent runs share the cache, so the cache's global counters cannot say
+    # what one run did), and the generator's log gains one line per step this build ran.
+    export CCACHE_STATSLOG="`$R/.camel-build-ccache.log"
+    rm -f "`$CCACHE_STATSLOG"
+    ninja_log="`$R/build/.ninja_log"
+    ninja_before=`$( [ -f "`$ninja_log" ] && wc -l < "`$ninja_log" || echo 0 )
     build_want=`$(budget_jobs `$BUILD_JOBS)
     build_started_ns=`$(date +%s%N)
     build_idle_limit=1200
@@ -3526,6 +3533,7 @@ if [ '$NoBuild' != 'True' ]; then
     export CAMEL_GATE_BUILD_SECONDS=`$(awk "BEGIN{printf \"%.1f\", `$build_ms/1000}")
     echo "BUILD_SECONDS=`$CAMEL_GATE_BUILD_SECONDS"
     echo "BUILD_EXIT=`$code"
+    node "`$R/scripts/build-report.mjs" --ninja-log "`$ninja_log" --from-line "`$ninja_before" --ccache-log "`$CCACHE_STATSLOG" 2>&1 || true
     if [ `$code -ne 0 ]; then echo '__CAMEL_REMOTE_BUILD_FAILED__'; exit `$code; fi
     # What the build was handed, and what it left behind: a generator that ran inside it would have
     # rewritten a tracked file here, and every target compiled from that file would be compiled from
