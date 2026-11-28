@@ -79,3 +79,41 @@ struct ReverseRoundCount {
 - 只加一条来源，**不改**已有两条来源的判据（要动就停下贴两边读数报给负责人）。
 - 不推远端、不 merge、不开别的枝；构建只走 88 主机；不动冻结目录（`src/stdlib/autodiff/` 里的求导引擎是冻结的对照实现 —— 本卡对 `pullback.h` 只加枚举与一支消费，不改引擎本体）。
 - 判据：`[SUMMARY]`/`RUN_EXIT`/`[provenance] tip + binary built`/`numstat`/`git status` 空；红集对 `promotion-68`（147 行、`plan`/`case` 两键、两侧 `Trim`）**甲 0**。
+## ⑤ 续做记（2026-11-28，接手这条车道）
+
+### 已落
+
+- `62a77296cf` 钉住拒绝的用例 + 计划条目：`test/cases/compile/transforms/transpose_loop_condition_reads_state.cml`、
+  `test/plans/feat/compile/transforms.plan.toml`（条目 `transpose_loop_condition_reads_state`）。
+  `feat/compile/transforms` 整计划：**220 例、8 红**（原 219/8，红集逐名未动），新条目 `[PASS]`（它钉的是拒绝本身）。
+- 改前原文（本车道实跑，`--trace transforms`）：
+
+```
+TRANSPOSE function=halve skip=state node=17 origin=0 why=this-version-does-not-yet-recompute-the-rounds-of-a-loop-whose-condition-reads-a-state
+transforms: transpose has no transpose for this function: a loop ...
+```
+
+### 量到的两个事实（都来自实跑，不是推断）
+
+1. **能走到这条拒绝的循环形态是 `while` 头部 + 三个状态**。`while` 循环是 `LoopKind::While`：
+   `loopHasIterable(While) == false`。一个状态、两个状态的 `while` 循环**走不到**这条拒绝，
+   先被上一道门拦成 `why=the-loop-carries-no-state`。
+2. **`walk.cpp` 里 `stateCount = regionPorts.size() - (iterates ? 1 : 2)` 对 `while` 循环是错的**。
+   临时插桩（已 `git checkout` 还原）读到：三状态的 `while` 循环 **`ports=3 stateCount=1`** ——
+   它实际带 3 个状态。运行期自己的读法是 `src/kernel/runtime/loop.cpp:93`
+   （`inputs(Normal).size() - (loopHasIterable ? 1 : 0)`，`while` 不扣 2）。
+
+⇒ 这一条**不是“只加一条来源”能带过的**：计数器要接到反向循环上，而反向循环的状态数就由这个 `stateCount` 决定；
+在 `while` 上它现在是 1（真值 3）。照现在的数接下去，重放出来的 n 会被安到一个状态数不对的反向循环上。
+
+### 停下来问的一件事
+
+- 判据本体要不要改：把 `stateCount` 按 `loopKindOf` 分（`while` 取 `ports.size()`，`iterates` 仍取 `ports.size()-1`，
+  与 `loop.cpp:93` 同一读法），还是你认为这条该由别的车道/别的卡处理？
+- 另外：**重放要复制正向条件区与正向体里“更新状态”的那些节点**。walk 现有的是 `forward(ref)`（整函数走法下的原值复制），
+  没有“把某个区整段复制进 draft 并重映射端口”的现成设施 —— 这一截是新写，不是加一个枚举值。
+
+### 边界照旧
+
+不推、不 merge、不动 `src/stdlib/autodiff/` 引擎本体、不改 `TapeLength`/`Recomputed` 的判据；
+枝 `lane/c4-round-source`，树 `D:\Projects\Camel-wt\hdr-channel`，`git status` 空。
