@@ -1,17 +1,30 @@
-// RQ1 classic suite: binary-trees. Builds full binary trees of a given depth and counts their nodes.
+// RQ1 classic suite: binary-trees. Builds full binary trees of a given depth, counts their
+// nodes, and counts the traversal's work: node visits plus the child slots it walked. The work
+// count is larger than the node count, so it says "how much was walked", not just "what was
+// built" -- a run that built the trees and never traversed them would print the node count with
+// a work count of zero.
 
 type Node = { children: Node[] }
+type Count = { n: int, w: int }
 
 func make(d: int) => Node {
     if d == 0 then { children: [] } else { children: [make(d - 1), make(d - 1)] }
 }
 
-func check(n: Node) => int {
-    return 1 + (loop acc = 0 for c in n.children do acc + check(c))
+func check(n: Node) => Count {
+    let kids = loop acc = { n: 0, w: 0 } for c in n.children do {
+        let one = check(c)
+        { n: acc.n + one.n, w: acc.w + one.w }
+    }
+    return { n: kids.n + 1, w: kids.w + 1 + len(n.children) }
 }
 
 func main() sync {
     let depth = 16
-    let total = loop acc = 0 for q in 0 .. 3 do acc + check(make(depth))
-    println(total)
+    let t = loop acc = { n: 0, w: 0 } for q in 0 .. 3 do {
+        let one = check(make(depth))
+        { n: acc.n + one.n, w: acc.w + one.w }
+    }
+    println(t.n)
+    println(t.w)
 }

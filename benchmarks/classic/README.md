@@ -28,14 +28,16 @@ runs zero times, or a smaller N, can still print a matching line. The work count
 | program | result | work count | what the count is |
 |---|---|---|---|
 | `mandelbrot` | grid points inside the set | `2238729` | iterations the whole 200 x 200 grid cost |
-| `binary_trees` | nodes in three trees of depth 16 | `393213` | the node count itself: every node is visited by the count |
+| `binary_trees` | nodes in three trees of depth 16 | `786423` | node visits plus the child slots walked: larger than the node count, so it says how much was walked, not only what was built |
 | `spectral_norm` | `int(norm * 1e9)` | `302400` | (i, j) products, counted per multiply, n = 120, 10 iterations |
 | `fannkuch` | checksum, largest flip count | `5040` | permutations visited (7!) |
 | `nbody` | `int(total energy * 1e9)` | `375000` | (body, other body) pairs walked, 5000 steps of 0.01 |
 
-The same five numbers come out of `main.cpp` for `mandelbrot`, `spectral_norm`, `fannkuch` and
-`nbody` (`binary_trees` prints only the node count, which is its work count). Results are printed
-as integers (`int(x * 1e9)` for a float) so a last-bit formatting difference cannot make two
+The same numbers come out of `main.cpp` for all five programs, `binary_trees` included: it prints
+the node count and the traversal work count (786423 against 393213 nodes). A work count that equals
+the result is the weakest kind of evidence -- a run that built the trees and never traversed them
+would still print the node count -- so `binary_trees` counts the traversal separately. Results are
+printed as integers (`int(x * 1e9)` for a float) so a last-bit formatting difference cannot make two
 backends look different while agreeing.
 
 ## How the columns are produced
