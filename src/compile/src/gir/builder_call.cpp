@@ -95,6 +95,67 @@ Builder::CallResolutionInputs Builder::takeCallResolutionInputs(
     return inputs;
 }
 
+std::vector<camel::core::type::FunctionType *>
+Builder::callCandidateSignatures(node_handle_t target) const {
+    // The order of this list is the order a call reads its entries in, and it is a rule rather
+    // than whatever a container happens to hold: the group's rules first, in the order the group
+    // registers them, then the functions the built-in layer declares with a body, then its
+    // generic templates, each in the order they were gathered. `operatorOverloads_` is an
+    // unordered map, but it is indexed by the call's node and is never walked to order
+    // candidates.
+    std::vector<camel::core::type::FunctionType *> entries;
+    if (target == nullptr || !nodeIsKind(target, runtime::GCNodeKind::Dref)) {
+        return entries;
+    }
+    // The rules of a group, each as the signature it declares: a rule that is declared has its
+    // parameters whether or not the call's arguments have fixed them yet, and that is what a
+    // position reads.
+    const auto takeGroup = [&](const oper_group_ptr_t &group) {
+        if (group == nullptr) {
+            return;
+        }
+        for (const auto &[uri, resolver] : group->resolvers()) {
+            (void)uri;
+            if (resolver == nullptr) {
+                continue;
+            }
+            camel::core::type::FunctionType *fixed = resolver->fixedSignature();
+            if (fixed == nullptr) {
+                fixed = resolver->declaredSignature();
+            }
+            if (fixed == nullptr) {
+                fixed = resolver->graftedSignature();
+            }
+            if (fixed != nullptr) {
+                entries.push_back(fixed);
+            }
+        }
+    };
+    // The entries of the set this call is resolved against: the rules of the name's operator group
+    // and the functions the built-in layer declares under the same spelling, which
+    // `operatorOverloads_` keeps as one set for this name. `foreach` over a `Range` is the
+    // prelude's function beside the array's rule, and the group alone does not hold it.
+    const auto set = operatorOverloads_.find(target);
+    if (set != operatorOverloads_.end()) {
+        takeGroup(set->second.ops);
+        for (const auto &graph : set->second.graphs) {
+            if (graph != nullptr && graph->funcType() != nullptr) {
+                entries.push_back(graph->funcType());
+            }
+        }
+        for (const auto &tmpl : set->second.templates) {
+            if (tmpl != nullptr && tmpl->funcType != nullptr) {
+                entries.push_back(tmpl->funcType);
+            }
+        }
+        return entries;
+    }
+    const auto &selected = nodeGraphOf(target)->drefTarget(target);
+    if (std::holds_alternative<oper_group_ptr_t>(selected)) {
+        takeGroup(std::get<oper_group_ptr_t>(selected));
+    }
+    return entries;
+}
 
 node_handle_t
 Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::AssignmentForm> store) {
@@ -678,55 +739,9 @@ Builder::visitLinkNode(const GCT::node_ptr_t &gct, std::optional<GCT::Assignment
         // here: for a name the built-in layer also declares (`foreach` over a `Range`), the entry
         // that fits is one of those declarations, and the group does not hold it.
         const auto withParameterOfSelectedEntry = [&](size_t index) -> Type * {
-            if (!nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
-                return nullptr;
-            }
-            // The entries of the set this call is resolved against: the rules of the name's
-            // operator group and the functions the built-in layer declares under the same
-            // spelling, which `operatorOverloads_` keeps as one set for this name
-            // (`builtinLayerNamed`). `foreach` over a `Range` is the prelude's function beside the
-            // array's rule, and the group alone does not hold it.
-            std::vector<FunctionType *> entries;
-            const auto takeResolver = [&](const oper_group_ptr_t &group) {
-                if (group == nullptr) {
-                    return;
-                }
-                for (const auto &[uri, resolver] : group->resolvers()) {
-                    if (resolver == nullptr) {
-                        continue;
-                    }
-                    FunctionType *fixed = resolver->fixedSignature();
-                    if (fixed == nullptr) {
-                        fixed = resolver->declaredSignature();
-                    }
-                    if (fixed == nullptr) {
-                        fixed = resolver->graftedSignature();
-                    }
-                    if (fixed != nullptr) {
-                        entries.push_back(fixed);
-                    }
-                }
-            };
-            if (const auto set = operatorOverloads_.find(targetNode);
-                set != operatorOverloads_.end()) {
-                takeResolver(set->second.ops);
-                for (const auto &graph : set->second.graphs) {
-                    if (graph != nullptr && graph->funcType() != nullptr) {
-                        entries.push_back(graph->funcType());
-                    }
-                }
-                for (const auto &tmpl : set->second.templates) {
-                    if (tmpl != nullptr && tmpl->funcType != nullptr) {
-                        entries.push_back(tmpl->funcType);
-                    }
-                }
-            } else {
-                const auto &selected = nodeGraphOf(targetNode)->drefTarget(targetNode);
-                if (!std::holds_alternative<oper_group_ptr_t>(selected)) {
-                    return nullptr;
-                }
-                takeResolver(std::get<oper_group_ptr_t>(selected));
-            }
+            // The entries this call reaches -- the group's rules and the built-in layer's
+            // declarations of the same spelling -- gathered in the one place that gathers them.
+            const std::vector<FunctionType *> entries = callCandidateSignatures(targetNode);
             Type *found = nullptr;
             for (FunctionType *fixed : entries) {
                 if (fixed == nullptr || fixed->hasRest() || fixed->hasWithRest()) {

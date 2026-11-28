@@ -3757,6 +3757,13 @@ class Builder {
 
     /// Collects the overloads of the operator `group` visible here.
     OperatorOverloads operatorOverloadsOf(const std::string &group);
+    /// The entries a call to `target` reaches, as signatures: the operator group's rules
+    /// (`fixedSignature`, else `declaredSignature`, else `graftedSignature`) and the functions the
+    /// built-in layer declares under the same spelling, gathered in one list. A call site has no
+    /// "rule" and "body" to tell apart, so the two sources are gathered here once, and every
+    /// question about which entry a call reaches reads this list rather than gathering its own.
+    std::vector<camel::core::type::FunctionType *>
+    callCandidateSignatures(node_handle_t target) const;
     /// The one overload set `name` stands for when a body-less `#op` declaration of it and a
     /// declaration of it with a body are both THIS layer's (design principles 6.4): the rules of
     /// its operator group and the functions its body declarations make, as the candidates of one
