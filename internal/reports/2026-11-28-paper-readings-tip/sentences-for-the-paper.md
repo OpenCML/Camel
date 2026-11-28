@@ -22,7 +22,7 @@ Figure 1 于 `d0539fba99433c6a9208584e854665ade60fba14`（16:14:05）。
 | A8 | 两侧体积相同 ⇒ 两个内联入口在同一下游上产出等价图。 | `readings-at-integration.md:47` |
 
 **用 A5 时的一处限制**：7431/6463/4627 是"dot 文本去掉 `GRAPH_STATS` 行后按 `\n` 连接的长度"，
-不是整段 stdout 的字节数 —— 取法在该页 §2 末（`readings-at-integration.md:57`–`:59`）。若正文用别的量法，数字要重算。
+不是整段 stdout 的字节数 —— 取法在该页 §2 末（`readings-at-integration.md:56`–`:58`）。若正文用别的量法，数字要重算。
 
 ## B. 必须撤回或重测（无出处 / 已被新读数取代）
 
