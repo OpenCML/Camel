@@ -3311,6 +3311,8 @@ c14a1f79d17ee6f4 ok test/cases/modules/module_resolution/only_cml_and_cmo/py_bes
 0cbf1647892530ee ok test/cases/modules/nn/adam_update_bits.cml
 093370c2f59628d6 ok test/cases/modules/nn/autoencoder.cml
 8d50e62a027f7cb3 ok test/cases/modules/nn/autograd_linear_demo.cml
+ba8b16eb5b131eed ok test/cases/modules/nn/bn_rankone_one_axis.cml
+f9a74effabd96307 ok test/cases/modules/nn/bn_rankone_two_axes.cml
 b3f62a36b355370e ok test/cases/modules/nn/bn_train_f64.cml
 d628fd8cf435aee5 ok test/cases/modules/nn/bn_train_grad_sanity.cml
 569f52c022ad678f ok test/cases/modules/nn/checkpoint_fixture_load.cml
@@ -3358,6 +3360,7 @@ cec1701c8db91506 ok test/cases/modules/nn/tiny_rnn.cml
 66a0943e9bad5560 ok test/cases/modules/onnx/export_branch.cml
 244bcaeda395c486 ok test/cases/modules/onnx/export_canonical_kernel.cml
 8604e275ad4d7e59 ok test/cases/modules/onnx/export_capability.cml
+52e71076a88782a8 ok test/cases/modules/onnx/export_collect_reverse.cml
 f602f21634d5d496 ok test/cases/modules/onnx/export_ctrl_effect.cml
 4dae6dc3c813a433 ok test/cases/modules/onnx/export_ctrl_effect_callee.cml
 560a13ab5e82755b ok test/cases/modules/onnx/export_dynamic.cml
