@@ -393,10 +393,32 @@ FACTS probe third_f_id kept ; FACTS probe third_f_revision kept ; FACTS probe th
 
 ### 12.3 同因结论
 
-`types_and_node_kind` 的 `47→60` 与 `node_kinds_match_the_graph` 第 2 行的 `__g_51__… → __g_64__…` **同因**：同一个**图创建 id 计数器整体 +13**（两处都是 +13，且相对间距不变）。`node_kinds_match_the_graph` **额外**还有第 3 行 `main` 少一个 `Data` 的**期望过期**（由 `ee550f53dc` 删 `return 0` 造成），这一项与计数器无关。**+13 是哪一笔记出来的，我没定位到**（只在 `9cdb0c9458` 定期望之后、当前底之前；要定位得二分，这次没做）。
+`types_and_node_kind` 的 `47→60` 与 `node_kinds_match_the_graph` 第 2 行的 `__g_51__… → __g_64__…` **同因**：同一个**图创建 id 计数器整体 +13**（两处都是 +13，且相对间距不变）。`node_kinds_match_the_graph` **额外**还有第 3 行 `main` 少一个 `Data` 的**期望过期**（由 `ee550f53dc` 删 `return 0` 造成），这一项与计数器无关。**+13 是哪一笔记出来的，没定位**——**按性质判据改完之后与本条无关**（计数不再进期望，追它是白花时间）。
 
-### 12.4 改期望时的三条规矩（负责人交代；改期望归元层，等决策者点头）
+### 12.4 改期望的判据换成了性质（决策者 `D-1128-208`；原"照实改两个数"作废）
 
-1. **同因的两处一起改、一次提交**：`types_and_node_kind` 的 `47→60` 与 `node_kinds_match_the_graph` 那四个图名是一件事；提交里附**旧→新逐项对照**（图名 4 项、`main` 的 12 项列表、`:14` 那个数），别只写"改了期望"。
-2. **两条判词不许混成一条**，改完要能**分开验**：若改完**仍差一个 `Data`** ⇒ 还有别的东西在变，不是计数器；若 `Data` 对了而**名字还对不上** ⇒ 计数器那条没对齐。
-3. **`+13` 的二分先不做**（决策者不要求就不做）：整段 +13、间距不变这类漂移，改成实得读数比追它更划算；页里已把"未定位"留在这里。
+原来那三条（同因一起改、两件事分开验、`+13` 不二分）**只剩第一条还在，且只对 `main` 那条成立**；`47→60` 与 `__g_51__→__g_64__` 一律**不再照实改**——用例把**全局创建计数钉成绝对值**，任何"前面多建了几张图"的改动都会让它红，正撞 `agents/refactor.md` 的"**不测会因无关原因变化的计数**"。三条现在是：
+
+1. **`main` 少一个 `NodeKind::Data`**：这是 `return 0` 被设计删除的**直接结果** ⇒ **照实改**。旧 → 新逐项：
+   - 旧（13 项）：`Data, Data, Data, Func, Oper, Oper, Data, Data, Oper, Oper, Oper, Oper, Gate`
+   - 新（12 项）：`Data, Data, Func, Oper, Oper, Data, Data, Oper, Oper, Oper, Oper, Gate`
+   - 其余 7 张图的列表逐项不动。
+2. **计数改成测性质**：
+   - `creation_id`（`graph_types.cml:14`）：改成**先后关系**——`creation_id(graph_of(later)) > creation_id(graph_of(p))`，期望那行从 `47` 变 `true`；**不再出现任何绝对数字**。
+   - **自动图名**：比较前把 `__g_N__` 按**出现顺序**归一成 `__g_1____g_2__…`，再逐字比；**归一只在比较处**（`verify_script` 里的 `seen` 映射），**不改生成侧、不改名字本身**。
+3. **改完这两条不再随计数漂移 ⇒ `+13` 不用二分**（与 12.3 末句一致）。
+
+### 12.5 交付读数（`lane/graph-kinds-renumber`，基 `origin/integration@aef14dfa5a`）
+
+```
+26e255b94333d664ce41a83c52f840c48992b412  graph: the creation number is read as an order, never as a value
+numstat：9  1 test/cases/modules/graph_types.cml
+         2  1 test/plans/feat/modules/graph.plan.toml
+         1  1 test/plans/feat/parse/golden/ast_hashes.txt
+```
+
+- **`graph.plan.toml`：`[SUMMARY] total: 80, pass: 80, fail: 0`**（`BUILD_EXIT=0`、`TREE_STATE=clean`、`dirty 0`）。
+- **`feat/modules` 整目录逐名**：`total: 2096, pass: 2070, fail: 18, skip: 4, known failures: 4` —— 基线是 `2068 / 20 / 4 / 4`，**少的正是这两条，新增红 0**；18 条名字与基线逐名相同（`op_stats.table.nvm`、`op_stats.table.fvm`、`export_unsupported_op`、`export_impure_op`、`pass_export_refusal_located.request_in_arm_json`、`as_refusal.constant_fails.pass`、`as_refusal.constant_fails.operator`、`slice_runtime`、`si_as_fails`、`si_as_fails_fvm`、`si_as_fails_jit`、`si_as_fails_prl`、`fusion_group.profile.none`、`npy_generic_wrapper_mismatch`、`rename.env_graph_identity`、`rename.process_graph_identity`、`outline_delivers_the_graph_it_makes`、`outline_delivers_a_graph_the_bytecode_vm_can_compile`）。
+- **`feat/parse`：`total: 131, pass: 131, fail: 0`**；`frontend.ast_record`、`inspect.ast_snapshot`、`numbers.ast_snapshot` 全绿。**golden 只动一行**：`test/cases/modules/graph_types.cml` `8834137bc1ccbf58` → `c837dac7499ecff0`（记录用 `-UpdateAstHashes -AstOnly` 只点名这一个文件；工具报 "1 added and 1 removed"，`numstat` 1/1）。
+- **"编号变大仍绿"的读数**：集成尖与本枝底跑出的名字**都是 `__g_64__…`**，自然漂移这次没出现，所以把同一段 `renumber` 拿到**本机 `node`** 上跑三串输入（老钉 `51` 系、今日 `64` 系、**人为 +100 的 `164` 系**）：三串归一后**同一串**、长度都是 **707** ⇒ 归一不随计数走。**这条是本机跑同一段实现，不是宿主读数**（页里保留这个标注）。
+- 两条 `rev-parse` 相等（`HEAD` = `lane/graph-kinds-renumber` = `26e255b94333d664ce41a83c52f840c48992b412`）；**未 push**。
