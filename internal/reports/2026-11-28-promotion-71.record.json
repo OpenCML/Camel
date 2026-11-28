@@ -1,0 +1,63 @@
+{
+  "kind": "promotion",
+  "promotion": 71,
+  "tip": "b81f79aea70bb4e3856aba3294e3bbab6df68ec2",
+  "measured_tip": "b81f79aea70bb4e3856aba3294e3bbab6df68ec2",
+  "pushed_develop_sha": "b81f79aea70bb4e3856aba3294e3bbab6df68ec2",
+  "landing_tip": "the record is a documentation commit and lands on whatever integration holds at push time; the seat/batch2 batch (opt-inline 979224dec7 + loop-tape-values ba4d1ec233 + its ast re-record) arrived while this layer ran and is not covered by this reading",
+  "note": "the layer was measured at b81f79aea70b. The tip named for this promotion when it started was 9645e6a897 (forty-one ledger commits); b81f79aea70b is its descendant and the commits in between touch internal/backlog.md and internal/collab only, never src/, test/plans/ or scripts/, so the layer covers them. The batch that arrived during the run, seat/batch2, is not covered: its own reading is 141 red and this table keeps 142, and the next promotion compares against this table on the newer tip rather than mixing the two",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at b81f79aea70b; load 1m 41.63 at the start of the run, 46.79 after it",
+  "binary_built": "2026-11-28T10:14:35+08:00",
+  "readings": {
+    "total": 9901,
+    "pass": 9698,
+    "fail": 142,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 0,
+    "re_run": 0,
+    "re_run_passed": 0,
+    "load_before": "1m 41.63, 5m 38.48, 15m 42.43",
+    "load_after": "1m 46.79, 5m 47.75, 15m 47.52",
+    "load_warning": "[load] WARNING: 1m load 41.63 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth to seventieth layers carried; a promotion does not wait on load, D-1128-36)"
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-70-reds.tsv (the seventieth promotion, 142 names)",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], both sides trimmed, with the plan aliases transforms/compile.transforms and stated_extents/compile.stated_extents read as the same plan",
+    "still_red": 142,
+    "turned_green": 0,
+    "turned_green_names": [],
+    "new_reds": 0,
+    "new_reds_names": [],
+    "vanished_reds": 0,
+    "arithmetic": "142 names before: 0 turned green, 0 vanished, 0 appeared, 142 remain red; 142 = this reading red case names, and the two sets are the same set name for name",
+    "notes": [
+      "export_loop_carried_array_field is still red here and is therefore still a row of this table: the loop-tape-values batch that turns it green arrived during the run and is not part of this reading, so its green belongs to the next promotion and not to this one",
+      "linear.loops loops.grad_loop_collect is a row of the seventieth table already, so its reading moving from 1 to 1000 is a known red whose expected text changed, not a new one",
+      "compile.stream stream.interval_loop_not_materialised is a row of the seventieth table as well; it is the bound-is-the-work's-own-time case, so under a host load of 46 it is read as load-sensitive and not as a new red either",
+      "fault_deep.prl_off is absent for the fifth round running: the scheduler root-cause fix holds and no known-flaky allowance was used",
+      "no case timed out in this layer and none was re-run, so the transpose_loop_escape cases that timed out in the sixty-sixth to seventieth promotions came in under their window here and failed on their own assertions instead"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 0,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [],
+    "how": "the layer reported timed_out 0 and re_run 0, so there was no timeout to run alone"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-71-reds.tsv",
+  "red_table_rows": 142,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-71-reds.tsv",
+  "new_red_names": [],
+  "pushed_as": "develop, fast-forwarded from e6a0174e91 to b81f79aea70b, the tip this layer measured",
+  "develop_before": "e6a0174e91361734fb6ed703c694628a684f2c12",
+  "develop_after": "b81f79aea70bb4e3856aba3294e3bbab6df68ec2",
+  "commits_brought_in": 97,
+  "commits_touching_src": 19
+}
