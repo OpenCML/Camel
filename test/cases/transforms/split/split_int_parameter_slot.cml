@@ -1,7 +1,7 @@
-// A callee whose parameter has **no tangent space**: `widen(n: int, x: float)`, called from the body
-// `g(x: float) = widen(2, x) + 1.0`. `Tangent<int> = ()`, so the callee's lifted list is
-// `(int, float, (), float)` -- the value and the tangent of each parameter, with an empty tuple
-// standing where a parameter that has no direction would have one.
+// A callee with a discrete parameter: `widen(n: int, x: float)`, called from the body
+// `g(x: float) = widen(2, x) + 1.0`. `Tangent<int> = int` (a discrete value is its own tangent
+// space, design principles 9.9), so the callee's lifted list is `(int, float, int, float)` -- the
+// value and the tangent of each parameter, the tangent of the `int` being a zero of that type.
 //
 // The slot is a **port** of the lift, so a call fills it with `()` (jvp's argument list). What the
 // cut then does with that argument is arithmetic: it takes the second half of the call's ordinary
@@ -32,5 +32,5 @@ func main() sync {
     let fwd = split(lifted)
     let (y, lin) = fwd(2.0)
     println('g y=', y)
-    println('g d=', lin(1.0))
+    println('g d=', lin(0, 1.0))
 }
