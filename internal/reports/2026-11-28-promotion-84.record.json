@@ -1,0 +1,66 @@
+{
+  "kind": "promotion",
+  "promotion": 84,
+  "tip": "02208fe542d0da0b4fb7f8079d7525efc31a1fd4",
+  "measured_tip": "02208fe542d0da0b4fb7f8079d7525efc31a1fd4",
+  "pushed_develop_sha": "02208fe542d0da0b4fb7f8079d7525efc31a1fd4",
+  "landing_tip": "the record is a documentation commit and lands on whatever integration holds at push time; the tip this layer measured was taken with git rev-parse at the instant the run started, because integration was still moving while the run was being prepared",
+  "note": "the layer was measured at 02208fe542d0 and it is the first whole-layer reading to include batch thirty-one's gir change (reading a handle access's key in one place, in builder.h and builder_resources.cpp), batch thirty-two built and read at a3ae2b5f1d81, lane/draft-key's resource-key reading, and lane/arrangeable-two-bits, which the coordinator had held back until the lane repaired its initialisation defect. One name turned green and nothing appeared",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at 02208fe542d0; load 1m 23.57 at the start of the run",
+  "binary_built": "2026-11-28T17:27:36+08:00",
+  "readings": {
+    "total": 9930,
+    "pass": 9737,
+    "fail": 132,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 0,
+    "re_run": 0,
+    "re_run_passed": 0,
+    "load_before": "1m 23.57, 5m 27.88, 15m 30.14",
+    "load_warning": "[load] WARNING: 1m load 23.57 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth to eighty-third layers carried; a promotion does not wait on load, D-1128-36)."
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-83-reds.tsv (the eighty-third promotion, 133 names)",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], with the plan aliases transforms/compile.transforms and stated_extents/compile.stated_extents read as the same plan",
+    "still_red": 132,
+    "turned_green": 1,
+    "turned_green_names": [
+      "opt.progen|progen_seed_4"
+    ],
+    "turned_green_kind": {
+      "opt.progen|progen_seed_4": "fixed: the case passes now, and the behaviour that decides it arrived in this layer's coverage rather than earlier -- the two lanes that change how a branch or a loop family is judged, lane/arrangeable-two-bits (whose initialisation defect the lane repaired before it was allowed to merge) and lane/draft-key, are both inside it. This record does not claim which of the two, because no bisection was run: what the layer establishes is that the case passes at this tip and that nothing else moved"
+    },
+    "new_reds": 0,
+    "new_reds_names": [],
+    "vanished_reds": 0,
+    "arithmetic": "133 names before: 1 turned green, 0 vanished, 0 appeared, 132 remain red",
+    "total_delta": "zero: the layer declares 9930 entries, the same count the eighty-third layer declared. The source and plan changes in this coverage moved a verdict without changing the set of cases, which is the ordinary case and worth saying plainly",
+    "notes": [
+      "the coverage is forty-seven commits with nine build paths: batch thirty-one's two gir files, batch thirty-two, draft-key and arrangeable-two-bits",
+      "the eighty-third layer's record was not rewritten after the fact; instead this layer's coverage states that the fast-forward the coordinator approved (0cffdccda2 to 36f7b2adf59e, seventy-two commits, four plan files carrying cores = 4 and no src line) was pushed after that record was written, so the eighty-third record describes the state at the time it was published",
+      "no case timed out in this layer and none was re-run; fault_deep.prl_off is absent for the eighteenth round running because the scheduler root-cause fix holds"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 0,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [],
+    "how": "the layer reported timed_out 0 and re_run 0, so there was no timeout to run alone"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-84-reds.tsv",
+  "red_table_rows": 132,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-84-reds.tsv (132 names)",
+  "new_red_names": [],
+  "pushed_as": "develop, fast-forwarded from 36f7b2adf59e to 02208fe542d0, the tip this layer measured",
+  "develop_before": "36f7b2adf59ec216f57d025ec6c7963041ef0f70",
+  "develop_after": "02208fe542d0da0b4fb7f8079d7525efc31a1fd4",
+  "commits_brought_in": 47,
+  "commits_touching_src": 9
+}
