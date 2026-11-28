@@ -187,6 +187,11 @@ pwsh -NoProfile -File <你的工作树>\internal\tools\camel-remote.ps1 `
   也进了后台、只传了 2 KB 就停，等于替全队多占一把锁；当时十棵树同时在跑、`[load]` 68–88、一次 transfer
   花掉 **1802.8 s**）。⇒ 排不上就回来写「未取到（排队）+ 当时的 `[load]`」，把命令与日志路径备好，等下一轮再排。
   ⇒ 要把这个等待也变成可配的，属元层（`internal/tools`），由决策者那边改，我们不碰。
+· **在一台构建机上新建一棵检出，必须先把 `internal/tools/camel-gate.local.json` 从一棵已有检出复制过去**
+  （它被 git 忽略、约 455 B，`promote` 那棵有一份；2026-11-28 `daily-all` 首次建成时缺它，第一次启动直接死在
+  `the local settings file has no 'sshHost': …\daily-all\internal\tools\camel-gate.local.json`，补上后一次就成）。
+  另：`camel-remote` 的 `-Path` **只认 Windows 路径**，宿主上的树靠**同名叶名**对应
+  （`D:\…\daily-all` ↔ `/home/zjwei/camel-work/daily-all`）；两边叶名不一致时会默默跑到别处去。
 · 读数要带 provenance（`tip`、binary 的构建时刻、`tree`、`tier`、`jobs`）与 `[TREE] clean`。
   没有 `[load]` 行的读数（本机跑的）**只能当名字集用**，不能当时间基线。
 · **把一个用例移出快层（`tier = "slow"`）时，提交说明必须点名它带走的红**
