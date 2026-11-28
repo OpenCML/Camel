@@ -3468,3 +3468,20 @@ expect_stdout_exact = "4.0\n1.0\n"
 expect_stderr_contains = ["READING_REFUSAL {\"transform\":\"jvp\",\"function\":\"over_a_range\",\"cause\":\"loop\"}", "jvp_range_loop_names_its_iterable.cml:31:21: [Error]: An error has occurred: transforms: jvp has no forward transform for this function"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+# A loop decides its own rounds when its condition reads the loop's state: `s` halves while it is
+# above 1.0, so how many rounds there were is a value the rounds computed, not a constant the graph
+# holds. The transpose refuses such a loop by name today -- it can re-run a pull and count the pulls
+# when the condition reads only the pull's own control, and it does not replay the body -- and the
+# refusal is what this entry pins, with the origin it names and the reason it gives. The reading is
+# the same class of skip the other loop refusals use (`skip=state`), so a reader comparing the two
+# sees one shape of refusal and not two.
+[[tests]]
+name = "transpose_loop_condition_reads_state"
+desc = "A loop whose condition reads the loop's own state is refused by name: `halve(x)` halves `s` while it is above 1.0, so the round count is a value the rounds produced and not a constant. The reading is `TRANSPOSE function=halve skip=state` with the loop's node and the origin the round was written at, and the reason names what is missing -- recomputing those rounds means replaying the body -- rather than answering a cotangent from a count that is not the loop's."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_loop_condition_reads_state.cml"
+args = ["--trace", "transforms", "${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["TRANSPOSE function=halve skip=state node=", "origin=0", "why=this-version-does-not-yet-recompute-the-rounds-of-a-loop-whose-condition-reads-a-state", "transpose has no transpose for this function"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
