@@ -53,6 +53,12 @@ def OPT(t):
     return ("opt", t)
 
 
+def REF(t):
+    """`Ref<T>` from module `state`: a handle to a cell that `get` reads and `set` writes. A handle
+    is a value, so a closure may capture one (the language's answer for state across calls)."""
+    return ("ref", t)
+
+
 def type_src(t) -> str:
     k = t[0]
     if k in ("int", "float", "bool", "string", "void"):
@@ -68,6 +74,8 @@ def type_src(t) -> str:
     if k == "opt":
         inner = type_src(t[1])
         return ("(" + inner + ")" if t[1][0] == "fn" else inner) + "?"
+    if k == "ref":
+        return "Ref<" + type_src(t[1]) + ">"
     raise ValueError(t)
 
 
@@ -227,6 +235,14 @@ def ex(n: N, ind: int, top: bool = False) -> str:
         return wrap(n.a["op"] + sub(n.c[0]))
     if k == "conv":
         return f"{n.a['fn']}({arg(n.c[0])})"
+    if k == "mkref":
+        # `ref(x)`, `get(r)`, `set(r, x)` (module `state`): a handle is a value, which is why a
+        # closure may capture one -- the language's own answer for state that survives a call.
+        return f"ref({arg(n.c[0])})"
+    if k == "getref":
+        return f"get({arg(n.c[0])})"
+    if k == "setref":
+        return f"set({arg(n.c[0])}, {arg(n.c[1])})"
     if k == "call":
         return post(n.c[0]) + "(" + ", ".join(arg(x) for x in n.c[1:]) + ")"
     if k == "fmt":
@@ -415,6 +431,8 @@ def emit(prog: N) -> str:
     out = []
     if prog.a.get("env"):
         out += ["import { get_env } from env", ""]
+    if prog.a.get("refs"):
+        out += ["import { Ref, ref, get, set } from state", ""]
     if split is None:
         out += type_decls_src(prog, False)
         out += globals_src(prog, False)
@@ -662,6 +680,24 @@ class Evaluator:
     def e_ref(self, n, env):
         v = env.get(n.a["name"])
         return v.v if isinstance(v, Cell) else v
+
+    def e_mkref(self, n, env):
+        # `ref(x)`: the handle is a cell of the reference too, so a closure that captures one and
+        # writes through `set` is seen by the next call -- which is the whole point of the shape.
+        return Cell(self.ev(n.c[0], env))
+
+    def e_getref(self, n, env):
+        cell = self.ev(n.c[0], env)
+        if not isinstance(cell, Cell):
+            raise Reject("get of something that is not a handle")
+        return cell.v
+
+    def e_setref(self, n, env):
+        cell = self.ev(n.c[0], env)
+        if not isinstance(cell, Cell):
+            raise Reject("set of something that is not a handle")
+        cell.v = self.ev(n.c[1], env)
+        return None
 
     def e_null(self, n, env):
         return None
