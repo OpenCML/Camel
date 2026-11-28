@@ -44,7 +44,10 @@ inline std::ostream &out() { return camel::core::trace(camel::core::TraceArea::F
 
 #include <atomic>
 #include <cctype>
+#include <cstdio>
+#include <cstdlib>
 #include <stdexcept>
+#include <string_view>
 #define DEBUG_LEVEL -1
 
 using namespace std;
@@ -69,12 +72,35 @@ node_handle_t Builder::visitVariNode(const GCT::node_ptr_t &gct) {
 }
 
 oper_group_ptr_t Builder::internalOperatorGroup(camel::core::OperId oper) {
-    const auto group = context_->importModule("")->nativeOperatorGroup(oper);
+    const auto &table  = camel::core::OperatorTable::instance();
+    const auto builtin = context_->importModule("")->nativeOperatorGroup(oper);
+    if (builtin != nullptr) {
+        return builtin;
+    }
+    // An operator that belongs to a module, not to the built-in one. The compiler emits a few of
+    // these now (an edit block commits through `graph:commit`), and their group is registered by
+    // the module that declares them, not by the built-in module: the registration records every
+    // group under the id of each of its rules (`Module::exportEntity`), so the module's own table
+    // answers for this id. The URI names that module -- the part before the colon -- and the
+    // context already holds it, so the group is asked of its holder and of nowhere else: not a
+    // search across modules, not a table kept beside this one.
+    const std::string_view uri = table.uri(oper);
+    if (const auto colon = uri.find(':'); colon != std::string_view::npos) {
+        if (const auto holder = context_->importModule(std::string(uri.substr(0, colon)));
+            holder != nullptr) {
+            if (const auto owned = holder->nativeOperatorGroup(oper); owned != nullptr) {
+
+                return owned;
+            }
+        }
+    }
+    // Nobody registered it: the same reading, from the same place as before.
     GUARD(
-        group != nullptr,
-        "The built-in module did not register the operator the compiler emits: " +
-            std::string(camel::core::OperatorTable::instance().uri(oper)));
-    return group;
+        builtin != nullptr,
+        "The built-in module did not register the operator the compiler emits, and no module "
+        "declares it: " +
+            std::string(uri));
+    return builtin;
 }
 
 GCT::node_ptr_t Builder::internalOperatorDref(camel::core::OperId oper) {

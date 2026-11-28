@@ -1,5 +1,5 @@
 import { flatten } from array
-import { Node, Graph, nodes, graphs, inputs, with_inputs, op, op_name, constant, type_of, type_name, is_anchor, is_written_slot, open, replace, commit, abort } from graph
+import { Node, Graph, Draft, nodes, graphs, inputs, with_inputs, op, op_name, constant, type_of, type_name, is_anchor, is_written_slot, open, replace, commit, abort } from graph
 import { is_function } from types
 
 func opText(n: Node) => string {
@@ -88,7 +88,7 @@ func allNodes(d: Graph) => Node[] {
     }>)
 }
 
-func replaceHits::<F>(d: Graph, hits: Node[]) => F! sync {
+func replaceHits::<F>(d: Draft<F>, hits: Node[]) => F! sync {
     independent(hits)->foreach<func (n: Node) {
         replace(n, kept(n))
     }>
