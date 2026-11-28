@@ -121,7 +121,7 @@ debuggablePasses(const std::vector<std::string> &passes, std::string &notice) {
     std::vector<std::string> out;
     for (const std::string &pass : passes) {
         std::string reason;
-        if (pass == "std::jit" || pass == "std::fastvm::jit") {
+        if (pass == "std::jit") {
             reason = "compiled code cannot be stopped";
         } else if (pass == "std::prl") {
             // DESIGN-QUESTION(parallel-debugging)

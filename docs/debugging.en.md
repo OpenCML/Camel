@@ -346,7 +346,7 @@ isolated by attempt* is switched on.
 | none | the graph as compiled, on `std::nvm` (the node VM): closest to the source |
 | `std::nvm`, `std::fvm` | supported |
 | `std::jit` | runs as `std::fvm`: compiled code cannot be stopped. The debug console says so |
-| `std::prl` / `std::prl` (parallel) | runs as `std::fvm`: several nodes run at once, so there is no single current node. The debug console says so. The order under the debugger is the sequential one |
+| `std::prl` (parallel) | runs as `std::fvm`: several nodes run at once, so there is no single current node. The debug console says so. The order under the debugger is the sequential one |
 | optimisation passes before the back end (`std::cxx::inline`, `std::opt`, `std::macro`, ...) | supported; see below |
 
 Passes rewrite the graph, and the debugger shows the graph that runs. Nodes keep their source

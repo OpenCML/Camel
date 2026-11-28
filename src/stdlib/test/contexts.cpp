@@ -9,8 +9,8 @@
  *   CONTEXTS before=<n> second=<n> held=<n> released=<n> own=<0|1> own_released=<0|1> alive=<0|1>
  *
  * `before` is the running context's own registration (one `runtimeGraphRoots` entry, the name the
- * profiler and `std::gcsnap` already report), `second` the same plus the second context's, and
- * `released` the same after the pass's own registration was taken back: giving one registration
+ * profiler and `std::gc::snapshot` already report), `second` the same plus the second context's,
+ * and `released` the same after the pass's own registration was taken back: giving one registration
  * back removes that one and nobody else's. `own` / `own_released` read the pass's own entry by its
  * name. `alive` is the program this pass was given, still allocated in the graph space after a
  * major collection ran while both contexts were alive. `held` is how many owners the second context

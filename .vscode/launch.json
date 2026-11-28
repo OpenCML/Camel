@@ -50,7 +50,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/out/latest/bin/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
-            "args": ["-v", "--log-level debug", "${file}", "std::nodevm"],
+            "args": ["-v", "--log-level debug", "${file}", "std::nvm"],
             "console": "externalTerminal",
             "logging": {
                 "moduleLoad": true,
@@ -64,7 +64,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/out/latest/bin/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
-            "args": ["-v", "--log-level debug", "${file}", "std::cxx::inline", "std::nodevm"],
+            "args": ["-v", "--log-level debug", "${file}", "std::cxx::inline", "std::nvm"],
             "console": "externalTerminal",
             "logging": {
                 "moduleLoad": true,

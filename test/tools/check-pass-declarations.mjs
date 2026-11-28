@@ -371,7 +371,6 @@ for (const entry of fs.readdirSync(LIBRARY)) {
 }
 
 // Every alias resolves, and every registration is declared.
-let aliasCount = 0
 const registrations = new Set()
 for (const root of SOURCE_ROOTS) {
     for (const file of files(path.join(REPO_ROOT, root))) {
@@ -401,25 +400,18 @@ for (const root of SOURCE_ROOTS) {
         }
     }
 }
+let aliasCount = 0
 const corePaths = new Set(implementations.map((name) => `std::${name}`))
-// The core's aliases are a table of names, not a registry of kernels: each names a declared
-// pass, and resolution tries the written name first (so an alias never shadows a declaration).
+// The core has no alias table: a pass has one name, the one its declaration writes, and
+// resolution answers the written name or nothing (`pass.cpp`, `findDescriptor`). An alias
+// table that came back would be a second name for a pass, so the guard refuses one.
 {
     const file = path.join(REPO_ROOT, 'src', 'kernel', 'execute', 'pass.cpp')
     const text = fs.readFileSync(file, 'utf8')
-    const start = text.indexOf('const std::map<std::string, std::string> passAliases = {')
-    const end = text.indexOf('\n};', start)
-    if (start < 0 || end < 0) {
+    if (text.includes('passAliases')) {
         problems.push(
-            'src/kernel/execute/pass.cpp: the core alias table is not where the guard reads it'
+            'src/kernel/execute/pass.cpp: a pass alias table is back; a pass has one name'
         )
-    } else {
-        for (const match of text.slice(start, end).matchAll(/\{"(std::[^"]+)", "(std::[^"]+)"\}/g)) {
-            aliasCount += 1
-            if (!corePaths.has(match[2])) {
-                problems.push(`the core alias '${match[1]}' names '${match[2]}', not a pass kernel`)
-            }
-        }
     }
 }
 // Test-only passes are registered by the module but declared nowhere: they exist to be named by

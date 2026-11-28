@@ -1634,7 +1634,7 @@ FastVMConfig makeDefaultFastVmJitConfig() {
     return config;
 }
 
-/// `std::fvm` is the bytecode VM, and `std::fastvm::jit` is the same VM with the JIT switched on;
+/// `std::fvm` is the bytecode VM, and `std::jit` is the same VM with the JIT switched on;
 /// `std::jit` is the alias its declaration gives it.
 const PassKernel fastVmKernel(
     "std::fvm", [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
@@ -1645,7 +1645,7 @@ const PassKernel fastVmKernel(
     });
 
 const PassKernel fastVmJitKernel(
-    "std::fastvm::jit", [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+    "std::jit", [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
         FastVMConfig config     = makeDefaultFastVmJitConfig();
         config.statsPath        = pathArgument(args, "stats");
         config.reportConfig     = args.getBool("config");

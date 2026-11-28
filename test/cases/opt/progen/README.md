@@ -36,7 +36,7 @@ program may hide a second defect.
 Twenty findings of progen had three causes (A to C; D is a fourth defect found by hand). A to C are about what a branch arm is to the schedulers:
 when an arm is taken they run the nodes that run after the arm's head and not after the JOIN,
 as one range of the linear order, and everything else of the graph unconditionally before the
-BRCH. The findings were read against the graphs (`std::rgir`, `std::tns`) before and after the
+BRCH. The findings were read against the graphs (`std::rgir`, `std::topo_node_seq`) before and after the
 pass; the status column of the tables names the cause.
 
 - **A** (`e82fa21e`, `src/runtime/draft_inline.cpp`). The splice hands the control predecessors

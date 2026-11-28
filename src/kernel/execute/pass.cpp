@@ -73,7 +73,7 @@ std::string specName(const std::string &spec) {
 /// permissions, and the optimizing pipeline keeps them across rewrites (CSE combines by their
 /// merge rules). A tag's `read_by` names one of these (or a module's pass that registers itself).
 /// Both names of the pipeline are readers: `std::opt` is the default pipeline's name, and
-/// `std::cxx` covers the C++ passes named under the isolation (`std::cxx::opt`, `std::cxx::fold`)
+/// `std::cxx` covers the C++ passes named under the isolation (`std::opt`, `std::cxx::fold`)
 /// by the prefix rule that makes a name cover the passes under it.
 ///
 /// This is the tag registry's answer, not the pipeline's: the kernels are registered by the files
@@ -98,8 +98,7 @@ void declareCoreTagReaders() {
 /// not care which back end runs it. The alias table carries the default target; the run
 /// configuration (`.opencmlrc`'s `passes.run`) may name another scheduling pass, and a front end
 /// that reads one stores it here. The alias is resolved with the other aliases, in
-/// `resolveAlias`; this is the one value that resolution reads from configuration, not a second
-/// table of names.
+/// that reads one stores it here. `runPassTarget` answers it, and it is the only value
 constexpr const char *kRunPassName          = "std::run";
 constexpr const char *kRunPassDefaultTarget = "std::fvm";
 
@@ -108,70 +107,6 @@ std::string &runPassTargetOverride() {
     return target;
 }
 
-const std::map<std::string, std::string> passAliases = {
-    // The optimization passes are registered under `std::cxx::` -- the C++ implementations, kept
-    // apart from the Camel ones in the module `opt`. Their old spellings (`std::opt::fold`,
-    // `std::opt::inline`, the four inline strategies and the standalone `std::inline` and the rest)
-    // are **not**
-    // aliases: a pipeline that writes one is refused as an unknown pass, which is the isolation's
-    // own judgement rather than compatibility debt(the old writings are deleted, not carried).
-    //
-    // `std::opt` stays, and it is the one entry here that is not a spelling of another pass: it is
-    // the name of the default pipeline -- the choice "optimize by default". A program that names
-    // no pass, and the pass the fixed lowering steps insert, go through this entry, and today it
-    // selects the C++ implementation. After the comparison experiment of docs/roadmap.cn.md
-    // section 0, P, the owner decides whether it selects the Camel one instead; nothing else in
-    // this table has to move for that.
-    {"std::opt", "std::cxx::opt"},
-    // Standard scheduler aliases
-    //
-    // `std::run` is the step that runs the program, written when which back end runs it is not
-    // the point: a reader does not have to learn the back ends to read "compile, rewrite, run".
-    // Its target is `passes.run` when the run configuration names one, and `std::fvm` -- the
-    // fast VM, which is `std::fvm` -- otherwise. `resolveAlias` reads that configuration; a
-    // target that is not a scheduling pass is refused before anything runs, naming the setting
-    // (`requireKnownPasses` asks `requireRunPassTarget`).
-    {kRunPassName, kRunPassDefaultTarget},
-    {"std::linear", "std::nvm"},
-
-    // Common VM aliases
-    {"std::lnr", "std::fvm"},
-    {"std::jit", "std::fastvm::jit"},
-    {"std::nodevm", "std::nvm"},
-    // Common translation and dump aliases
-    // Names whose leaf is a keyword of the language: the declaration uses a name that can be
-    // written, and the old spelling keeps resolving to it.
-    {"std::type::array", "std::arraytype"},
-    {"std::type::identity", "std::identitytype"},
-    // `std::cxx` is not a shorthand of the C++ exporter, `std::cpp`:
-    // `cxx` is the namespace the C++ optimization passes are named under (`std::cxx::opt`,
-    // `std::cxx::fold`), and leaving the shorthand in place would answer `std::cxx` with a
-    // translation pass while a reader who learned the namespace from docs/cli.md means the
-    // optimizer. The exporter keeps its own name, `std::cpp`, and its two others below.
-    {"std::cppmod", "std::cpp::module_file"},
-    {"std::cppinspect", "std::cpp::inspect"},
-    {"std::tns", "std::topo_node_seq"},
-    {"std::gcsnap", "std::gc::snapshot"},
-    {"std::gcverify", "std::gc::verify"},
-    {"std::gcminor", "std::gc::minor"},
-    {"std::gcmajor", "std::gc::major"},
-    {"std::gcconfig", "std::gc::config"},
-    {"std::gcsummary", "std::gc::summary"},
-    {"std::gcblocks", "std::gc::blocks"},
-    {"std::gcviews", "std::gc::views"},
-    {"std::gcviews_escape", "std::gc::views_escape"},
-    {"std::gcremembered", "std::gc::remembered_set"},
-    {"std::gcforeign", "std::gc::foreign_resource"},
-    {"std::gcpoison", "std::gc::poison"},
-    {"std::bc", "std::fastvm::bytecode"},
-    {"std::lbc", "std::fastvm::linked_bytecode"},
-    {"std::bin", "std::fastvm::jit_bin"},
-    {"std::asm", "std::fastvm::jit_asm"},
-    {"std::rmir", "std::fastvm::jit_rmir"},
-    {"std::mir", "std::fastvm::jit_mir"},
-    {"std::tfg", "std::tfdump"},
-    {"std::prof", "std::profile"},
-};
 /// The kernel of every registered pass, **by the operator the pass's declaration names**. The id is
 /// the function's identity in the operator table -- the one a call of it carries -- so a pass has one
 /// entry whatever spelling a pipeline wrote, and the name is resolved to the id at the boundary where
@@ -390,37 +325,6 @@ std::optional<PassDescriptor> findPassKernel(camel::core::OperId pass) {
 
 namespace {
 
-/// The pass a written name resolves to: the core's table, whose one entry `std::opt` is the default
-/// pipeline's name -- a choice rather than a spelling of another pass -- so no sub-pass of the
-/// optimizer is reachable under an old name.
-///
-/// **An alias is one kernel fallback, not a name rewrite.** The declaration stays the written
-/// name's: `findDescriptor` tries the name as written first and reaches this table only when that
-/// name has no kernel of its own, so `std::prl` answers with its own declaration (its parameters
-/// and applicability are its own) and the alias supplies only the kernel. Folding this table into
-/// `resolvePassOperator` -- resolving first, declaration second -- was measured: 388 of 2841 fast
-/// tests went red, every `.prl` and `.jit` variant among them, because those spellings then stopped
-/// at their own inapplicable declaration instead of falling through.
-std::string resolveAlias(const std::string &name) {
-    if (auto it = passAliases.find(name); it != passAliases.end()) {
-        std::string target = it->second;
-        if (name == kRunPassName) {
-            // The one alias whose target the run configuration decides. The table's entry is the
-            // default; a configuration that names another scheduling pass replaces it here, and
-            // the target is resolved on through the table so every caller that compares spellings
-            // sees the pass itself (`std::jit` is
-            // `std::fastvm::jit`).
-            if (!runPassTargetOverride().empty()) {
-                target = runPassTargetOverride();
-            }
-            if (auto nested = passAliases.find(target); nested != passAliases.end()) {
-                return nested->second;
-            }
-        }
-        return target;
-    }
-    return name;
-}
 
 /// The operator a written path is, resolved here and nowhere else: the operator table answers what
 /// the name is. A name the table does not know is not interned -- asking whether a name is a pass
@@ -540,10 +444,7 @@ std::optional<FoundPass> findDescriptor(const context_ptr_t &ctx, const std::str
     if (auto written = candidateFor(name)) {
         return written;
     }
-    const std::string resolved = resolveAlias(name);
-    if (resolved != name) {
-        return candidateFor(resolved);
-    }
+    // The written name is the pass's name: a pipeline writes the one name every pass has.
     return std::nullopt;
 }
 
@@ -690,7 +591,7 @@ ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
     // declaration cannot be read, the kernel must not run on defaults invented elsewhere: the
     // failure names the module and the files the pipeline looked at.
     if (ctx) {
-        const std::string resolvedName = resolveAlias(parsed.name);
+        const std::string &resolvedName = parsed.name;
         if (resolvedName.rfind("std::", 0) == 0) {
             const std::string bare = resolvedName.substr(5);
             if (findImplementation(resolvedName) &&
@@ -766,11 +667,10 @@ valueProblem(const std::string &name, const PassArgs &args) {
     using camel::execute::detail::ParamProblemKind;
     // `std::opt settle_runs`: the bound the rewrite engine reports at. It is an internal bound
     // (see settleRunsOf), and 0 is refused rather than read as "never report". The pipeline is
-    // registered as `std::cxx::opt` and `std::opt` is the default pipeline's name for it, so the
+    // registered as `std::opt` and `std::opt` is the default pipeline's name for it, so the
     // check is made on the name the specification resolves to: a program that writes either
     // spelling gets the refusal.
-    if (resolveAlias(name) == "std::cxx::opt" && args.given("settle_runs") &&
-        args.getInt("settle_runs") < 1) {
+    if (name == "std::opt" && args.given("settle_runs") && args.getInt("settle_runs") < 1) {
         ParamProblem problem;
         problem.kind     = ParamProblemKind::OutOfRange;
         problem.name     = "settle_runs";
@@ -965,12 +865,6 @@ void listAvailablePasses(const std::string &name, const context_ptr_t &ctx) {
                 declaration ? declaration->params : descriptor.params);
         }
     }
-    help << std::format("Available aliases are:\n");
-    for (const auto &[alias, target] : passAliases) {
-        help << std::format("  {} -> {}\n", alias, target);
-    }
-    help << std::endl;
-    help << "A pass is written `name`, followed by its parameters as `key=value` words; a value is "
             "the constant the parameter's declared type reads (a bool, int, float, string or "
             "`int[]` constant, or `null` where the declaration writes `T?`).\n";
 }
@@ -1051,7 +945,7 @@ ResolvedPass resolvePassWithModule(const std::string &spec, const context_ptr_t 
     if (resolved.paramProblem || resolved.problem || resolved.factory || !ctx) {
         return resolved;
     }
-    const std::string name = resolveAlias(specName(spec));
+    const std::string name = specName(spec);
     const size_t sep       = name.find("::");
     if (sep == std::string::npos || sep == 0 || name.substr(0, sep) == "std") {
         return resolved;
@@ -2475,18 +2369,18 @@ std::vector<std::string> expandFixedLoweringSteps(const std::vector<std::string>
     std::vector<std::string> plan = passes;
     for (const FixedLoweringStep &step : fixedLoweringSteps) {
         // The comparison is made on the names the specifications resolve to, not on the words the
-        // writer used: the optimizing pipeline answers to two names (`std::cxx::opt`, and
+        // writer used: the optimizing pipeline answers to two names (`std::opt`, and
         // `std::opt`, the default pipeline's name for it), and a step that the optimizer is
         // written against belongs before either of them. Comparing the written word would insert
         // the step for one spelling and silently skip it for the other.
         const auto target = std::find_if(plan.begin(), plan.end(), [&](const std::string &spec) {
-            return resolveAlias(specName(spec)) == resolveAlias(step.before);
+            return specName(spec) == step.before;
         });
         if (target == plan.end()) {
             continue;
         }
         const bool named = std::any_of(plan.begin(), plan.end(), [&](const std::string &spec) {
-            return resolveAlias(specName(spec)) == resolveAlias(step.pass);
+            return specName(spec) == step.pass;
         });
         if (named) {
             continue;
@@ -2504,8 +2398,7 @@ std::string runPassTarget() {
     if (!runPassTargetOverride().empty()) {
         return runPassTargetOverride();
     }
-    const auto entry = passAliases.find(kRunPassName);
-    return entry == passAliases.end() ? std::string() : entry->second;
+    return kRunPassDefaultTarget;
 }
 
 namespace {
@@ -2625,7 +2518,7 @@ bool passListEndsWithoutExecuting(const std::vector<std::string> &passes, const 
     // from a spelling written here: this question is asked before the program is compiled and so
     // before any pass can be built, and it must not be the one place that answers "does this pass
     // execute" a second time.
-    return resolveAlias(specName(passes.back())) == NopPass::kName;
+    return specName(passes.back()) == NopPass::kName;
 }
 
 std::optional<Diagnostic>
@@ -2651,7 +2544,7 @@ jitWithoutCodeGeneratorWarning(const std::vector<std::string> &passes, const con
     return std::nullopt;
 #else
     for (const std::string &spec : passes) {
-        if (resolveAlias(specName(spec)) != "std::fastvm::jit") {
+        if (specName(spec) != "std::jit") {
             continue;
         }
         auto warning  = DiagnosticBuilder::of(RuntimeDiag::JitWithoutCodeGenerator).commit();
@@ -2672,7 +2565,7 @@ std::map<std::string, std::vector<std::string>>
 declaredReadersOf(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     std::map<std::string, std::vector<std::string>> readers;
     for (const auto &spec : passes) {
-        const std::string pass = resolveAlias(specName(spec));
+        const std::string pass = specName(spec);
         const size_t sep       = pass.rfind("::");
         if (sep == std::string::npos) {
             continue;
@@ -2730,7 +2623,7 @@ declaredReadersOf(const std::vector<std::string> &passes, const context_ptr_t &c
 
 bool pipelineNamesProfile(const std::vector<std::string> &passes) {
     for (const auto &spec : passes) {
-        if (resolveAlias(specName(spec)) == "std::profile") {
+        if (specName(spec) == "std::profile") {
             return true;
         }
     }
@@ -2759,7 +2652,7 @@ tagsNeverReadWarnings(const std::vector<std::string> &passes, const context_ptr_
     for (const auto &spec : passes) {
         const std::string name = specName(spec);
         inPipeline.push_back(name);
-        inPipeline.push_back(resolveAlias(name));
+        inPipeline.push_back(name);
     }
     const auto camelReaders = declaredReadersOf(passes, ctx);
     for (const auto &use : ctx->tagUses()) {
