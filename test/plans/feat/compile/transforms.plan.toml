@@ -3533,3 +3533,15 @@ expect_exit = 0
 expect_stdout_exact = "[[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]\n[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+[[tests]]
+name = "pow_forward_both_legs"
+desc = "`^` on one program, through both routes. `p(x) = x ^ 2.0` at 3.0 with `dx = 1`: the forward route (`jvp` on `transforms`, walking `rulesets.jvp`'s `jvp_pow`) and the engine's `with_grad` both answer `9.0` and `6.0`, and the library's `vjp` answers the same 6.0 -- three routes, one program. `s(x) = x ^ x` at 3.0 is the group that separates the law's second term: the tangent is `x^x (ln x + 1) = 27 * 2.0986122886681098 = 56.66253179403897`, while a law that dropped the exponent's term answers the value 27.0 there. The engine is not on that group on purpose: `with_grad` refuses a varying exponent (`Derivative of ':op/pow_d' requires a constant exponent`), so that group's second route is `vjp`, whose reverse law is `pow_t`. Both comparisons are `== 0.0` and every number is exact in binary floating point, so equal means equal."
+kind = "behavior"
+case = "../../../cases/compile/transforms/pow_forward_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["pow p value=9.0 tangent=6.0", "pow p engine value=9.0 tangent=6.0", "pow p: forward=6.0 engine=6.0 same=true library=6.0 same_library=true", "pow s value=27.0 tangent=56.66253179403897", "pow s: forward=56.66253179403897 library=56.66253179403897 same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
