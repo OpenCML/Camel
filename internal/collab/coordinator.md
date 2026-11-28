@@ -570,5 +570,9 @@ git worktree add --detach <旧提交>
 `docs/notes6` 落地时合并位踩到（`seat-merge-1`，`db77af3b49`）：那枝 `src/**` 零改动，可它**改了 `test/cases/modules/rules/check_when.cml`、加了 `test/cases/modules/stdlib/abs_smallest_int.cml`** —— 两条都在 AST 记录里 ⇒ 首趟 `parse.frontend frontend.ast_record` 报甲（`recorded 04da6afb… now 4835f1d1…` / `missing … recorded -`）。按金标纪律"只读 check → `-UpdateAstHashes` → 只读 check"补 `4704 lines recorded, 2 added and 1 removed`，再 check `4704 file(s) checked, 0 stale`，单列一笔只动 `ast_hashes.txt`。
 **判据分两件事**：判**要不要跑整层**看 `src/**`；判**要不要重录 AST**看有没有动 `test/cases/**` 与 `docs/tutorial/examples/**`（注释也参与哈希，改注释同样要重录）。
 
+**23. 派工里写的工作树路径不存在时，车道会落在主检出上 —— 派工前先核路径。**
+`lane-oper-shape-guard` 接 `jvp` 那条活时，我写的树是 `D:\Projects\Camel-wt\op-guard`（**不存在**）；它 `Set-Location` 报错后，后续 `git switch -c lane/jvp-through-loop origin/integration` 落进了**主检出 `D:\Projects\Camel`**（会话默认目录），主树 HEAD 就此离开负责人位置，插件当场报 `main-checkout-touched` 并列出 3555 个"改动"（其实是换枝造成的文件差异，不是脏）。车道没动代码、没提交；恢复三行：`git -C <主树> switch --detach <原游离 sha>`、`git -C <主树> branch -D <误建的枝>`、再各报一次 `status` 与 `rev-parse --abbrev-ref HEAD`。
+**教训**：① 派工里每条路径**先 `Test-Path`**，写错一个字就等于把活派进负责人的树；② 车道起手第一句应是"`cd <树>` 成功了吗"（`Set-Location` 失败**不中断** PowerShell 后续命令，所以错会静默传播）；③ 主检出那时的本地 `develop` 还比 `origin/develop` 多一笔 promotion-67 的 record 提交（`git cherry origin/integration develop` 给 `-`，内容已在 integration 里）—— 那种状态下主树不是"干净地停在 develop 上"，**先核等价、再 `reset --hard origin/develop` 对齐**，别直接快进。
+
 **20. 一行级工具错误的例外用法（铁律 18 的实操）。**
 `benchmarks/tools/grad_referee.py` 把计划给的 `--block-limit` 原样转给 camel，而 camel 只认 `--spaces block_mb=`（`src/tools/camel-cli/config.cpp:650/:823/:1239`）⇒ `unknown option`、4 条 slow 用例全红。改法唯一（目标写法由 CLI 自己规定），按铁律 18 例外我先改后报：`cmd += ["--spaces", f"block_mb={_block_limit_mb}"]`，当轮 `oversight_tell` 写明"改了哪一行、为什么只能这样改、不同意就回退"。**两笔缺一不可**：计划侧传裁判的参数名（`--block-limit`）与脚本侧传 camel 的参数名（`--spaces block_mb=`）是两个不同的接口，别把两笔当成重复。
