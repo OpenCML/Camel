@@ -147,6 +147,11 @@ defs.push_back(binaryDef<k::BinaryOp::Pow>("pow", {"pow", "__pow__"}));   // 加
 （`同`、`文本差（说明为什么，例如 TensorOrScalar 的 `Tensor | number` 变成类型函数的展开写法）`、
 `行为差（是缺陷，不许提交）`）。行为差一票否决。
 
+**`pow` 的 `name` 会变，这一条单列（实测）**：今天快照里 `tensor:pow` 是 `"name":"__pow__"`
+（`"signature":"(lhs: float[...] | number, rhs: float[...] | number) => float[...]"`）。迁移给它 Camel 名之后
+**`name` 由 `__pow__` 变 `pow`**（组名 = 导出名），而 `__pow__` 那一组仍在 ⇒ 快照差异是两项（`name` + `signature`），
+**预期**，必须**单独列一行**并说明"`^`/`__pow__`/`pow` 同一条记录、同一个 URI"，不能混在"除 signature 外不许变"里当异常。
+
 配套的行为判据（缺了"逐条一致"没有意义）：`vjp-parity --tables` 的 `newDebt 0 / staleCount 0`、
 `feat/trans` 与 `feat/compile` 对当前晋级红表 **甲 0**、AST 单列一笔、`[provenance] tip + binary built`、`dirty=0`。
 
@@ -158,6 +163,18 @@ defs.push_back(binaryDef<k::BinaryOp::Pow>("pow", {"pow", "__pow__"}));   // 加
 （`export type BroadcastDims<S1, S2>`，编译器给），像 `PayloadOf` 那样"有名字、有文档、可组合"。
 这不算开一门类型层语言（原则 23），是 663 明文允许的编译器原语。**先做一天的验证，验证不过就走退路，
 不许在库里塞特例。**
+
+**step 0 的读文本结论（2026-11-28，`lane-misc`；决策者点名要这一行）**：`match type` 的一个 case 只绑**一个**
+类型模式，**不是"类型函数机制不够"，而是要补"泛型按结构展开"里的一条具体能力 —— 两个类型包按位置同时展开**。
+今天语言能**携带**一个维包、能把它**接进**新的维表（`ShapeOf` 的 `case E[...Dims] => int[Dims]`、`WithElement`
+的 `E[...Dims]`、`RowsOf` 的 `E[?, ...Dims]`），但**没有"两个包进一个 case"**、也没有"逐位取大/补 1/拒绝不可广播"
+的写法；`static for`/`static loop` 只有 `fields T`（结构体字段）与 `indices ts`（一个包的下标）两种遍历。
+依据：原则 **5.6**（第 448 行）列出的 case 形状只有九个形状词 + 类型名；原则 **446** 原话"泛型要能在编译期按
+结构体、元组的字段递归（**设计另行讨论**）"；`src/stdlib/types.cml:70-105` 三个类型函数证明"包能携带/接续"但
+从不组合两个包。⇒ **`BroadcastDims` 今天写不出来**，`ElementPromote`/`WithShape` 写得出 ⇒ 按 663/463 先写
+**无体的原生类型函数**。要不要把"两个包并行展开"补进语言是**语言层决定**（原则 446 已登记），不是这次迁移的
+必要条件。**会推翻它的条件**（写进实现阶段第一天验收）：若 `static loop` 能把两个包的下标折叠、并把结果拼回
+维表用（`static loop acc = () for i in indices S1 do …` 之后 `E[...acc]`），结论改成"写得出，只是要绕一下"。
 
 **6.2 元素类型提升是语言规则，不是库的偏好。** 今天在 `binaryInfer` 里（C++）：`f64×f32→f64`、
 整数张量与浮点、`bf16/f16` 算 f32 再舍入一次（7.3）、标量字面量按 5.1 的宽容。搬进 `ElementPromote` 时
@@ -179,9 +196,14 @@ F 类 6 条要么等语言补，要么按 663 把默认值写进类型的文字�
    新用例钉住"名字可写、行为与 `^` 相同"。若不想加名字，那就只能停在"参考文件里补条目"，不是迁移。
 2. **`BroadcastDims`/`ElementPromote` 走 Camel 还是走 663 的编译器原语退路？** 建议：先按 §6.1 验一天，
    验得过就 Camel 写，验不过就走原语——两条都不违反原则 23，但后者要写进设计文档的"编译器原语"名单。
-3. **待确认（step 0）**：静态对照有一处对不上——`mean_axis_stated` 在 `src/stdlib/tensor.cml` 里有声明，
-   却不在 `kDeclaredOperators[]` 的 26 条里（而 `mean_stated` 在）。我按源码读到的是这样，`--verify-ops` /
-   `stdlib-declarations --check` 今天是不是绿的，要用 step 0 的实测回答；**不绿就先修它，再谈迁移**。
+3. **无遗留对不上（step 0 实测后改写）**：`mean_axis_stated` **不在** `src/stdlib/tensor.cml` 的声明里
+   （那里只有 `:235`、`:417` 两处注释；`git grep -n "export func mean_axis_stated" -- src/stdlib/tensor.cml`
+   零命中），它的记录在 `src/stdlib/tensor/signatures/tensor.cml:296`（**算出来的**那一侧）；
+   `module.cpp:62-70` 写明为什么必须算：维随 `axis`/`keepdims` 这个**值**走，声明唯一能写的类型是 `T[..]`，
+   而那是"值可以反驳的断言"（原则 5.4）。所以 `kDeclaredOperators[]` **不该**有它，两道守卫今天**绿得对**：
+   `stdlib-declarations.mjs --check` exit 0（`29 declaration module(s), 80 computed signature(s) left in C++,
+   0 problem(s)`）、`stdlib-reference.mjs --verify-ops` exit 0（`594 registered operator overloads`、
+   `paramsCompared`/`resultsCompared` 非零）。**这一条原本是"静态对照对不上"的怀疑，实测后作废**。
 
 ## 8 读数怎么复现（全文数字的出处）
 
