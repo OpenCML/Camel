@@ -1529,3 +1529,38 @@ for (const conv of convs) {
 """
 timeout_ms = 20000
 
+
+[[tests]]
+name = "batch_norm_rankone_fits_one_axis"
+desc = "A `[1]` parameter on a `[2, 1, 1]` value is legal: the length 1 fits axes 1 and 2 by value, but an extent of 1 is a lane every axis can take, so `ambiguousRankOneAxes` (the judgement the declaration and the kernel share) answers that there is no ambiguity, and the call runs with axis 1's statistics -- (1 - 0) / sqrt(1) = 1, times gamma 1 plus beta 1, summed over two elements = 4."
+kind = "behavior"
+case = "../../../cases/modules/nn/bn_rankone_one_axis.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+assert(input.normalized.output.includes('bn_rankone_one_axis sum=4'), 'a [1] parameter on [2,1,1] must run: ' + input.normalized.output)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "batch_norm_rankone_two_axes_refused"
+desc = "A `[2]` parameter on a `[2, 2, 2]` value is ambiguous and stays refused: the length fits axes 1 and 2, the statistics differ between them, and the sentence lists both axes (the list is `ambiguousRankOneAxes`' answer, shared with the declaration) and says a rank-1 parameter that fits more than one axis is refused."
+kind = "behavior"
+case = "../../../cases/modules/nn/bn_rankone_two_axes.cml"
+args = ["${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+assert(input.exit_code !== 0, 'a [2] parameter on [2,2,2] must be refused')
+assert(text.includes('batch_norm: the [2] parameter fits axes 1 or 2 of the tensor\'s shape [2, 2, 2] and does not say which one'), 'the refusal must list the axes it fits: ' + text)
+assert(text.includes('a rank-1 parameter that fits more than one axis is refused'), 'the refusal must say why: ' + text)
+assert(text.includes('RuntimeDiag::TensorDimensionMismatch'), 'missing runtime diagnostic category')
+}
+"""
+timeout_ms = 10000

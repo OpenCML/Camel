@@ -30,19 +30,24 @@ namespace camel::tensor {
  * The axes of `shape` that hold `span`'s one extent, joined for the refusal sentence ("0, 2 or
  * 3"), or an empty string when there is no ambiguity: `span` is not of one extent, that extent is
  * 1, `shape` has fewer than three axes, or the extent sits on one axis only.
+ *
+ * `firstAxis` is the first axis a candidate may stand on: 0 for a value read against the whole
+ * shape, and 1 for `batchNorm`'s `[C]` parameter, whose axis 0 is the batch axis and never the
+ * axis the parameter names.
  */
-inline std::string ambiguousRankOneAxes(std::span<const int64_t> span, std::span<const int64_t> shape) {
+inline std::string ambiguousRankOneAxes(
+    std::span<const int64_t> span, std::span<const int64_t> shape, size_t firstAxis = 0) {
     if (span.size() != 1 || span[0] == 1 || shape.size() < 3) {
         return std::string();
     }
     std::string fits;
     size_t candidates = 0;
-    for (size_t d = 0; d < shape.size(); ++d) {
+    for (size_t d = firstAxis; d < shape.size(); ++d) {
         if (shape[d] != span[0]) {
             continue;
         }
         if (candidates != 0) {
-            fits += (candidates + 1 == shape.size()) ? " or " : ", ";
+            fits += (d + 1 == shape.size()) ? " or " : ", ";
         }
         fits += std::to_string(d);
         ++candidates;
