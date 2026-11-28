@@ -50,7 +50,7 @@ desc = "Maps and sets under collection stress: a table keeps its keys and values
 # The twenty-two now ask for their collections to be served one for one
 # (std::prl gc_stress=true, the pass parameter the rule asks for, named
 # to say what it does; every run that does not write it keeps the pacing, which is what
-# feat/mm/gc_elder_exhaustion.plan.toml sizes its std::tf arms
+# feat/mm/gc_elder_exhaustion.plan.toml sizes its std::prl arms
 # against), and they read what their nvm and fvm siblings read: 9.02-9.47 s of CPU for the six tree
 # cases and 15.00-15.56 s for the six tiny ones, against 8.88-10.41 s and 14.72-17.53 s on those
 # two back ends, with 3,535 major collections in place of 6 to 9 and 78 to 1,014 while a flow was

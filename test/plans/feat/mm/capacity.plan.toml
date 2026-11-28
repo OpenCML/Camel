@@ -224,11 +224,11 @@ timeout_ms = 300000
 
 [[tests]]
 name = "capacity.growth_tf_gc_stress"
-desc = "The three spaces grow by segments while the program is compiled and run: with a first segment of 32 KB (`--spaces segment_kb=`, a test control; since types are interned, the permanent space of 500 functions no longer fills three segments of 64 KB) 500 functions of all shapes need several segments of each space. The program prints the sum the generator computed and the statistics line shows at least 3 segments per space. Pipeline: std::tf, with a verified major collection at every safepoint the scheduler polls: workers allocate while the collector asks the spaces which objects are theirs."
+desc = "The three spaces grow by segments while the program is compiled and run: with a first segment of 32 KB (`--spaces segment_kb=`, a test control; since types are interned, the permanent space of 500 functions no longer fills three segments of 64 KB) 500 functions of all shapes need several segments of each space. The program prints the sum the generator computed and the statistics line shows at least 3 segments per space. Pipeline: std::prl, with a verified major collection at every safepoint the scheduler polls: workers allocate while the collector asks the spaces which objects are theirs."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/scale/scale.py"
-args = ["${case}","run","mixed","500","std::profile gc_stats=1 report=false hints=false","std::tf", "--camel-options", "--gc-stress safepoint=1,kind=major --gc-check verify=both --spaces segment_kb=32"]
+args = ["${case}","run","mixed","500","std::profile gc_stats=1 report=false hints=false","std::prl", "--camel-options", "--gc-stress safepoint=1,kind=major --gc-check verify=both --spaces segment_kb=32"]
 expect_exit = 0
 expect_stdout_contains = ["OK mixed n=500"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

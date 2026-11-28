@@ -179,7 +179,7 @@ name = "map_result_order.tf"
 desc = "The result of map and filter is in element order under every scheduler, also when the element functions run concurrently and finish out of order. (The order of EFFECTS inside element functions under a parallel scheduler is not asserted: it is not defined.)"
 kind = "behavior"
 case = "../../../cases/para/core/map_result_order.cml"
-args = ["${case}", "std::tf"]
+args = ["${case}", "std::prl"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -222,7 +222,7 @@ name = "filter_keeps_all.tf"
 desc = "filter keeps every element whose predicate holds, also when the predicates run concurrently: forty filters over 3000 elements, count and sum of the kept elements checked. (The verdicts were bits of one std::vector<bool>, and concurrent writes to neighbouring bits lost some.)"
 kind = "behavior"
 case = "../../../cases/para/core/filter_keeps_all.cml"
-args = ["${case}", "std::tf"]
+args = ["${case}", "std::prl"]
 expect_exit = 0
 expect_stdout_contains = ["filter_keeps_all total=80119959000"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

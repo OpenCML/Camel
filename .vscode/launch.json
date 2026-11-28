@@ -36,7 +36,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/out/latest/bin/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
-            "args": ["-v", "--log-level debug", "${file}", "std::fastvm"],
+            "args": ["-v", "--log-level debug", "${file}", "std::fvm"],
             "console": "externalTerminal",
             "logging": {
                 "moduleLoad": true,
@@ -92,7 +92,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/out/latest/bin/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
-            "args": ["-v", "--log-level debug", "${file}", "std::parallel"],
+            "args": ["-v", "--log-level debug", "${file}", "std::prl"],
             "console": "externalTerminal",
             "logging": {
                 "moduleLoad": true,

@@ -300,7 +300,7 @@ CHECK = [
     ("mixed", 2000, []),
     ("mixed", 2000, ["std::fvm"]),
     ("mixed", 500, ["std::jit"]),
-    ("mixed", 500, ["std::tf"]),
+    ("mixed", 500, ["std::prl"]),
 ]
 
 

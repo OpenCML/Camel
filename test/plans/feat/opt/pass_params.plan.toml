@@ -43,8 +43,8 @@ expect_stdout_starts_with = "camel-ran-marker\n"
 
 [[tests]]
 name = "valid.taskflow_parameters"
-desc = "Parameters of std::tf, with an int where an int is declared."
-args = ["${case}", "std::tf bytecode=false gc_stats=0 linear=true"]
+desc = "Parameters of std::prl, with an int where an int is declared."
+args = ["${case}", "std::prl bytecode=false gc_stats=0 linear=true"]
 expect_exit = 0
 expect_stdout_starts_with = "camel-ran-marker\n"
 

@@ -57,7 +57,7 @@
 | 可能故障不强制声明；没声明按可能故障 | **已实现** | `effects.cpp` 的 `mayFault` 保守合并；`kernel/include/camel/runtime/effects.h` | 无专门用例（随 `EffectSummary`） |
 | 无序资源 `resource net unordered`：其上的效应不保持书写顺序；要顺序就写 `sync` 块或用句柄 | **缺**。`ResourceSpec` 没有无序标志，语言层没有这个词 | parser；`resource_semantics.h#ResourceSpec` | 无 |
 | 句柄类型：`#resource` 类型，每个值一个独立资源；签名写 `uses 形参名`；同一句柄按书写顺序，不同句柄互不约束；调用处推出是哪个值 | **缺**。没有 `#resource` 标签（`tags.cpp` 的标准标签表里没有它），函数类型没有资源，`ResourceClass::Foreign` 只是"模块包的对象" | `tags.cpp#declareStandardTags` 是标准标签的写法；`struct.h#StructDecl` 是名词性类型的落点 | `tags.plan` 的 `independent.*` 是"声明→图属性"的现成范式；句柄无用例 |
-| 并发不需要 `async`/`await`；独立计算与不同资源可同时进行；运行时在一个效应等待时执行其他就绪节点 | **部分**。`std::prl` 就是 `std::taskflow`，任务图只由 norm/with/ctrl 边决定；不在同一条链上的两个节点可以并发。`wait` 旧写法仍在 | `kernel/execute/pass.cpp#std::prl`；`src/passes/sched/taskflow/` | `para` 各计划；没有"两个句柄并发"的用例 |
+| 并发不需要 `async`/`await`；独立计算与不同资源可同时进行；运行时在一个效应等待时执行其他就绪节点 | **部分**。`std::prl` 就是 `std::prl`，任务图只由 norm/with/ctrl 边决定；不在同一条链上的两个节点可以并发。`wait` 旧写法仍在 | `kernel/execute/pass.cpp#std::prl`；`src/passes/sched/taskflow/` | `para` 各计划；没有"两个句柄并发"的用例 |
 | 取消只对 `cancellable` 资源/算子 | **缺** | — | — |
 
 ### 1.2 一个便宜处：类型声明已经是名词性的
@@ -324,7 +324,7 @@ pump(s, open("b"))   同上：被调用者不知道 s 与新句柄不同，仍�
 - 建图时对每个"碰资源"的节点，按 2.3 得到键集合；与前一个同键的节点连 ctrl（6a 先按成对冲突、6b 再按资源链稀疏化）。已有的 `shouldAddSyncCtrlLink`（`builder_helpers.h#shouldAddSyncCtrlLink`）与 `hasControlDependency` 负责去重与避免已有数据依赖时再加边；分支两臂的节点不互连（`exclusive` 的规则，`resources.cpp#exclusive`）。
 - `ordered by data` 的对不重复加 ctrl（数据边已经给了顺序）；`ordered by control` 的对已经有边；只有"冲突且无路径"的对才加。加边方向是书写顺序（节点创建顺序），通常不会成环；仍用 `reaches` 兜底。
 - 判据的落点：`mayAlias`/`originOf` 现在只接受 `GCGraph`（`resources.cpp#mayAlias`）。建图时在草稿节点上维护同一张来源表（Fresh/Port/Same/Unknown、由哪个节点来），逐条对齐那张判决表；`requiredOrderings` 需要 `Program`，只在验收时调用，不在建图时调用。
-- 调度器读的还是同三种边，**`std::taskflow`/`std::prl` 一行不改**。这是"执行顺序是图的属性"的直接结果：图的边变了，调度自然变。
+- 调度器读的还是同三种边，**`std::prl`/`std::prl` 一行不改**。这是"执行顺序是图的属性"的直接结果：图的边变了，调度自然变。
 - `requiredOrderings`（`resources.cpp#requiredOrderings`）继续作为独立验收：步骤 6 之后，除 `unordered` 资源上的对外，所有 `ResourceConflict` 的对都必须是 `ordered`。
 
 ---

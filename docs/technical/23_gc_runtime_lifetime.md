@@ -313,7 +313,7 @@ doubles between two collections: a merge sort of 2e7 integers (2 GB of arrays al
 A lower setting trades collections for memory in proportion (25: four times the collections, a
 quarter of the garbage). The collector's own work is proportional to the number of objects, not
 to their bytes, so for a few large arrays the collections themselves cost almost nothing; under
-`std::tf` each one also waits for the other workers to leave their operators (see the safepoint
+`std::prl` each one also waits for the other workers to leave their operators (see the safepoint
 contract above), and that wait is what a lower setting pays for. Freed large blocks are kept in
 a size-class cache (up to 256 MB) and reused, so steady-state tensor workloads recycle hot memory
 instead of faulting fresh pages in; cached blocks stay resident, so the resident peak sits up to

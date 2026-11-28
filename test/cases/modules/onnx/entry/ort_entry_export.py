@@ -6,7 +6,7 @@ Each program of this folder is a pure `main` (no export request, no `import onnx
     the model checked by onnx.checker(full_check) when the onnx package is present and its
     inputs, initializers and outputs compared with what the declared types say;
   - run natively with the same values (`--arg name=file`, `-o dir`) under the default
-    pipeline and under std::fvm, std::jit and std::tf;
+    pipeline and under std::fvm, std::jit and std::prl;
   - run on ONNX Runtime with those values.
 
 The ONNX Runtime outputs must match every native run within 1e-5.
@@ -31,7 +31,7 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[4]
 TOL = 1e-5
-SCHEDULERS = [None, "std::fvm", "std::jit", "std::tf"]
+SCHEDULERS = [None, "std::fvm", "std::jit", "std::prl"]
 # The export consumes the graph, so the pipeline ends in `std::nop`: the model is written and the
 # program is not run, which is what this harness compares against the native run below.
 EXPORT = ["std::macro", "std::opt", "onnx::export_model", "std::nop"]

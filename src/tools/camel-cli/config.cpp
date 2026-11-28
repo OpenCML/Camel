@@ -1209,7 +1209,7 @@ bool parseArgs(int argc, char *argv[]) {
             &Run::runPassTarget);
         // The pass `std::run` stands for, when the rc names one. The pipeline is resolved after
         // this point, so the value is in place before any pass name is checked or run; an empty
-        // value leaves the kernel's default (`std::fastvm`).
+        // value leaves the kernel's default (`std::fvm`).
         ::setRunPassTarget(Run::runPassTarget);
 
         // The two depth limits: the option only. A value that is not an integer in range is

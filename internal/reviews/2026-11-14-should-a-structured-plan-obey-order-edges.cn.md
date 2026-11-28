@@ -2,7 +2,7 @@
 
 ## 问什么
 
-`std::prl`（`std::taskflow`）有两条执行路径，它们对 **order 边**的答案不一样：
+`std::prl`（`std::prl`）有两条执行路径，它们对 **order 边**的答案不一样：
 
 - **逐节点任务图**（`connectRuntimeDependencies`，`std::tfdump` 画的就是它）：遵守三种边，
   order 边只让两个**都要跑**的节点分先后（`edges.cn.md` 2）；

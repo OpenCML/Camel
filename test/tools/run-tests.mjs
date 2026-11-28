@@ -94,6 +94,7 @@ const TEST_FIELDS = new Set([
     'name', 'desc', 'kind', 'case', 'args', 'envs', 'tool', 'timeout_ms', 'cpu_budget_ms', 'verify_timeout_ms',
     'skip_unless', 'skip_unless_timeout_ms', 'require_artifacts', 'parallel', 'tier', 'sweep', 'cuda_devices',
     'cuda_free_device',
+    'processes',
     'known_fail', 'known_fail_owner', 'known_fail_reason', 'known_fail_note', 'known_fail_msg',
     'known_fail_ends_when',
     'flaky',
@@ -605,6 +606,14 @@ function validatePlanSchema(doc, planPath) {
         checkFieldType(planPath, entry, 'cuda_devices', where, 'boolean')
         checkFieldType(planPath, entry, 'cuda_free_device', where, 'boolean')
         checkFieldType(planPath, entry, 'cpu_budget_ms', where, 'number')
+        // How many programs the case keeps running at once (a gc-stress run that starts a compiler
+        // and the program under several collector settings, a driver that fans out): the case holds
+        // that many of the run's slots, so `--jobs` and the host's tokens count processes, not cases.
+        if (entry.processes !== undefined && !(Number.isInteger(entry.processes) && entry.processes >= 1)) {
+            throw new PlanSchemaError(
+                `${planLabel(planPath)}: ${where}: processes must be a whole number of at least 1, the programs the case runs at once`
+            )
+        }
         // A CPU budget is the test's cost bound and the timeout is only its liveness bound, so the
         // two are declared together: a test that states a budget and leaves the timeout at the
         // runner's 10 s default would be killed long before its own work could cross it, and the
@@ -5366,7 +5375,9 @@ async function executePlans(plans, options, sharedVars, logDir) {
             }
             clock.dependenciesDoneAt = performance.now()
             const serial = isSerial(entry.plan, entry.test)
-            const tokens = serial ? options.jobs : 1
+            // A serial case holds every slot; one that says how many programs it runs at once holds
+            // that many, never more than the run has.
+            const tokens = serial ? options.jobs : Math.min(options.jobs, entry.test.processes ?? 1)
             clock.serial = serial
             clock.tokens = tokens
             const wantsProbe = Array.isArray(entry.test.skip_unless) && entry.test.skip_unless.length > 0
