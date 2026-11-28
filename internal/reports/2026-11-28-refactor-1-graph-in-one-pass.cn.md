@@ -294,6 +294,24 @@ Get-ChildItem out/migrate/corpus/*.cml | ForEach-Object {
 
 **规矩不变**：每类的差异**逐个归因**（§3.4），**归不了因的一律算新路径的错**。
 
+### 3.8 甲还是乙？——读数：**甲**
+
+**程序**：`test/cases/consistency/new_values/peek_loop.cml`（循环里重绑定的正例，今天走格子），`std::jgir canonical=true`，现跑：
+
+```
+peek_loop exit=0 total_lines=605
+lines containing var (case-insensitive): 1
+VAR> "var": false
+```
+
+**判读**：605 行里**含 `var` 的只有 1 行，且那是一个 JSON 字段 `"var": false`，不是节点** ⇒ canonical 图里**没有** `/var/new`、`/var/get`、`:op/assn` 这些节点 —— 它们今天已经被折叠掉了。
+
+⇒ **甲**：第一刀"不造这些节点"**是零变化的内部整理**，判据"新旧 canonical 逐字节相同"**成立**，第一刀按 §2·0 的**惰性绑定 + 物化**做。
+
+**前一次的四个 `0` 是猜错键**（`/var/new` 等拼写是我推的），那组数不算读数；这一次不预设键、按 `var` 全量捞，才是读数。
+
+**待补**：`var` 形参的**真实写法**本轮没找到（`with <p: var int>` 是我猜的，`exit=1`；`test/cases/**/var_param*.cml` 也没捞到）—— 第 2 刀要用它，**先别猜**，届时 `git grep` 找出来再写。
+
 ## 不做什么
 ### 3.7 `foreach` / `Range` 这条护栏（每日审查第 2 条的一半）
 
