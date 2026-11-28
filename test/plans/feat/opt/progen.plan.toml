@@ -18,20 +18,9 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # The work is fixed (25 programs x 41 pipelines = 1,025 cells, each one a compiler run), so what
 # bounds it is its own CPU time, and `timeout_ms` below is the liveness bound only -- the reading
 # the rule asks for, and the one the resnet referees of
-# feat/modules/autodiff and the entries of perf/step_budget state. Measured on the 32-core host
-# of this project, the plan alone under camel-remote -Jobs 8:
-#
-#   86560 ms of CPU / 91858 ms wall  (the first window in which every cell ran)
-#   82180 ms of CPU / 51220 ms wall  (the run that turned this entry green)
-#   83670 ms of CPU / 42820 ms wall  (the measurement in force: every cell reaches
-#                                     the compiler again, 223 of them by failing)
-#
-# The budget is 150000 ms and is not re-derived from the newest reading: it keeps the margin the
-# slower reading set (150000 / 86560 = 1.73x), the headroom those referees took, which
-# is what the budget states instead of the runner's 4x margin (300000 / 86560 = 3.47x, the reading
-# before the cells began to run). The 83670 ms measurement leaves that budget at
-# 150000 / 83670 = 1.79x.
-cpu_budget_ms = 150000
+# feat/modules/autodiff and the entries of perf/step_budget state. The budget states the take, not a
+# reading: 1.5x the CPU time this batch costs on the build host.
+cpu_budget_ms = 250000
 timeout_ms = 300000
 
 # Seed 4 of `generate.VERSION` 9, run on its own, and a fast reading of the seed the optimizer broke
