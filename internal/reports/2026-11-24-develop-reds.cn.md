@@ -2078,8 +2078,8 @@
 | test/plans/feat/parse/frontend.plan.toml | frontend.ast_snapshot | expected exit 0, got exit 1 | `e3c6e0293333-22-15145fbf` | 2026-11-24 03:04 | 未知 | 说不清（只有退出码） |
 | test/plans/feat/parse/frontend.plan.toml | grammar.reference_in_step | expected exit 0, got exit 1 | `e3c6e0293333-22-15145fbf` | 2026-11-24 03:04 | 未知 | 说不清（只有退出码） |
 | test/plans/feat/runtime/graph_draft_ledger.plan.toml | runtime.graph_draft_ledger.never_rises | expected exit 0, got exit 1 | `e3c6e0293333-22-15145fbf` | 2026-11-24 03:04 | 未知 | 说不清（只有退出码） |
-| test/plans/feat/showcase_s1.plan.toml | stream_fib.default.nvm | [1;31mCamel Invariant Violation:[0m | `20261102_151915_642372` | 2026-11-02 07:19 | 未知 | 真缺陷 |
-| test/plans/feat/showcase_s1.plan.toml | stream_fib.default.prl | [1;31mCamel Invariant Violation:[0m | `20261102_151915_642372` | 2026-11-02 07:19 | 未知 | 真缺陷 |
+| test/plans/feat/showcase_s1.plan.toml | stream_fib.default.nvm | \e[1;31mCamel Invariant Violation:\e[0m | `20261102_151915_642372` | 2026-11-02 07:19 | 未知 | 真缺陷 |
+| test/plans/feat/showcase_s1.plan.toml | stream_fib.default.prl | \e[1;31mCamel Invariant Violation:\e[0m | `20261102_151915_642372` | 2026-11-02 07:19 | 未知 | 真缺陷 |
 | test/plans/feat/tools/autodiff_migration_ledger.plan.toml | tools.autodiff_migration_ledger.ratchet | test/cases/modules/autodiff/jax_names/argnums.cml                          1      1  off  (vjp)D:\Projects\Camel\test\cases\modules\autodiff\jax_names\vjp.cml:15:21: [Error]: Unresolved reference: 'vj | `6ac9fee133e3-11-f614f428` | 2026-11-24 00:17 | 未知 | 真缺陷 |
 | test/plans/feat/tools/compile_bench.plan.toml | compile_bench.smoke | expected exit 0, got exit 1 | `6ac9fee133e3-11-f614f428` | 2026-11-24 00:17 | 未知 | 说不清（只有退出码） |
 | test/plans/feat/tools/debugger.plan.toml | debugger.dap_session | expected exit 0, got exit 1 | `6ac9fee133e3-11-f614f428` | 2026-11-24 00:17 | 未知 | 说不清（只有退出码） |

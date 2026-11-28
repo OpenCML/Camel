@@ -9,7 +9,7 @@
 
 **缺口数必须带算式**：只给一个数字的账页，下一轮一定被读错。写法是三段相加、去重后写成一行，
 量不到的项写"未量"，不猜：缺口 = A（C2 节点级）+ B（transformer 节点级）+ C（array: 入口里未进表的名字，去重）。今天不等的情形有两类：表里有名字而程序里没有节点带它（	ensor:sum_axis
-对只调 rray.sum 的程序），以及程序里有节点而表里没有那条名字（rray:argmax_axis）。
+对只调 array.sum 的程序），以及程序里有节点而表里没有那条名字（array:argmax_axis）。
 
 这是 G4 的"缺口为 0 才算完成"（`internal/reports/gpu-g4-g5-plan.md` G4 第 1 条）的唯一账本。数由遍
 `tiles::census` 读出：程序可达图里的面内算子（`tensor` 的数组与 `nn` 的参数树）按

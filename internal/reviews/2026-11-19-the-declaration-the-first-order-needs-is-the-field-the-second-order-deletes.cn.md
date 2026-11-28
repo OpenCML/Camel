@@ -100,7 +100,7 @@ src/compile/gir/builder_helpers.h:186          graph->setExitType(resultType);
 前面写甲（保留字段、挪时机）与乙（删字段、① 做不成）是二选一，但还有第三条：
 
 `
-**对每个签名后来没被补过/换过的图，uncType() **本身就是那份声明**，graphExitTypeOf(funcType()) 直接能答，不需要另存**
+**对每个签名后来没被补过/换过的图，FuncType() **本身就是那份声明**，graphExitTypeOf(funcType()) 直接能答，不需要另存**
 **真要给「后来补过/换过」的图存一份，**冻结图 GCGraph**（include/camel/runtime/graph.h:1279）是更贴切的位置：
    在 encode 时把声明签名写进去一次 —— 它**按图持久**，builder 与 draft 都不必活着
 ⇒ **⇒ 所以两条裁定不必互斥**：把「每图打包前的声明」记在**声明还完整可读的时候**（创建 / encode），

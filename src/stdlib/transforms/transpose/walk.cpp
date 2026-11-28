@@ -2406,7 +2406,7 @@ bool buildTransposeMember(
                 break;
             }
             case NodeCase::Gate: {
-                // The gate forwards its first input and waits on the rest (xit_gate.h): the
+                // The gate forwards its first input and waits on the rest: the
                 // cotangent goes to the value, never to a statement the gate waits on.
                 const gc_node_ref_t forwarded = valueBehindGates(*function, ref);
                 if (forwarded != rt::kInvalidNodeRef) {
