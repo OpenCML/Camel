@@ -1,0 +1,19 @@
+// RQ1 classic suite: mandelbrot. Counts the pixels of an n x n grid inside the set, and the
+// number of iterations the whole grid cost (the work count the C++ column prints too).
+
+func iterate(zr: float, zi: float, cr: float, ci: float, i: int) => int {
+    if i == 200 then 200 else {
+        let nr = zr * zr - zi * zi + cr
+        let ni = 2.0 * zr * zi + ci
+        if nr * nr + ni * ni > 4.0 then i + 1 else iterate(nr, ni, cr, ci, i + 1)
+    }
+}
+
+func main() sync {
+    let n = 200
+    let cells = [ iterate(0.0, 0.0, float(k / n) * 3.0 / float(n) - 2.0, float(k % n) * 2.0 / float(n) - 1.0, 0) for k in 0 .. (n * n) ]
+    let inside = loop acc = 0 for k in 0 .. (n * n) do acc + (if cells[k] == 200 then 1 else 0)
+    let work = loop acc = 0 for k in 0 .. (n * n) do acc + cells[k]
+    println(inside)
+    println(work)
+}

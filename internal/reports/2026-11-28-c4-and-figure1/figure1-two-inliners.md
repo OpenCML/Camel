@@ -1,16 +1,22 @@
 # Figure 1 的三张图：`opt::inline` 版与 `std::cxx::inline` 版，逐字节
 
-**状态：初读，非定稿（preliminary, not final）。** 本页只有一次运行的读数，机器当时很忙，且只覆盖
-Figure 1 这一支程序；正文里每个数字都可以按 §4 的命令重取。
+**状态：可引用读数（citable reading）——限于这一个程序、这一台主机、这一个尖端。**
+本页的数字全部来自**一次**运行（2026-11-28 18:12 +08:00，尖端 `c41814ea5e`），驱动随读数一起
+自报身份，命令、`[load]` 行、两侧 SHA-256 都在下面，可按 §4 原样重取。**不是终稿**：只覆盖
+Figure 1 这一支程序（见 §5 的"没回答"）。
 
-- **尖端**：车道工作树 `D:\Projects\Camel-wt\misc`，detached HEAD `b25dcda7a2b3`（主机检出
-  `/home/zjwei/camel-work/misc`）。本轮没有改任何被跟踪文件；跑时工作树有 4 个**未跟踪**的探针文件，
-  所以 `build-info.json` 的 `dirty` 是 4，`[provenance]` 行照抄了这个 4。
-- **机器**：主机 `zjwei`（Linux，令牌池 24 个 worker）。本次运行的
-  `[provenance] tip (dirty: 4 files) | binary built 2026-11-28T15:08:37+08:00 | tree /home/zjwei/camel-work/misc | tier fast | jobs 2`。
-- **负载**：跑前 `[load] 71.75 54.38 42.30 (1m/5m/15m)`，跑后 `[load] 77.28 57.91 43.99`，池子
-  `pool: size=24 inUse=14`。**主机很忙**，所以本页不写任何墙钟结论；图的**字节数**与**节点数**不随
-  负载变（同一二进制、同一命令、dot 里没有时间戳），下面比的正是这两样。
+- **尖端**：`c41814ea5eb2356045f0edaab2498f17a66c20b6`（= 当时的 `origin/integration`），
+  车道工作树 `D:\Projects\Camel-wt\paper-readings`，分支 `lane/paper-readings`，主机构出
+  `/home/zjwei/camel-work/paper-readings`。`[provenance] tip c41814ea5eb2356045f0edaab2498f17a66c20b6
+  | binary built 2026-11-28T18:10:04+08:00 | tree /home/zjwei/camel-work/paper-readings | tier fast | jobs 4`。
+- **驱动**：一个一次性探针脚本，**不在本页的提交里、也不进 integration**（探针纪律：活一次、用完删）。
+  它在运行时自报 `driver.self_sha256=69f8fb22c99cc03182f37a294f53fa0131f7b7d73ac3439bf6791b749badb1da`
+  ——**"主机上跑的是哪一份"由此回答**，而不是靠仓库里有没有这个文件。复算方法见 §4：命令、输入、
+  以及"怎么解析这台机器上的输出"都在文字里，不需要那份 `.py` 也能重做。
+- **负载**：跑前 `[load] 31.45 41.71 42.81 (1m/5m/15m)`，跑后 `[load] 29.77 41.01 42.57`；
+  运行器自己打了 `WARNING: 1m load 29.77 > 8 —— readings taken now are not comparable to
+  quiet-host readings`。**所以本页不写任何墙钟结论**；图的字节数与计数不随负载变。
+- **机器**：主机 `zjwei`（Linux，令牌池 24 个 worker），`-Jobs 4`。
 - **日期**：2026-11-28。
 
 ## §1 口径：照计划自己声明的那一条比，不自造
@@ -36,91 +42,131 @@ compare_fields = ["exit_code", "stdout_normalized"]
 区别只有第一步是用 `opt::inline` 还是 `std::cxx::inline`。
 
 两处比计划更严：计划比 `stdout_normalized`，本页比**原始字节**（字节相同 ⇒ 归一化后必定相同）；
-不同时打印第一处差异的行号与两行原文，所以差异会点名到某一节点行或边行，而不是"图不一样"。
+比的是 SHA-256，任何一处字节差异都会让两侧哈希分开，不是"看上去一样"。
 
 三张图 = 管线的三步：① `inline` 之后、② `+ opt::cse` 之后、③ `+ opt::cse + opt::algebra` 之后。
-另加一步 `before`（**不过任何内联器**，`std::gir std::nop`），它是起点、不是三张图之一。
+另加一步 `before`（**不过任何内联器**），它是起点、不是三张图之一。
 
-## §2 四条读数
+## §2 四条读数（本轮，尖端 `c41814ea5e`）
 
-| 步 | 遍列表 | 字节 Camel / C++ | 相同 | nodes | edges | direct_calls |
-|---|---|---|---|---|---|---|
-| `before`（起点，无内联器） | `std::gir std::nop` | 4976 | —（只有一条命令） | 19 | 16 | 2 |
-| ① `inline` | `opt::inline` 或 `std::cxx::inline`，`std::gir std::nop` | 7067 / 7067 | 是 | 28 / 28 | 26 / 26 | 0 / 0 |
-| ② `inline_cse` | 同上 `+ opt::cse` | 6155 / 6155 | 是 | 24 / 24 | 22 / 22 | 0 / 0 |
-| ③ `inline_cse_algebra` | 同上 `+ opt::cse + opt::algebra` | 4431 / 4431 | 是 | 18 / 18 | 14 / 14 | 0 / 0 |
+| 步 | 遍列表（两侧只差第一步） | camel 字节 | cpp 字节 | 两侧相同 | 两侧 SHA-256（相同则一个值） |
+|---|---|---|---|---|---|
+| `before`（起点，无内联器） | `std::gir std::nop` | 4499 | —（只有一条命令） | — | `b38054da0936f18bdc7d228ebe37676385205160ff026a01b793993f6505e8a2` |
+| ① `inline` | `opt::inline` / `std::cxx::inline` | 6338 | 6338 | **是** | `e87c42e24890a1d50f8cf110ec907ec8d1e09c25f8824adfb589b9f073d086e1` |
+| ② `inline_cse` | 同上 `+ opt::cse` | 5538 | 5538 | **是** | `61f5c74fb9facba04fd373f62e8c31ed2ad88372bfa2e3cbeebc17693811ff53` |
+| ③ `inline_cse_algebra` | 同上 `+ opt::cse + opt::algebra` | 4038 | 4038 | **是** | `61619c59ff32d1e76a6e46c89642b0518d6980bf64322aad9f78ed8f886dd8a3` |
 
-`nodes`/`edges`/`direct_calls` 来自同一批遍之后加一个 `std::stats` 的 `GRAPH_STATS` 行，不是从 dot 里数的。
+`nodes` / `edges` / `direct_calls` / `graphs` 取自同一条命令里的 `std::stats`（`GRAPH_STATS` 行，
+本页把这一行从 dot 文本里剔掉，所以"字节"是 dot 本身）：
 
-这张表里最要紧的一行不是"相同"，是起点：**4976 → 7067**，即 `opt::inline` 这一步确实动了图
-（19 → 28 个节点、`direct_calls` 2 → 0）。所以③对①的逐字节相同，不是"内联器什么都没干、拿同一张图
-跟自己比"那种空判。
+| 步 | camel nodes / edges / direct_calls | cpp nodes / edges / direct_calls | graphs（两侧） |
+|---|---|---|---|
+| `before` | 19 / 16 / 2 | — | 4 |
+| ① `inline` | 28 / 26 / 0 | 28 / 26 / 0 | 4 / 4 |
+| ② `inline_cse` | 24 / 22 / 0 | 24 / 22 / 0 | 4 / 4 |
+| ③ `inline_cse_algebra` | 18 / 14 / 0 | 18 / 14 / 0 | 4 / 4 |
 
-## §3 判词原文（程序自己打的那几行，逐字）
+`GRAPH_STATS` 这一版记录的键是（驱动把收到的键名打出来了，不是我猜的）：
+`branches,bytes,closures,cycle_dropped_sessions,direct_calls,edges,graph_names,graphs,indirect_calls,loops,macro,nodes,opers,specializations`。
 
-```
-fig1.program=test/cases/opt/cxx_isolation/paper_figure1.cml
-fig1.camel=opt::inline fig1.cpp=std::cxx::inline
-fig1.stage=before inliner=none bytes=4976 nodes=19 edges=16 direct_calls=2
-fig1.stage=inline rc_camel=0 rc_cpp=0 bytes_camel=7067 bytes_cpp=7067 same=True
-fig1.stage=inline camel nodes=28 edges=26 direct_calls=0
-fig1.stage=inline cpp   nodes=28 edges=26 direct_calls=0
-fig1.inline_changed_graph=True (before=4976 inline=7067)
-fig1.stage=inline_cse rc_camel=0 rc_cpp=0 bytes_camel=6155 bytes_cpp=6155 same=True
-fig1.stage=inline_cse camel nodes=24 edges=22 direct_calls=0
-fig1.stage=inline_cse cpp   nodes=24 edges=22 direct_calls=0
-fig1.stage=inline_cse_algebra rc_camel=0 rc_cpp=0 bytes_camel=4431 bytes_cpp=4431 same=True
-fig1.stage=inline_cse_algebra camel nodes=18 edges=14 direct_calls=0
-fig1.stage=inline_cse_algebra cpp   nodes=18 edges=14 direct_calls=0
-figure1_two_inliners: 3 of 3 graphs identical
-```
+这张表里最要紧的一行不是"相同"，是起点：**4499 → 6338**，即内联这一步确实动了图
+（19 → 28 个节点、`direct_calls` 2 → 0）。所以①对起点的不同、②③对①的逐字节相同，不是
+"内联器什么都没干、拿同一张图跟自己比"那种空判。
 
-运行器那一侧：
+## §3 驱动打出来的原文（本轮，逐字；驱动故意以 1 结束，读数就是它的 stdout）
+
+四条条目各打印自己那一步（`-Jobs 4`，`[SUMMARY] total: 4, pass: 0, fail: 4`，**故意红**：
+这些条目没有断言可下，读数本身就是输出）：
 
 ```
-[PLAN] probe.fig1-two-inliners: probe.fig1_two_inliners
-[PASS] probe.fig1_two_inliners.three_graphs                    3.11 s
-[SUMMARY] total: 1, pass: 1, fail: 0
+driver.self_sha256=69f8fb22c99cc03182f37a294f53fa0131f7b7d73ac3439bf6791b749badb1da
+case=test/cases/opt/cxx_isolation/paper_figure1.cml stage=before
+cmd[camel]=…/out/latest/bin/camel test/cases/opt/cxx_isolation/paper_figure1.cml std::stats std::gir std::nop
+route=camel rc=0 bytes=4499 sha256=b38054da0936f18bdc7d228ebe37676385205160ff026a01b793993f6505e8a2
+stats[camel]=nodes:19 edges:16 direct_calls:2 graphs:4 bytes:716
+```
+```
+case=… stage=inline
+cmd[camel]=… paper_figure1.cml opt::inline std::stats std::gir std::nop
+route=camel rc=0 bytes=6338 sha256=e87c42e24890a1d50f8cf110ec907ec8d1e09c25f8824adfb589b9f073d086e1
+stats[camel]=nodes:28 edges:26 direct_calls:0 graphs:4 bytes:1088
+cmd[cpp]=… paper_figure1.cml std::cxx::inline std::stats std::gir std::nop
+route=cpp rc=0 bytes=6338 sha256=e87c42e24890a1d50f8cf110ec907ec8d1e09c25f8824adfb589b9f073d086e1
+stats[cpp]=nodes:28 edges:26 direct_calls:0 graphs:4 bytes:1088
+identical=True
+```
+```
+case=… stage=inline_cse
+cmd[camel]=… paper_figure1.cml opt::inline opt::cse std::stats std::gir std::nop
+route=camel rc=0 bytes=5538 sha256=61f5c74fb9facba04fd373f62e8c31ed2ad88372bfa2e3cbeebc17693811ff53
+stats[camel]=nodes:24 edges:22 direct_calls:0 graphs:4 bytes:928
+cmd[cpp]=… paper_figure1.cml std::cxx::inline opt::cse std::stats std::gir std::nop
+route=cpp rc=0 bytes=5538 sha256=61f5c74fb9facba04fd373f62e8c31ed2ad88372bfa2e3cbeebc17693811ff53
+stats[cpp]=nodes:24 edges:22 direct_calls:0 graphs:4 bytes:928
+identical=True
+```
+```
+case=… stage=inline_cse_algebra
+cmd[camel]=… paper_figure1.cml opt::inline opt::cse opt::algebra std::stats std::gir std::nop
+route=camel rc=0 bytes=4038 sha256=61619c59ff32d1e76a6e46c89642b0518d6980bf64322aad9f78ed8f886dd8a3
+stats[camel]=nodes:18 edges:14 direct_calls:0 graphs:4 bytes:664
+cmd[cpp]=… paper_figure1.cml std::cxx::inline opt::cse opt::algebra std::stats std::gir std::nop
+route=cpp rc=0 bytes=4038 sha256=61619c59ff32d1e76a6e46c89642b0518d6980bf64322aad9f78ed8f886dd8a3
+stats[cpp]=nodes:18 edges:14 direct_calls:0 graphs:4 bytes:664
+identical=True
 ```
 
-## §4 怎么复算
+## §4 怎么复算（探针是临时枝上的一次性脚本，**不随本页提交**）
 
-探针当时是两个未跟踪文件：`test/plans/probe/fig1-two-inliners.plan.toml`（一个条目，`tool = "python"`，
-`expect_stdout_contains = ["figure1_two_inliners: 3 of 3 graphs identical"]`）与
-`test/plans/probe/fig1-two-inliners.py`（驱动：对每一步各跑两条命令、比字节，再各跑一次 `std::stats`
-取节点数，最后打判词行）。**交回时已从工作树删除**（`test/plans/probe/` 是二十来条车道共用的目录，
-留着会让别人误把它当目录靶子跑），原件归档在 `D:\Temp\misc-c4-and-figure1-probes\`。
+复算需要的只有三段文字：**命令**、**输入**、**怎么解析这台机器的输出**。
 
-页里不缺可复算的东西：§1 的遍列表 + §2 的字节数 + §5 的两行 `cmp` 就是全部口径；驱动没有别的花招，
-重写它只需把 §2 的每行跑两次、比字节。§3 那 14 行是驱动当时的原话，取自运行日志
-（`test/results/fetched/pass/probe.fig1_two_inliners/probe.fig1_two_inliners.three_graphs/stdout.txt`，
-`.gitignore` 覆盖）。
-
-命令（本轮实际用的那一行，`-Jobs 2` 是本车道探针的常态宽度）：
+命令（本轮实际执行的那一条：把驱动推到主机的工作树上，然后在那边按 stage 跑四次）：
 
 ```powershell
-& "D:\Projects\Camel-wt\misc\internal\tools\camel-remote.ps1" `
-  -Path "D:\Projects\Camel-wt\misc" `
-  -Plan "test/plans/probe/fig1-two-inliners.plan.toml" `
-  -FetchFile "pass/probe.fig1_two_inliners/probe.fig1_two_inliners.three_graphs/stdout.txt" `
-  -FromThisRun -Jobs 2 -QueueOnTreeLock
+& "D:\Projects\Camel-wt\witness\internal\tools\camel-remote.ps1" `
+  -Path "D:\Projects\Camel-wt\paper-readings" -NoBuild -QueueOnTreeLock -NoGpuWatch
 ```
-
-`-FetchFile` 把条目自己的 stdout 取回 `test/results/fetched/…`（`.gitignore` 覆盖），§3 的 14 行就是
-那个文件。
-
-不用探针、只想要一次 `cmp` 也可以（在主机上、二进制的 `CAMEL_HOME` 已设好时）：
 
 ```bash
-camel test/cases/opt/cxx_isolation/paper_figure1.cml opt::inline opt::cse opt::algebra std::gir std::nop > a.dot
-camel test/cases/opt/cxx_isolation/paper_figure1.cml std::cxx::inline opt::cse opt::algebra std::gir std::nop > b.dot
-cmp a.dot b.dot && echo IDENTICAL   # 本轮 4431 字节 / 4431 字节
+# 在主机 /home/zjwei/camel-work/paper-readings 上，CAMEL_HOME 已设好；
+# <probe.py> 是临时枝上那个脚本（它第一行会打印自己的 sha256，见页头）：
+for stage in before inline inline_cse inline_cse_algebra; do
+  python3 <probe.py> "$(command -v camel)" \
+      test/cases/opt/cxx_isolation/paper_figure1.cml "$stage"
+done
 ```
+
+给要自己写这个探针的人，四个要点（这几条都是这一轮踩出来的，不是常识）：
+
+1. **读数要自己打印成 stdout**：条目若没有断言可下，就让它故意以非零结束——只有**失败条目**的
+   stdout 会被回显；通过条目不打印任何东西。
+2. **`std::jgir` 的 stdout 是 JSON 加上程序自己的输出**（这里是 `collapse dh=22.0` 那类行），
+   所以用 `json.JSONDecoder().raw_decode(text)` 取第一段，`json.loads` 会报 `Extra data`。
+3. **`std::stats` 要放在 `std::gir` 之前**：它统计的是随后被打印的那张图；把 `GRAPH_STATS` 那一行
+   剔掉剩下的字节数就是 dot 的字节。
+4. **回显会被截断**（`omitted N line(s) above -- full output: …`）：完整输出在宿主的
+   `test/results/log/<run>/fail/<条目>/stdout.txt`，直接 `ssh <host> cat` 取回来，**不要为了看全再跑一遍**。
+
+另一个坑：把驱动留成**未跟踪**文件时，远端同步（`[camel-remote] … 0 changed file(s), 2 untracked`）
+不会把它带过去，主机上跑的其实是别的东西，而读数里看不出这件事。所以驱动必须在**同一棵被推送的树**里
+（临时枝上提交，用完删枝），并且第一行打自己的 SHA-256——**"主机上跑的是哪一份"由读数自己回答**。
+
+单侧复算（在主机上、`CAMEL_HOME` 已设好时；`std::stats` 在前，取计数，再把
+`GRAPH_STATS` 那一行剔掉就是 dot 的字节）：
+
+```bash
+camel test/cases/opt/cxx_isolation/paper_figure1.cml opt::inline opt::cse opt::algebra std::stats std::gir std::nop
+camel test/cases/opt/cxx_isolation/paper_figure1.cml std::cxx::inline opt::cse opt::algebra std::stats std::gir std::nop
+```
+
+两行去掉 `GRAPH_STATS …` 后应当逐字节相同（本轮 4038 / 4038 字节、
+`61619c59…` 一个哈希）；其余三步照 §2 表里的遍列表替换第一步即可。
 
 ## §5 这一页回答了什么、没回答什么
 
-**回答**：Figure 1 的三张图，`opt::inline` 版与 `std::cxx::inline` 版**逐字节相同**（7067 / 6155 /
-4431 三对），并且这一对是在"内联这一步确实动了图"的前提下比的（4976 → 7067，`direct_calls` 2 → 0）。
+**回答**：Figure 1 的三张图，`opt::inline` 版与 `std::cxx::inline` 版**逐字节相同**
+（6338 / 5538 / 4038 三对，两侧 SHA-256 各自相等），并且这一对是在"内联这一步确实动了图"的前提下
+比的（4499 → 6338，`direct_calls` 2 → 0，节点 19 → 28）。
 
 **没回答**（不写成"大致相同"）：
 
@@ -128,6 +174,9 @@ cmp a.dot b.dot && echo IDENTICAL   # 本轮 4431 字节 / 4431 字节
   "哪几个节点是同几个"；也没在别的程序上比（递归、闭包、growth budget 那几支在
   `internal/plans/2026-11-28-opt-inline.cn.md` §3 的 corpus 里，本页没测）。
 - 没测 `growth_budget` 的边界（0、超出预算），也没测"内联器什么都不选"的程序。
-- 本页的 `nodes`/`edges` 是 `std::stats` 的 `GRAPH_STATS` 计数（全程序所有图的 `Nxx` 之和），不是某一
-  张图；与 `internal/reports/2026-11-28-figure1-dumps/counts.txt` 里按图逐个数的 19/28/24/18 对得上，
-  但这属于同一口径的两次读数，不是两种独立方法的互证。
+- 本页的 `nodes`/`edges` 是 `std::stats` 的 `GRAPH_STATS` 计数（全程序四个图的合计），不是某一
+  张图；驱动只是把记录里的键原样打印出来，没有按图拆开。
+- **旧草稿的字节数不再引用**：本页此前写过 `4976 / 7067 / 6155 / 4431`，那是另一次运行、另一个
+  驱动（当时留成未跟踪文件、交回时已删）的计数，与本轮 `4499 / 6338 / 5538 / 4038` **不可混用**；
+  两个驱动各自的"字节"口径没有被证明相同，所以本页只把本轮的数字当读数。两轮**一致**的是
+  节点数 `19 / 28 / 24 / 18` 与结论（三对逐字节相同）——那是两个驱动各自算出来又对上了的部分。

@@ -1,0 +1,40 @@
+// RQ1 classic suite: spectral-norm. Power iteration on the classic n x n matrix. Prints the
+// norm and the number of (i, j) products the run cost: every multiply carries its own count,
+// so the two columns can be asked whether they did the same work.
+
+import { sqrt } from math
+
+type Run = { v: float[], c: int }
+
+func a(i: int, j: int) => float {
+    let ij = i + j
+    return 1.0 / float(ij * (ij + 1) / 2 + i + 1)
+}
+
+func mul_av(v: float[], n: int) => Run {
+    let parts = [ (loop st = { v: 0.0, c: 0 } for j in 0 .. n do { v: st.v + a(i, j) * v[j], c: st.c + 1 }) for i in 0 .. n ]
+    return { v: [ p.v for p in parts ], c: (loop s = 0 for p in parts do s + p.c) }
+}
+
+func mul_atv(v: float[], n: int) => Run {
+    let parts = [ (loop st = { v: 0.0, c: 0 } for i in 0 .. n do { v: st.v + a(i, j) * v[i], c: st.c + 1 }) for j in 0 .. n ]
+    return { v: [ p.v for p in parts ], c: (loop s = 0 for p in parts do s + p.c) }
+}
+
+func dot(u: float[], v: float[], n: int) => float {
+    return loop acc = 0.0 for i in 0 .. n do acc + u[i] * v[i]
+}
+
+func main() sync {
+    let n = 120
+    let u0 = [ 1.0 / float(n) for i in 0 .. n ]
+    let u = loop st = { v: u0, c: 0 } for k in 0 .. 10 do {
+        let av = mul_av(st.v, n)
+        let ata = mul_atv(av.v, n)
+        { v: ata.v, c: st.c + av.c + ata.c }
+    }
+    let av = mul_av(u.v, n)
+    let norm = sqrt(dot(u.v, av.v, n) / dot(av.v, av.v, n))
+    println(int(norm * 1000000000.0))
+    println(u.c + av.c)
+}
