@@ -101,8 +101,11 @@ using KindId = uint32_t;
 inline constexpr KindId kNoKind = UINT32_MAX;
 
 /// What a fact is about: a node of a graph, or the graph as a whole (node == kInvalidNodeRef).
-/// `program` is the program the graph is read in: the graphs it refers to are the ones that
-/// program holds.
+/// `program` is the program this fact is read in, and it is what the stamp's closure revision is
+/// computed from (`closureRevisionOf`: the graphs the program holds are the ones the reading is
+/// valid against). So it is an input of the reading, not a part of the key: the key is the kind,
+/// the graph and the node alone (`FactStore::KeyHash`), and a second anchor on the same graph
+/// carries the program again only because the closure has to be computed from some anchor's.
 struct Anchor {
     // program-holder-exempt: long-lived-cache -- the fact store keeps anchors across queries,
     // and a pin here would root every program a fact ever read.
