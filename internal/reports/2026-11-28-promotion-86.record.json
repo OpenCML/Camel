@@ -1,0 +1,62 @@
+{
+  "kind": "promotion",
+  "promotion": 86,
+  "tip": "0fb33bc32f1b87da3ec1f345638e95230b4c801b",
+  "measured_tip": "0fb33bc32f1b87da3ec1f345638e95230b4c801b",
+  "pushed_develop_sha": "0fb33bc32f1b87da3ec1f345638e95230b4c801b",
+  "landing_tip": "the record is a documentation commit and lands on whatever integration holds at push time; the tip this layer measured was read with git rev-parse at the instant the run started, and it is the tip the merge seat pushed the forty-second batch on",
+  "note": "the layer was measured at 0fb33bc32f1b, the tip the merge seat pushed the forty-second batch on: ten build paths arrived since the eighty-fifth layer's landing, and they are real code -- src/kernel/execute/pass.cpp, src/kernel/facts/include/camel/facts/facts.h, src/kernel/include/camel/runtime/draft_session.h, src/kernel/include/camel/runtime/resources.h, src/stdlib/std/fvm/fastvm.cpp, src/stdlib/transforms/transpose/walk.cpp, plus test/plans/feat/compile/rest_params.plan.toml, test/plans/feat/compile/transforms.plan.toml and test/plans/feat/tools/arrangeable.plan.toml, and scripts/check-arrangeable.mjs. Six pass-layer files and three plans moved and the red set did not move at all",
+  "tier": "fast",
+  "scope": "test/plans (the whole plan tree)",
+  "jobs": 2,
+  "host": "the build host, promote checkout at 0fb33bc32f1b; load 1m 29.12 at the start of the run",
+  "binary_built": "2026-11-28T18:53:51+08:00",
+  "readings": {
+    "total": 9933,
+    "pass": 9740,
+    "fail": 132,
+    "skip": 28,
+    "known": 33,
+    "killed_by_a_signal": 0,
+    "timed_out": 0,
+    "re_run": 0,
+    "re_run_passed": 0,
+    "load_before": "1m 29.12, 5m 29.07, 15m 31.89",
+    "load_warning": "[load] WARNING: 1m load 29.12 > 8 -- readings taken now are not comparable to quiet-host readings (the warning the sixty-sixth to eighty-fifth layers carried; a promotion does not wait on load, D-1128-36)."
+  },
+  "comparison": {
+    "against": "internal/reports/2026-11-28-promotion-85-reds.tsv (the eighty-fifth promotion, 132 names)",
+    "method": "the two red sets compared by the pair (plan, case) exactly as the runner writes them in test_timings[], with the plan aliases transforms/compile.transforms and stated_extents/compile.stated_extents read as the same plan; the two summaries were also compared entry by entry, so a case that changed status without entering or leaving the red set would have been seen",
+    "still_red": 132,
+    "turned_green": 0,
+    "turned_green_names": [],
+    "new_reds": 0,
+    "new_reds_names": [],
+    "vanished_reds": 0,
+    "arithmetic": "132 names before: 0 turned green, 0 vanished, 0 appeared, 132 remain red; the two red sets are equal name for name, and the entry-by-entry comparison of the two summaries reports no added, removed or changed case",
+    "total_delta": "zero: 9933 entries, the same count and the same set the eighty-fifth layer declared. Ten build paths moved in this coverage -- six under src/ and three plans -- and not one of them moved a verdict",
+    "notes": [
+      "opt.progen|progen_seed_4 stayed green for a second layer, so the eighty-fourth layer's green is stable and the two family-judging lanes that arrived together in that coverage remain its joint explanation, with no bisection needed (D-1128-193's记法)",
+      "the coverage carries scripts/check-arrangeable.mjs and test/plans/feat/tools/arrangeable.plan.toml, which is the arrangeable family's own tooling; the plan's cases are in the red set neither before nor after, so the tool arriving changed no verdict here",
+      "no case timed out in this layer and none was re-run; fault_deep.prl_off is absent for the twentieth round running because the scheduler root-cause fix holds",
+      "the tip this layer measured is the same tip the merge seat's forty-second batch was pushed on, so this reading is the first one that covers a batch's code without the batch and the reading being taken at two different tips"
+    ]
+  },
+  "timeouts_rerun": {
+    "count": 0,
+    "run_alone": true,
+    "green": [],
+    "still_red_not_timeout": [],
+    "how": "the layer reported timed_out 0 and re_run 0, so there was no timeout to run alone"
+  },
+  "red_table": "internal/reports/2026-11-28-promotion-86-reds.tsv",
+  "red_table_rows": 132,
+  "red_table_format": "two columns, the plan id exactly as the runner writes it in test_timings[].plan, then the case name; generated from this run's summary.json plan/test pairs, so the keys match the tool that reads them",
+  "next_promotion_compares_against": "internal/reports/2026-11-28-promotion-86-reds.tsv (132 names)",
+  "new_red_names": [],
+  "pushed_as": "develop, fast-forwarded from cf730bf232dc to 0fb33bc32f1b, the tip this layer measured",
+  "develop_before": "cf730bf232dc430ad89f8e97099b12735598545f",
+  "develop_after": "0fb33bc32f1b87da3ec1f345638e95230b4c801b",
+  "commits_brought_in": 29,
+  "commits_touching_src": 10
+}
