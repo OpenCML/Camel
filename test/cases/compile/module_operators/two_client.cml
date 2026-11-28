@@ -8,8 +8,7 @@ import two_left
 import { mk } from two_models
 import two_right
 
-func main() => int sync {
+func main() sync {
     let b = twice(mk(1))
     println(b.v)
-    return 0
 }

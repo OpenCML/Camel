@@ -49,7 +49,7 @@ func user(x: float) => float {
     return loss<2.0>(x) + 1.0
 }
 
-func main() => int sync {
+func main() sync {
     let before = size(graph_of(user))
     println(`before: ${loss<2.0>(3.0)} ${user(3.0)}`)
     let g = grad(loss)
@@ -57,5 +57,4 @@ func main() => int sync {
     let (l, d) = vg<2.0>(3.0)
     println(`derived: ${g<2.0>(3.0)} ${l} ${d}`)
     println(`after: ${loss<2.0>(3.0)} ${user(3.0)} ${size(graph_of(user)) == before}`)
-    return 0
 }

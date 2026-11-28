@@ -20,7 +20,6 @@ func box_of_the_last_round() => int sync {
     return state::get(last)
 }
 
-func main() => int sync {
+func main() sync {
     println(box_of_the_last_round())
-    return 0
 }

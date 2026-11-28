@@ -9,9 +9,8 @@ func f(x: int) => int {
     return x + 0
 }
 
-func main() => int sync {
+func main() sync {
     println(f(7))
-    return 0
 }
 
 export func apply::<F>(p: F) => F! {

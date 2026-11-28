@@ -65,7 +65,7 @@ func permission_empty(a: f32[...], b: f32[...]) => f32[...] {
     let pair = loop x = a, y = a for k in domain do (y, permitted_madd(y, a, b))
     return pair.0
 }
-func main() => int sync {
+func main() sync {
     let folder = get_env('TILES_TEST_OUT') ?? ''
     let a = load_npy::<f32>(folder + '/a.npy') as f32[...]
     let b = load_npy::<f32>(folder + '/b.npy') as f32[...]
@@ -134,5 +134,4 @@ func main() => int sync {
     println(benchmark<permission_two>((c, c)))
     println('EMPTY_BENCHMARK')
     println(benchmark<permission_empty>((c, c)))
-    return 0
 }

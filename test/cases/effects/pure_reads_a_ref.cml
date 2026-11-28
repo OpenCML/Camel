@@ -13,8 +13,7 @@ func first(r: state::Ref<int>) => int pure {
     return state::get(r)
 }
 
-func main() => int sync {
+func main() sync {
     let r = state::ref(41)
     println(first(r))
-    return 0
 }

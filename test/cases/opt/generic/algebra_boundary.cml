@@ -12,9 +12,8 @@ func fractional(x: float) => float {
     return t + t
 }
 
-func main(x: float) => int sync {
+func main(x: float) sync {
     println(positive(x))
     println(negative(x))
     println(fractional(x))
-    return 0
 }

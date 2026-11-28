@@ -33,7 +33,7 @@ func report(j: Json) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     // ---- a failed document: every accessor passes the same error on ----
     let bad = decode('{"a": ')
     let original = error_of_doc(bad)
@@ -119,5 +119,4 @@ func main() => int sync {
         case v => error('NoError', 'the deep document decoded')
     }
     println(typed.kind, typed.location)
-    return 0
 }

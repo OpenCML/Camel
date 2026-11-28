@@ -22,10 +22,9 @@ func three(a: int, b: int) => int sync {
     return a
 }
 
-func main() => int sync {
+func main() sync {
     one(1)
     two(1)
     three(2, 3)
     one(4)
-    return 0
 }

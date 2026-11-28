@@ -102,7 +102,7 @@ func inArrayF16(value: f16) => bool {
     return string(one) == '[' + string(value) + ']'
 }
 
-func main() => int sync {
+func main() sync {
     // ---- a literal is the nearest bf16 or f16 of what is written, rounded once ----
     let bfTie: bf16 = 1.00390625
     let f16Tie: f16 = 1.00048828125
@@ -211,5 +211,4 @@ func main() => int sync {
     println(readBackBf16(bfLargest), readBackBf16(bfNormal), readBackBf16(bfSubnormal))
     println(readBackF16(hLargest), readBackF16(hNormal), readBackF16(hSubnormal))
     println(inArrayBf16(widenedTenth[0]), inArrayF16(f16Tie))
-    return 0
 }

@@ -9,9 +9,8 @@ func tally(var x: int) => int sync {
     return x
 }
 
-func main() => int sync {
+func main() sync {
     var n = 4
     println(tally(n))
     println(n)
-    return 0
 }

@@ -43,12 +43,11 @@ func mix(a: float[...], w: float[...]) => float {
     return sum(softmax<2>(c) * w)
 }
 
-func main() => int sync {
+func main() sync {
     let xs = reshape<[8, 16]>([0.0 for i in 0 .. 128] as float[])
     let dxs = reshape<[8, 16]>([float(i) for i in 0 .. 128] as float[])
     let ws = reshape<[2, 8, 8]>([float(i + 1) for i in 0 .. 128] as float[])
     let dws = reshape<[2, 8, 8]>([0.0 for i in 0 .. 128] as float[])
     let (value, tangent) = jvp(mix)(xs, ws, dxs, dws)
     'rules_angle_args softmax-after-layout value={} tangent={}'->format<value, tangent>->println
-    return 0
 }

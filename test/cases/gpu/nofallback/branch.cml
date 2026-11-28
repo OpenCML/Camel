@@ -16,12 +16,11 @@ func choose_host(flag: bool, x: f32[3]) => f32[3] {
     if flag then x * 2.0 else x + 1.0
 }
 
-func main() => int sync {
+func main() sync {
     println(regions<choose>())
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(sum(choose(true, x)))
     println(sum(choose(false, x)))
     println(sum(choose_host(true, x)))
     println(sum(choose_host(false, x)))
-    return 0
 }

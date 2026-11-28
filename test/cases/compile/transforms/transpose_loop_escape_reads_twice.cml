@@ -14,8 +14,7 @@ func read_twice(x: float) => float {
     return loop s = x for i in 0 .. 3 do 2.0 * s + x + x
 }
 
-func main() => int sync {
+func main() sync {
     let back = transpose(read_twice)
     println(back(1.0))
-    return 0
 }

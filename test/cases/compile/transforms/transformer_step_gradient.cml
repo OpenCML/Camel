@@ -126,7 +126,7 @@ func init() => Params {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let x = [[0.25, 0.5, 0.75, 1.0], [2.0, 0.5, 1.5, -0.25]] as float[2, 4]
     let p = init()
     
@@ -204,5 +204,4 @@ func main() => int sync {
         z4
     )
     `transformer step library dL/dwq1[0][0]={}`->format<d_wq1_00>->println
-    return 0
 }

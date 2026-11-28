@@ -14,7 +14,7 @@
 // this case is read by a test that expects exit 0.
 //
 // Run: camel test/cases/facts/a_body_exit_gate_reads_its_writes.cml test::facts_compare
-func main() => int {
+func main() {
     println(1)
-    return 0
+    0
 }

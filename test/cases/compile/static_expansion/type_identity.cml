@@ -14,7 +14,7 @@ func kind::<T>(x: T) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let small: f32 = 1.5
     let narrow: i32 = 1
     println(kind(1))
@@ -22,5 +22,4 @@ func main() => int sync {
     println(kind(small))
     println(kind(narrow))
     println(kind('x'))
-    return 0
 }

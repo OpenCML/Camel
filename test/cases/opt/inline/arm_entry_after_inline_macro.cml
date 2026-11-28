@@ -10,7 +10,6 @@ func train(w: float, steps: int) => float {
     return if steps == 0 then w else train(w - dsq(w) * 0.1, steps - 1)
 }
 
-func main() => int sync {
+func main() sync {
     println(train(1.0, 3))
-    return 0
 }

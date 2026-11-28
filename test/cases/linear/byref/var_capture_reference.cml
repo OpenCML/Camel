@@ -56,11 +56,10 @@ func counted() => int sync {
     return total
 }
 
-func main() => int sync {
+func main() sync {
     var o = 0
     println(nested())
     println(through(o))
     println(counted())
     println(o)
-    return 0
 }

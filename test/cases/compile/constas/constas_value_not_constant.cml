@@ -8,7 +8,6 @@ func use(m: int) => float {
     return total(m, ones::<f32>([3]))
 }
 
-func main() => int sync {
+func main() sync {
     println(use(3))
-    return 0
 }

@@ -23,8 +23,7 @@ func loss_conv(x: float[1, 1, 6, 6], w: float[1, 1, 3, 3], b: float[1]) => float
     return sum(conv2d<2, 0>(x, w, b))
 }
 
-func main() => int sync {
+func main() sync {
     let back = transpose(loss_conv)(1.0)
     'transpose should have been refused, and it answered {}'->format<back.0>->println
-    return 0
 }

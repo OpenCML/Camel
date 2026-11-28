@@ -13,12 +13,11 @@ func show(x: int?) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [10, 20, 30]
     println(find(xs, 20, 0) ?? -1)
     println(find(xs, 99, 0) ?? -1)
     println(show(find(xs, 30, 0)), show(find(xs, 31, 0)))
     let maybe: int? = null
     println(maybe)
-    return 0
 }

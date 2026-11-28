@@ -32,7 +32,7 @@ func walk(n: int) => float {
     return if n == 0 then 0.0 else step + walk<x>(n - 1)
 }
 
-func main() => int sync {
+func main() sync {
     let a = grad(leaky)<3.0>()
     let b = grad(leaky)<-3.0>()
     let c = grad(power)<2.0>(5)
@@ -40,5 +40,4 @@ func main() => int sync {
     let e = grad(pick)<2.0>(3.0, false)
     let w = grad(walk)<-1.5>(4)
     'control_flow_grad a={} b={} c={} d={} e={} w={}'->format<a, b, c, d, e, w>->println
-    return 0
 }

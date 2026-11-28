@@ -30,9 +30,8 @@ A Camel program is a graph. This chapter explains how this graph is evaluated: e
 
 ```cml
 // camel greet.cml --arg name=Camel --arg times=2
-func main(name: string, times: int) => int sync {
+func main(name: string, times: int) sync {
     println(`Hello, ${name}! x${times}`)
-    return 0
 }
 ```
 
@@ -54,9 +53,8 @@ func greet() => int {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     println(greet())
-    return 0
 }
 ```
 
@@ -106,11 +104,10 @@ func log(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     let a = log(1)
     let b = log(a)
     println(b)
-    return 0
 }
 ```
 
@@ -137,9 +134,8 @@ func g() => int sync {
     return 2
 }
 
-func main() => int sync {
+func main() sync {
     println(f() + g())
-    return 0
 }
 ```
 
@@ -174,9 +170,8 @@ func twice() => int sync {
     return c
 }
 
-func main() => int sync {
+func main() sync {
     println(twice())
-    return 0
 }
 ```
 
@@ -197,9 +192,8 @@ func read() => int {
     return c            // this read is what runs that write
 }
 
-func main() => int sync {
+func main() sync {
     println(read())
-    return 0
 }
 ```
 
@@ -221,9 +215,8 @@ func drop() => int {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println(drop())
-    return 0
 }
 ```
 
@@ -241,9 +234,8 @@ The management and tracking of side effects is still under research (the design 
 ```cml
 #macro func cube(x: int) => int { return x * x * x }
 
-func main() => int sync {
+func main() sync {
     println(cube(3))
-    return 0
 }
 ```
 
@@ -265,12 +257,11 @@ A **fault** is a situation in which the program cannot continue: a zero divisor,
 <!-- camel-snippet: counter-example: the index is deliberately past the end and the program is written to stop there; a wrong program like this is not a program a graph pass can finish -->
 
 ```cml
-func main() => int sync {
+func main() sync {
     let xs = [1, 2, 3]
     println('before')
     println(xs[5])
     println('after')
-    return 0
 }
 ```
 
@@ -303,11 +294,10 @@ func count(n: int, acc: int) => int {
     return if n == 0 then acc else count(n - 1, acc + 1)   // tail recursion
 }
 
-func main() => int sync {
+func main() sync {
     println(count(1000000, 0))
     println(depth(200))
     println(depth(1200))
-    return 0
 }
 ```
 

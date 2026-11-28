@@ -13,8 +13,7 @@ func check(x: int) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println('never printed either')
     println(check(1))
-    return 0
 }

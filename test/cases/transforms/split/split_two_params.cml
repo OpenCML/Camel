@@ -18,7 +18,7 @@ func f(x: float, y: float) => float {
     return x * x * y
 }
 
-func main() => int sync {
+func main() sync {
     let lifted = jvp(f)
     // The lift's parameters are `jvpSignature`'s: the value of every parameter and then the tangent of
     // every one, so the four numbers are (x, y, dx, dy) -- not the (x, dx, y, dy) this
@@ -35,5 +35,4 @@ func main() => int sync {
     println('lin dy=', lin(0.0, 1.0))
     // The second value the lift answers is the same function read in the other direction.
     println('value from dy=', vy)
-    return 0
 }

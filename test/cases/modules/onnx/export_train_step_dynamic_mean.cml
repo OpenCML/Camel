@@ -26,7 +26,7 @@ func step(m: Mlp, x: float[...]) => (float, Mlp) {
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
-func main() => int sync {
+func main() sync {
     let m = {
         w1: reshape<[2, 3]>([0.5, -0.25, 0.75, 1.0, -0.5, 0.25]),
         b1: reshape<[3]>([0.1, 0.0, -0.1]),
@@ -34,14 +34,14 @@ func main() => int sync {
         b2: reshape<[1]>([0.2])
     }
     let x = reshape<[2, 2]>([1.0, 2.0, -1.0, 0.5])
-    return match export_model<out: get_env('ONNX_OUT') ?? '', dynamic_axes: [0]>(step, (m, x)) {
+    match export_model<out: get_env('ONNX_OUT') ?? '', dynamic_axes: [0]>(step, (m, x)) {
         case error e => sync {
             println(e)
-            return 1
+            1
         }
         case _ => sync {
             println('exported')
-            return 0
+            0
         }
     }
 }

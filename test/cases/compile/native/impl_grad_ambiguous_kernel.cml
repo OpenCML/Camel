@@ -24,8 +24,7 @@ func outer(b: float) => float {
     return t(a, b)
 }
 
-func main() => int sync {
+func main() sync {
     let d = grad(outer)<4.0>(2.0)
     'diff={}'->format<d>->println
-    return 0
 }

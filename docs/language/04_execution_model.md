@@ -30,9 +30,8 @@ Camel 的程序是一张图。本章说明这张图怎样被求值：按依赖�
 
 ```cml
 // camel greet.cml --arg name=Camel --arg times=2
-func main(name: string, times: int) => int sync {
+func main(name: string, times: int) sync {
     println(`Hello, ${name}! x${times}`)
-    return 0
 }
 ```
 
@@ -49,10 +48,9 @@ Hello, Camel! x2
 **读按需，写按区域。** 一个读——变量的读、外部资源的读——被执行，当且仅当它的结果被需要。而**对外部资源的写由所在的区域用到**（[设计原则 3.1](../design-principles.cn.md#31-按依赖求值)）：区域运行时，区域里对外部资源的写都执行，不论结果有没有人用，也不需要写成同步块。`main` 的函数体就是一个区域，所以一个不写 `sync` 的函数体里的裸 `println(x)` 照样执行：
 
 ```cml
-func main() => int {
+func main() {
     println('alpha')
     println('beta')
-    return 0
 }
 ```
 
@@ -64,9 +62,8 @@ beta
 会写的语句随它所在的区域运行（2026-11-17 的裁定）：循环的值没人要，循环照样运行，循环体里的写照常执行；分支写成语句时，它取的那条臂同样运行。编译器不为"值没人要"这件事报任何诊断——一句没被执行的语句不是一件可报告的事，值没人要是关于值的事实，不是关于效应的：
 
 ```cml
-func main() => int {
+func main() {
     loop s = 0 for i in [0, 1] do { println('round'); s + i }   // 值没人用，循环体里的写照常执行
-    return 0
 }
 ```
 
@@ -83,9 +80,8 @@ func greet() => int {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     println(greet())
-    return 0
 }
 ```
 
@@ -133,11 +129,10 @@ func log(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     let a = log(1)
     let b = log(a)
     println(b)
-    return 0
 }
 ```
 
@@ -164,9 +159,8 @@ func g() => int sync {
     return 2
 }
 
-func main() => int sync {
+func main() sync {
     println(f() + g())
-    return 0
 }
 ```
 
@@ -201,9 +195,8 @@ func twice() => int sync {
     return c
 }
 
-func main() => int sync {
+func main() sync {
     println(twice())
-    return 0
 }
 ```
 
@@ -224,9 +217,8 @@ func main() => int sync {
 ```cml
 #macro func cube(x: int) => int { return x * x * x }
 
-func main() => int sync {
+func main() sync {
     println(cube(3))
-    return 0
 }
 ```
 
@@ -248,12 +240,11 @@ func main() => int sync {
 <!-- camel-snippet: counter-example: the index is deliberately past the end and the program is written to stop there; a wrong program like this is not a program a graph pass can finish -->
 
 ```cml
-func main() => int sync {
+func main() sync {
     let xs = [1, 2, 3]
     println('before')
     println(xs[5])
     println('after')
-    return 0
 }
 ```
 
@@ -286,11 +277,10 @@ func count(n: int, acc: int) => int {
     return if n == 0 then acc else count(n - 1, acc + 1)   // 尾递归
 }
 
-func main() => int sync {
+func main() sync {
     println(count(1000000, 0))
     println(depth(200))
     println(depth(1200))
-    return 0
 }
 ```
 

@@ -2,6 +2,6 @@ func f(x: int): int {
     return x
 }
 
-func main() => int {
-    return f(1)
+func main() {
+    f(1)
 }

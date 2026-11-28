@@ -1,6 +1,5 @@
-func main() => int sync {
+func main() sync {
     let debug = true
     let x = if debug then 1
     println(x)
-    return 0
 }

@@ -44,7 +44,7 @@ func lane_min(x: float[...]) => float[...] {
     return min<1, false>(x)
 }
 
-func main() => int sync {
+func main() sync {
     let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let tied = [[2.0, 2.0], [1.0, 3.0]] as float[2, 2]
     let e00 = [[1.0, 0.0], [0.0, 0.0]] as float[2, 2]
@@ -88,5 +88,4 @@ func main() => int sync {
     `min<1> tie d/dx=ones {}`->format<min_tied_ones>->println
     `min<1> tie d/dx[0][0]={}`->format<min_tied_00>->println
     `min<1> tie d/dx[1][0]={}`->format<min_tied_10>->println
-    return 0
 }

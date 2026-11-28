@@ -5,11 +5,10 @@
  * Expected output: 1
  */
 
-func main() => int sync {
+func main() sync {
     let n = if true then sync {
         var v = [int(2.5)]
-        return int(1.0)
+        int(1.0)
     } else 0
     println(n)
-    return 0
 }

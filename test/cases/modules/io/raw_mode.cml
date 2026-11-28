@@ -14,8 +14,7 @@ func outcome(enabled: bool) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(outcome(false))
     println(outcome(true))
-    return 0
 }

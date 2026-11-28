@@ -14,8 +14,8 @@ func add_show(a: int, b: int) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println(1)
     let shown = show(2)
-    return add_show(40, shown)
+    add_show(40, shown)
 }

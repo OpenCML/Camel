@@ -8,10 +8,9 @@ func normed(x: float[...], gamma: float[...], beta: float[...]) => float {
     return float(sum(layer_norm(x, gamma, beta)))
 }
 
-func main() => int sync {
+func main() sync {
     let x = [[1.0, 2.0, 3.0, 4.0]] as float[1, 4]
     let gamma = ones::<float>([4])
     let beta = ones::<float>([4])
     println(`normed sum = ${normed(x, gamma, beta):.6f}`)
-    return 0
 }

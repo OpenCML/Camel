@@ -1,5 +1,4 @@
-func main() => int sync {
+func main() sync {
     let n = 3
     println(n > 1 || n)
-    return 0
 }

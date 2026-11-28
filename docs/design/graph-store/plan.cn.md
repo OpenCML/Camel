@@ -388,11 +388,10 @@ func classify(n: int) => int {
         case _ => 30
     }
 }
-func main() => int sync {
+func main() sync {
     let a = loop acc = 0 for x in [1, 2, 3] do acc + x
     let b = loop i = 0, s = 0 while i < 100 do (i + 1, s + i)
     println(pick(true, 7), classify(2), a, b)
-    return 0
 }
 ```
 

@@ -17,8 +17,7 @@ func scalar_loss(x: float) => float {
     return d * d
 }
 
-func main() => int sync {
+func main() sync {
     let m = { w: [1.0] as float[] }
     println(`grad of the model at 3 = ${grad(scalar_loss)<m>(3.0):.4f}`)
-    return 0
 }

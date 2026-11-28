@@ -26,10 +26,9 @@ func f(x: float) => float {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(f(2.0))
     let (_, lin) = split(jvp(f))(2.0)
     println(transpose(lin)(1.0))
     println(transpose(lin)(2.0))
-    return 0
 }

@@ -10,6 +10,5 @@ fact sign(v: int): int match v {
     case _ => 0
 }
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

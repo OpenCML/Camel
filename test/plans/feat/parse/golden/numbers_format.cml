@@ -1,4 +1,4 @@
-func main() => int sync {
+func main() sync {
     let a = 3
     let b = a - 1
     println(a - 1, a - 1, a + 1, 3 - 1, a - -1, a - -1, -a, -1, +1, 2 * -3)
@@ -9,5 +9,4 @@ func main() => int sync {
         case -1 => 'm'
         case _ => 'o'
     }
-    return 0
 }

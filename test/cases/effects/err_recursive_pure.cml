@@ -9,7 +9,6 @@ func count_down(n: int) => int pure sync {
     return if n <= 0 then 0 else count_down(n - 1)
 }
 
-func main() => int sync {
+func main() sync {
     println(count_down(3))
-    return 0
 }

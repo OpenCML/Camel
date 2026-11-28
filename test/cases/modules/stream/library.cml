@@ -4,7 +4,7 @@
 import { sum } from array
 import stream
 
-func main() => int sync {
+func main() sync {
     println(loop acc = 0 for x in stream::unfold(3, func (n: int) {
         if n > 0 then (n, n - 1) else null
     }) do acc + x)
@@ -34,5 +34,4 @@ func main() => int sync {
     println(a->stream::collect, b->stream::map<func (x: int) {
         x * 10
     }>->stream::collect)
-    return 0
 }

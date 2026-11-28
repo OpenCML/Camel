@@ -13,12 +13,11 @@ func e9() => (string, int) sync {
     return ('', 0)
 }
 
-func main() => int sync {
+func main() sync {
     if false then sync {
         let n23 = e9()
         null
     } else sync {
         null
     }
-    return 0
 }

@@ -21,7 +21,7 @@ func denom(x: int) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let a = 3
     let b = if a > 2 then a + 1 else a - 1
     let c = classify(2)
@@ -41,5 +41,4 @@ func main() => int sync {
         println('no c')
     }
     println(a, b, c, d, e, f, g)
-    return 0
 }

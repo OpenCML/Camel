@@ -37,7 +37,7 @@ func loss_with(m: float[2, 2]) => float {
     return sum(e * e)
 }
 
-func main() => int sync {
+func main() sync {
     let m = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let w = [0.5, 1.0] as float[2]
     
@@ -57,5 +57,4 @@ func main() => int sync {
     `broadcast difference engine value={} dL/dw numel={} dL/dw={}`->format<engine_value, numel(engine), engine>->println
     let d = max(abs(library[0] - engine[0]), abs(library[1] - engine[1]))
     `broadcast difference max_abs_diff library_vs_engine w={:.12e}`->format<d>->println
-    return 0
 }

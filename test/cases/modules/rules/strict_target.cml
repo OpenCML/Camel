@@ -40,7 +40,6 @@ export func report::<F>(p: F) => F! spelling sync {
     return p
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     println(combine(2.0), double(2.0))
-    return 0
 }

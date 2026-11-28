@@ -17,8 +17,7 @@ func name(n: int) => string {
     return row(n)!.name
 }
 
-func main() => int sync {
+func main() sync {
     println(count(3))
     println(name(3))
-    return 0
 }

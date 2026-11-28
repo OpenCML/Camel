@@ -38,7 +38,7 @@ func tick(k: int) => int {
     return k * 7 + 1
 }
 
-func main() => int sync {
+func main() sync {
     var k = 5
     let p = walk(6, k)
     let q = walk(4, k)
@@ -50,5 +50,4 @@ func main() => int sync {
     println(q)
     println(r)
     println(t)
-    return 0
 }

@@ -43,7 +43,7 @@ func shared_product(
     let product = a * b
     return (product, product + c)
 }
-func main() => int sync {
+func main() sync {
     let a = reshape<[2, 1]>([1.00000011920928955078125, 1.00000011920928955078125] as f32[])
     let b = reshape<[1, 3]>([0.99999988079071044921875, 0.99999988079071044921875, 0.99999988079071044921875] as f32[])
     let c = reshape<[1, 1]>([-1.0] as f32[])
@@ -64,5 +64,4 @@ func main() => int sync {
     println(inspect<add_only>((a, b, c)))
     println(inspect<multiply_only>((a, b, c)))
     println(source<allowed>((a, b, c)))
-    return 0
 }

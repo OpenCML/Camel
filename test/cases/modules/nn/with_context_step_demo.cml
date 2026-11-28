@@ -27,7 +27,7 @@ func init() => Linear {
     return { weight: zeros::<f32>([2, 1]) }
 }
 
-func main() => int sync {
+func main() sync {
     let layer = init()
     let X = ones::<f32>([4, 2])
     let y = ones::<f32>([4, 1])
@@ -41,5 +41,4 @@ func main() => int sync {
     'with_context_step_demo metrics before={} step={} after={}'->format<before, vg.0, after>->println
     'with_context_step_demo weight={}'->format<trained.weight>->println
     'with_context_step_demo grad={}'->format<gradient.weight>->println
-    return 0
 }

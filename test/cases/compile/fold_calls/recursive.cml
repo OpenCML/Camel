@@ -9,9 +9,8 @@ func depth(n: int) => int {
     return if n == 0 then 0 else depth(n - 1) + 1
 }
 
-func main() => int sync {
+func main() sync {
     println(depth(3))
     let xs = (10, 20, 30)
     println(xs.[depth(2)])
-    return 0
 }

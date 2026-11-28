@@ -22,8 +22,7 @@ func label(x: int) => int {
     return twice(x)
 }
 
-func main() => int sync {
+func main() sync {
     println(label(21))
     println({ scaled: 3, plain: 5 }.plain)
-    return 0
 }

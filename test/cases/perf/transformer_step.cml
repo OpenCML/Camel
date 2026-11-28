@@ -65,7 +65,7 @@ func loss(x: f32[...], labels: f32[...]) => float {
     return softmax_cross_entropy(logits<block>(x), int(labels))
 }
 
-func main(steps: int, lr: float) => int sync {
+func main(steps: int, lr: float) sync {
     // Deterministic inputs and starting weights.
     let x = zeros::<f32>([4, 8]) + 0.01
     let labels = zeros::<f32>([4])
@@ -90,10 +90,9 @@ func main(steps: int, lr: float) => int sync {
         let (value, gradient) = grad<b>(x, labels)
         let next = adam(b, gradient, opt, lr)
         let moved = e * 0.9 + next.0.w1 * 0.1
-        return (next.0, next.1, moved, step + 1)
+        (next.0, next.1, moved, step + 1)
     }
     let elapsed = now() - started
     
     'perf transformer seconds={:.6f} ms_per_step={:.3f} ema={} logits={}'->format<elapsed, elapsed * 1000.0 / float(done), sum(ema), sum(trained.w1)>->println
-    return 0
 }

@@ -16,7 +16,7 @@ func nested(x: float) => float {
     return t.0.1
 }
 
-func main() => int sync {
+func main() sync {
     println(nested(1.0))
     let back = transpose(nested)
     println(back(1.0))
@@ -24,5 +24,4 @@ func main() => int sync {
     // not about the forward reading. This is the line that turned 0.0 red: the first version of the
     // channel answered a silent zero here and the forward 2.0 above hid it.
     println(back(2.0))
-    return 0
 }

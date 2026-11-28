@@ -21,11 +21,10 @@ func halves(n: int, x: float) => float {
     return if n <= 0 then x else halves(n - 1, x * 0.5) + halves(n - 2, x + 1.0)
 }
 
-func main() => int sync {
+func main() sync {
     let f = fib(20)
     let p = paths(8, 7)
     let w = weave(15, 3, 4)
     let h = halves(12, 3.0)
     'self_recursion_shapes fib={} paths={} weave={} halves={:.6f}'->format<f, p, w, h>->println
-    return 0
 }

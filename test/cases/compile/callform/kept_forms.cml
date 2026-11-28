@@ -4,7 +4,7 @@
  * on two operands of equal standing take both as ordinary arguments.
  */
 
-func main() => int sync {
+func main() sync {
     let m = [('a', 1), ('b', 2)] as Map<string, int>
     let s = [3, 1, 2] as Set<int>
     // before the parentheses
@@ -23,5 +23,4 @@ func main() => int sync {
     // two operands of equal standing: both ordinary
     println(merge(m, [('b', 20), ('d', 4)] as Map<string, int>))
     println(union(s, [9] as Set<int>), intersect(s, [1, 9] as Set<int>), difference(s, [1] as Set<int>), is_subset([1] as Set<int>, s))
-    return 0
 }

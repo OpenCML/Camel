@@ -5,8 +5,7 @@
 
 type Range = { first: int, last: int }
 
-func main() => int sync {
+func main() sync {
     let r: Range = { first: 3, last: 9 }
     println(r.last - r.first)
-    return 0
 }

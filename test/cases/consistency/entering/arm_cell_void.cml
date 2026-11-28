@@ -23,10 +23,9 @@ func tail(i: int) => void {
     if i > 3 then null else (x = x + 1)
 }
 
-func main() => int sync {
+func main() sync {
     visit(1)
     visit(9)
     tail(1)
     println(bump(1), bump(9))
-    return 0
 }

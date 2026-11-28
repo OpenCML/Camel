@@ -18,7 +18,6 @@ type Pair = (int, int)
 /// Exported and documented.
 export let common = 1
 
-func main() => int sync {
+func main() sync {
     println(square(answer) + plain(common))
-    return 0
 }

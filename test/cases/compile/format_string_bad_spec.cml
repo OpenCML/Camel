@@ -1,4 +1,3 @@
-func main() => int sync {
+func main() sync {
     println('{:d}'->format<'text'>)
-    return 0
 }

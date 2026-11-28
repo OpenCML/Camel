@@ -77,7 +77,6 @@ func plain(a: float) => float {
     return a * 5.0
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     println(kept(7), plain(3.0))
-    return 0
 }

@@ -8,6 +8,6 @@ func f() => int {
     return 0
 }
 
-func main() => int {
-    return f()
+func main() {
+    f()
 }

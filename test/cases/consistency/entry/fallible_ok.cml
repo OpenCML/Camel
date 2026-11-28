@@ -1,6 +1,7 @@
 /**
- * `main` declared `int!` that returns a value which has not failed: the value is the function's
- * value and gives no exit code (design principles 9.8), as under `int`.
+ * `main` declared `int!` that returns a value which has not failed: the value is written out as
+ * any other value is, and gives no exit code (design principles 9.8). The `int` payload is
+ * printed -- 7 -- and the process ends with 0.
  */
 
 func main() => int! sync {

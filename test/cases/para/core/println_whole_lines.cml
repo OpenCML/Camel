@@ -9,7 +9,7 @@ func show(i: int) => int sync {
     return i
 }
 
-func main() => int sync {
+func main() sync {
     let shown = (0 .. 3000)->map<show>
-    return if len(shown) == 3000 then 0 else 1
+    if len(shown) == 3000 then 0 else 1
 }

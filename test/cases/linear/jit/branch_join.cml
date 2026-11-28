@@ -12,7 +12,7 @@ func layered(n: int) => int {
     else if n < 5 then 30 else 40
 }
 
-func main() => int sync {
+func main() sync {
     let a = select_value(1, 7, 100)
     let b = select_value(0, 7, 100)
     let c = layered(-3)
@@ -20,5 +20,4 @@ func main() => int sync {
     let e = layered(3)
     let f = layered(9)
     'branch_join a={} b={} c={} d={} e={} f={}'->format<a, b, c, d, e, f>->println
-    return 0
 }

@@ -1,0 +1,12 @@
+/**
+ * A fault before `process::exit(3)`: the run ends with the fault's non-zero code, and the
+ * `exit(3)` that follows it never runs -- so the code is not 3.
+ */
+import process
+
+func main() sync {
+    println('before')
+    let xs = [1, 2]
+    println(xs[5])
+    process::exit(3)
+}

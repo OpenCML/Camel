@@ -9,8 +9,7 @@
  * asks the prelude layer, so `to_array` there is still `Unresolved reference` (that is what
  * `stdlib/random.cml`'s `uniform::<T>` and `normal::<T>` report today).
  */
-func main() => int sync {
+func main() sync {
     let xs: int[] = to_array(0 .. 3)
     println(xs)
-    return 0
 }

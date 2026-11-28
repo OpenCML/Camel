@@ -21,7 +21,6 @@ func twice(s: int..) => int {
     return first + second
 }
 
-func main() => int sync {
+func main() sync {
     println(twice(count(3)))
-    return 0
 }

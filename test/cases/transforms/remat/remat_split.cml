@@ -26,7 +26,7 @@ func h(x: float, y: float) => float {
     return x * x * y
 }
 
-func main() => int sync {
+func main() sync {
     let lifted = split(jvp(h))
     let (plainValue, plainBackward) = lifted(3.0, 2.0)
     'split_remat plain value={} dfdx={} dfdy={}'->format<plainValue, plainBackward(1.0, 0.0), plainBackward(0.0, 1.0)>->println
@@ -34,5 +34,4 @@ func main() => int sync {
     let markForward = split(marked)
     let (markValue, markBackward) = markForward(3.0, 2.0)
     'split_remat marked value={} dfdx={} dfdy={}'->format<markValue, markBackward(1.0, 0.0), markBackward(0.0, 1.0)>->println
-    return 0
 }

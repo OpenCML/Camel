@@ -34,12 +34,11 @@ func total(x: float[2]) => float {
     return sum(tanh(x))
 }
 
-func main() => int sync {
+func main() sync {
     let slope = grad(total_of_the_parameter)
     let de = slope<[1.5, -2.0] as float[2]>()
     `tanh stated engine d={}`->format<de>->println
     let (value, pullback) = vjp(total)([1.5, -2.0] as float[2])
     let dl = pullback(1.0).0
     `tanh stated library value={} d={}`->format<value, dl>->println
-    return 0
 }

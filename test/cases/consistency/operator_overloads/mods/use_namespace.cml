@@ -4,7 +4,6 @@
 import base
 import plus_a
 
-func main() => int sync {
+func main() sync {
     println((base::mk(2) + base::mk(3)).x)
-    return 0
 }

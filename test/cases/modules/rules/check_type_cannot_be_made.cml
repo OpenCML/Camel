@@ -22,9 +22,8 @@ import { is_string } from types
 
 rule join::<T>(x: T) when is_string::<T>() { x + 'a' => x }
 
-func main() => int sync {
+func main() sync {
     let report = [join, add_self]->check<200, 7>
     print(check_text(report))
     println('rows', len(report.rows))
-    return 0
 }

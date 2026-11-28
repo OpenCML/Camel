@@ -21,7 +21,7 @@ with <xs: int[]>
 func context_length() => int {
     return len(xs)
 }
-func main() => int sync {
+func main() sync {
     println(id::<int>(7))
     println(id::<string>('typed'))
     println(repeat::<int><3>(5))
@@ -34,5 +34,4 @@ func main() => int sync {
     println(length(empty()))
     println(context_length<empty()>())
     println(generic_explicit_types::id::<(int, string)>((4, 'pair')))
-    return 0
 }

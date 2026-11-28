@@ -18,11 +18,10 @@ func shift1(a: int) => int {
     return a + 10
 }
 
-func main() => int sync {
+func main() sync {
     let f = add2
     let g = shift1
     let sum = f(3, 4)
     let shifted = g(sum)
     println(shifted)
-    return 0
 }

@@ -9,7 +9,6 @@ func describe(n: int) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(describe(0), describe(-3), describe(7), describe(8))
-    return 0
 }

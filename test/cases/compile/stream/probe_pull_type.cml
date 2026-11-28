@@ -22,6 +22,6 @@ func probe(s: int..) => int {
     return wrong
 }
 
-func main() => int sync {
-    return probe(count(1))
+func main() sync {
+    probe(count(1))
 }

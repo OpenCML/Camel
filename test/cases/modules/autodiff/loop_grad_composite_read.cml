@@ -25,9 +25,8 @@ func table() => float {
     return xs[1] + xs[2]
 }
 
-func main() => int sync {
+func main() sync {
     let vg = with_grad(pair)<2.0>(3)
     let d = grad(table)<2.0>()
     'loop_grad_composite_read vg={} d={}'->format<vg, d>->println
-    return 0
 }

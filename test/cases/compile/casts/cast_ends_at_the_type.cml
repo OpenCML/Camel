@@ -5,11 +5,10 @@
  * which reading the compiler took.
  */
 
-func main() => int sync {
+func main() sync {
     let a = 4
     let sum = a as int + 1
     let square = a as int ^ 2
     println(sum)
     println(square)
-    return 0
 }

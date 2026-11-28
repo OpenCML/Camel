@@ -15,7 +15,7 @@ func three(x: float, y: float, z: float) => float {
     return x * y * z
 }
 
-func main() => int sync {
+func main() sync {
     let (v1, p1) = vjp(one)(3.0)
     let (g1) = p1(1.0)
     println('arity 1')
@@ -37,5 +37,4 @@ func main() => int sync {
     println(gy3)
     println(gz3)
     
-    return 0
 }

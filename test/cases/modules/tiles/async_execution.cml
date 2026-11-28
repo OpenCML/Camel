@@ -16,7 +16,7 @@ func pair(x: f32[...]) => (f32[...], f32[...], f32[...]) {
 func chain(x: Device<f32[...]>, n: int) => Device<f32[...]> {
     return if n == 0 then x else chain(run_preferred_resident<step>(x), n - 1)
 }
-func main() => int sync {
+func main() sync {
     let folder = get_env('TILES_TEST_OUT') ?? ''
     let x = load_npy::<f32>(folder + '/x.npy') as f32[...]
     let d = upload(x)
@@ -31,5 +31,4 @@ func main() => int sync {
     save_npy(download(run_preferred_resident<identity>(r.1)), folder + '/identity.npy')
     save_npy(download(run_preferred_resident<identity>(upload(zeros::<f32>([0, 3])))), folder + '/empty.npy')
     println('ASYNC_PUBLIC_COMPLETE')
-    return 0
 }

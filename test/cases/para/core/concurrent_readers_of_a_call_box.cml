@@ -37,7 +37,6 @@ func both(n: int) => int {
     return late + now + (junk - junk)
 }
 
-func main() => int sync {
+func main() sync {
     println(both(7))
-    return 0
 }

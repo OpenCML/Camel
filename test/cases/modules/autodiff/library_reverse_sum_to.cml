@@ -40,12 +40,11 @@ func total() => float {
     return sum(sum_to(x, [2] as int[]))
 }
 
-func main() => int sync {
+func main() sync {
     let input = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let engine = grad(total)<input>()
     `sum_to engine={} library=filed-not-walked`->format<engine>->println
     let ones = [[1.0, 1.0], [1.0, 1.0]] as float[2, 2]
     let is_ones = sum(abs(engine - ones)) == 0.0
     `sum_to engine_is_ones={}`->format<is_ones>->println
-    return 0
 }

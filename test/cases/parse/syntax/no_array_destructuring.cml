@@ -9,8 +9,7 @@ func f(xs: int[]) => int {
     return a + b
 }
 
-func main() => int sync {
+func main() sync {
     println('never printed')
     println(f([1, 2]))
-    return 0
 }

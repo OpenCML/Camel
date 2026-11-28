@@ -4,7 +4,6 @@
 
 import { sha256 } from crypto
 
-func main() => int sync {
+func main() sync {
     println(sha256('abc'))
-    return 0
 }

@@ -33,7 +33,7 @@ func canonical(a: f32[...], b: f32[...]) => f32[...] {
     return a @ b
 }
 
-func main() => int sync {
+func main() sync {
     let left = ones::<f32>([8, 8]) * 1.00390625
     let right = ones::<f32>([8, 8])
     let grantedPlan = inspect<granted>((left, right))
@@ -45,5 +45,4 @@ func main() => int sync {
     println(revokedPlan)
     println('canonical')
     println(canonicalPlan)
-    return 0
 }

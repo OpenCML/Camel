@@ -7,7 +7,6 @@ func peek() => int uses var db {
     return cnt
 }
 
-func main() => int sync {
+func main() sync {
     println(peek())
-    return 0
 }

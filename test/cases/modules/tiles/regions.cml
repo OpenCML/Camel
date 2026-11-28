@@ -27,12 +27,11 @@ func shared_values(x: f32[2, 3]) => (f32[2, 3], f32[2, 3]) {
 func constant_axis(x: f32[2, 3]) => f32[2, 1] {
     return sum<1, true>(x)
 }
-func main() => int sync {
+func main() sync {
     println(regions<chain>())
     println(regions<dynamic>())
     println(regions<detour>())
     println(regions<ordered>())
     println(regions<shared_values>())
     println(regions<constant_axis>())
-    return 0
 }

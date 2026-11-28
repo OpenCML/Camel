@@ -22,9 +22,8 @@ func spin(i: int, n: int, acc: f32[...]) => f32[...] {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let rows = spin(1, 40, make_view(0))
     println('rows {} total {}'->format<rows, sum(rows)>)
     println('last {}'->format<reshape<[240]>(rows)>)
-    return 0
 }

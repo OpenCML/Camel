@@ -9,8 +9,7 @@ func run(n: int) => int {
     return count(n)
 }
 
-func main() => int sync {
+func main() sync {
     println(count(20))
     println(run(7))
-    return 0
 }

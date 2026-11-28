@@ -43,7 +43,7 @@ func spin(n: int, acc: int) => int sync {
     return if n == 0 then s else spin(n - 1, s)
 }
 
-func main() => int sync {
+func main() sync {
     var c = 0
     bump(c)
     println(c)
@@ -62,5 +62,4 @@ func main() => int sync {
     c += 100
     let shown = show(c)
     println(spin(20000, shown))
-    return 0
 }

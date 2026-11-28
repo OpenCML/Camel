@@ -18,10 +18,9 @@ func arity_of::<T>(t: T) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(names_of({ a: 1, b: (2, 3) }))
     println(names_of((4, 5)))
     println(arity_of({ a: 1, b: (2, 3) }))
     println(arity_of((4, 5)))
-    return 0
 }

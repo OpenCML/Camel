@@ -19,7 +19,7 @@ func is_odd::<T>(xs: T[], i: int) => bool {
     return if i >= len(xs) then false else is_even(xs, i + 1)
 }
 
-func main() => int sync {
+func main() sync {
     println(count([1, 2, 3], 0))
     println(count(['a', 'b'], 0))
     println(count([4, 5, 6, 7], 0))
@@ -27,5 +27,4 @@ func main() => int sync {
     println(last_of(['x', 'y'], 0))
     println(is_even([1, 2], 0))
     println(is_even(['a', 'b', 'c'], 0))
-    return 0
 }

@@ -39,10 +39,9 @@ func apart(x: int) => int {
     return (x + 1) * (x + 2)
 }
 
-func main() => int sync {
+func main() sync {
     println(shared(3))
     println(literals())
     println(written(4))
     println(apart(5))
-    return 0
 }

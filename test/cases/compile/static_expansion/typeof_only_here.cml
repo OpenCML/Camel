@@ -4,8 +4,7 @@
  * and that is the one error of this program.
  */
 
-func main() => int sync {
+func main() sync {
     let a: typeof (1 / 'x') = 5
     println(a)
-    return 0
 }

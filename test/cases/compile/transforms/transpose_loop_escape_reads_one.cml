@@ -16,8 +16,7 @@ func read_one(x: float) => float {
     return loop s = x for i in 0 .. 3 do 2.0 * s + x
 }
 
-func main() => int sync {
+func main() sync {
     let back = transpose(read_one)
     println(back(1.0))
-    return 0
 }

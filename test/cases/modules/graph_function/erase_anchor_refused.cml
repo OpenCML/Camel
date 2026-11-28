@@ -15,8 +15,7 @@ func exitOf(g: Graph) => Node spelling {
     }
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     let d = open(subject)
     erase(exitOf(d))
-    return 0
 }

@@ -1,6 +1,5 @@
-func main() => int sync {
+func main() sync {
     let func = 1
-    return func
 }
 
 func other() => int {

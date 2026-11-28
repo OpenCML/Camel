@@ -14,9 +14,8 @@ func choose(flag: int, x: int) => int {
     return if flag != 0 then plus1(x) else plus2(x)
 }
 
-func main() => int sync {
+func main() sync {
     let a = choose(1, 40)
     let b = choose(0, 40)
     'inline_registry_sweep_unique_arm a={} b={}'->format<a, b>->println
-    return 0
 }

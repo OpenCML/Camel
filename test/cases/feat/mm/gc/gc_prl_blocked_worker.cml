@@ -30,10 +30,9 @@ func job(k: int, millis: int, rounds: int) => int sync {
     return if k == 0 then nap(millis) else churn(k, rounds, 0)
 }
 
-func main(millis: int, rounds: int) => int sync {
+func main(millis: int, rounds: int) sync {
     let sums = (0 .. 6)->map<func (k: int) => int {
         job(k, millis, rounds)
     }>
     println('gc_prl_blocked_worker sums={}'->format<sums>)
-    return 0
 }

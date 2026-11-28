@@ -40,7 +40,7 @@ func clear(var y: int) => void {
     y = 0
 }
 
-func main() => int sync {
+func main() sync {
     var a = 0
     let ra = set(a)
     println(ra, a)
@@ -60,5 +60,4 @@ func main() => int sync {
     }
     let rh = h(e)
     println(rh, e)
-    return 0
 }

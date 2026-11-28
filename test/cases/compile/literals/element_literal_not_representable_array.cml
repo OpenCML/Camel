@@ -7,8 +7,7 @@ func half::<T>(x: T[...]) => T[...] {
     return x * 0.5
 }
 
-func main() => int sync {
+func main() sync {
     let x: int[4] = [1, 2, 3, 4]
     println(half(x)[0])
-    return 0
 }

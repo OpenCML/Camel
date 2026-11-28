@@ -52,7 +52,7 @@ func meanF16(x: f16[...]) => f16 {
     return mean(x)
 }
 
-func main() => int sync {
+func main() sync {
     // The element type's neighbour of 0.001: 1.0 plus it is not a value of the element type, so
     // the one rounding has somewhere to land.
     let tiny = [1.0, 0.001] as f32[]
@@ -101,5 +101,5 @@ func main() => int sync {
     'the element grid, not f32: {} {}'->format<bf16Narrow, f16Narrow>->println
     'bf16 and f16 differ: {}'->format<widthsDiffer>->println
     
-    return if bf16Once && f16Once && bf16Narrow && f16Narrow && widthsDiffer then 0 else 1
+    if bf16Once && f16Once && bf16Narrow && f16Narrow && widthsDiffer then 0 else 1
 }

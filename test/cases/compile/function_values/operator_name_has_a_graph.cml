@@ -4,8 +4,7 @@
  * so the call is a call and not a diagnostic -- and the graph is there to be printed.
  */
 
-func main() => int sync {
+func main() sync {
     let p = len
     println(p('abc'))
-    return 0
 }

@@ -14,8 +14,7 @@ func plain() => float {
     return sum(p)
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[1]>([1.0] as f32[])
     println(grad(plain)<(x, 'a')>())
-    return 0
 }

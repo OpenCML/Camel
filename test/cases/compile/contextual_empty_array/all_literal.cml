@@ -9,7 +9,7 @@ func count(tree: Tree) => int {
     return len(tree.children)
 }
 
-func main() => int sync {
+func main() sync {
     let tree: Tree = { value: 4, children: [] }
     let move: Move = { value: 1, moves: [1, 2], children: [] }
     let nested: Tree = { value: 2, children: [] }
@@ -17,5 +17,4 @@ func main() => int sync {
     println(len(move.moves))
     println(count(nested))
     println(move.value + tree.value + nested.value)
-    return 0
 }

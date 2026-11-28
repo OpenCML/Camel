@@ -43,7 +43,7 @@ func loss(x: float) => float {
     return w[0] * x + w[1] * x
 }
 
-func main() => int sync {
+func main() sync {
     // A value whose type is `Gradient<F>`. The engine's `grad` answers the gradient function, and
     // the annotation says that function's type is the computed one; the two have to be one type.
     let g: Gradient<Loss> = grad(loss)
@@ -56,5 +56,4 @@ func main() => int sync {
     println(is_same::<Gradient<Loss>, Gradient<Loss>>())
     println(is_same::<Gradient<Loss>, Loss>())
     'gradient_type g={}'->format<g<w>(x)>->println
-    return 0
 }

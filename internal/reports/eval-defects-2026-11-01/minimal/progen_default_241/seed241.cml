@@ -15,6 +15,5 @@ func e21(a24: bool, var c23: string, var c22: int) => float sync {
     return 1.0
 }
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

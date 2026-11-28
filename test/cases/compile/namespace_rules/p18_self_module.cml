@@ -2,7 +2,6 @@
 func f() => int {
     return 6
 }
-func main() => int sync {
+func main() sync {
     println(p18_self_module::f())
-    return 0
 }

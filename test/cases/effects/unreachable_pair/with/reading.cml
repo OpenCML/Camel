@@ -19,9 +19,9 @@ func apply(x: int) => int sync {
     return local
 }
 
-func main() => int sync {
+func main() sync {
     println(apply(1))
-    return 0
+    0
 }
 
 func bump() => int sync {

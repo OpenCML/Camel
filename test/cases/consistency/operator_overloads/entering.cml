@@ -13,10 +13,9 @@ func operator +(a: V?, b: V) => V {
     return { x: (a ?? fallback).x + b.x }
 }
 
-func main() => int sync {
+func main() sync {
     let a: V = { x: 1 }
     let none: V? = null
     let some: V? = a
     println((a + a).x, (none + a).x, (some + a).x)
-    return 0
 }

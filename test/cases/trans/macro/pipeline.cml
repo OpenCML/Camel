@@ -19,7 +19,6 @@ func pipeline(x: int) => int {
     return add_one(z)
 }
 
-func main() => int sync {
+func main() sync {
     println(pipeline(20))
-    return 0
 }

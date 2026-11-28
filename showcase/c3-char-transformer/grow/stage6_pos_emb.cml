@@ -131,7 +131,7 @@ func initial() => Model {
     }
 }
 
-func main(count: int) => int sync {
+func main(count: int) sync {
     let tokens = [0, 1] as int[]
     let model0 = initial()
     let z0 = (rows_of<model0>(tokens) + model0.pos) @ model0.head
@@ -139,7 +139,7 @@ func main(count: int) => int sync {
         let (value, g) = with_grad(loss_of)<m>(tokens)
         let next = adam(m, g, opt, 0.002)
         let nlog = log + `pos step=${step + 1} loss=${value:.12f}` + '\n'
-        return (next.0, next.1, step + 1, nlog)
+        (next.0, next.1, step + 1, nlog)
     }
     let last = with_grad(loss_of)<final>(tokens).0
     let z1 = (rows_of<final>(tokens) + final.pos) @ final.head
@@ -153,5 +153,4 @@ func main(count: int) => int sync {
     softmax<1>(z0)->println
     'pos prob after '->print
     softmax<1>(z1)->println
-    return 0
 }

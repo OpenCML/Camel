@@ -25,7 +25,7 @@ func twice(x: int?) => int? {
     }
 }
 
-func main() => int sync {
+func main() sync {
     // The declared type is the literal's: the constant `null` of `int?`.
     let none: int? = null
     println(none)
@@ -34,5 +34,4 @@ func main() => int sync {
     // Left out, the `with` parameter reads its own null.
     println(twice(null))
     println(twice(4))
-    return 0
 }

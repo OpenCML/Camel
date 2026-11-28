@@ -1,6 +1,7 @@
 /**
- * A `main` that declares `int`: the value is the function's value, not the exit code. It stays
- * off standard output and the process ends with 0 (design principles 9.8).
+ * A `main` that declares `int`: the value is the function's value, not the exit code. It is
+ * printed on standard output as `println` prints it, and the process ends with 0 (design
+ * principles 9.8).
  */
 
 func main() => int sync {

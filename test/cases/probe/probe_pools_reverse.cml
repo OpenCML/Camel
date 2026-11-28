@@ -30,12 +30,11 @@ func avg_engine() => float {
     return float(sum(tanh(avg_pool2d(x, 2))))
 }
 
-func main() => int sync {
+func main() sync {
     let x = image() as f32[1, 2, 4, 4]
     let (_, pullbackMax) = vjp(max_total)(x)
     let maxDiff = float(sum(abs(pullbackMax(1.0).0 - grad(max_engine)<x>())))
     let (_, pullbackAvg) = vjp(avg_total)(x)
     let avgDiff = float(sum(abs(pullbackAvg(1.0).0 - grad(avg_engine)<x>())))
     `probe pools max_diff={} avg_diff={}`->format<maxDiff, avgDiff>->println
-    return 0
 }

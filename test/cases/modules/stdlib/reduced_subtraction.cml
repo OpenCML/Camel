@@ -76,7 +76,7 @@ func f16WasATie(below: f16, above: f16, exact: f64) => bool {
     return abs(f64(below) - exact) == abs(f64(above) - exact)
 }
 
-func main() => int sync {
+func main() sync {
     // ---- bf16 ----
     let bfExact: bf16 = bf16(3.75) - bf16(0.5)
     let bfNegative: bf16 = bf16(0.5) - bf16(1.0)
@@ -128,5 +128,4 @@ func main() => int sync {
     let bfOne: bf16[] = [bfExact]
     let f16One: f16[] = [f16Exact]
     println(len(to_bytes(bfOne)), len(to_bytes(f16One)))
-    return 0
 }

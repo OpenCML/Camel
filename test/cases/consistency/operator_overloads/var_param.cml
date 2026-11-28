@@ -8,6 +8,5 @@ func operator +(var a: M, b: M) => M sync {
     return a
 }
 
-func main() => int {
-    return 0
+func main() {
 }

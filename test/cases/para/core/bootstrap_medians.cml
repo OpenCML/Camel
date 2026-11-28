@@ -7,7 +7,7 @@ import { seed, shuffle, sample, next_key } from random
 import { stdev } from statistics
 import { now } from time
 
-func main() => int sync {
+func main() sync {
     let source_size = 200000
     let sample_size = 40000
     let replicas = 8
@@ -45,5 +45,4 @@ func main() => int sync {
     'stdev = {:.2f}'->format<stdev(wide)>->println
     'sample preparation took {:.2f} seconds'->format<prep_duration>->println
     'parallel sorting stage took {:.2f} seconds'->format<sort_duration>->println
-    return 0
 }

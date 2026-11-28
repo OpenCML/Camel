@@ -53,12 +53,11 @@ func branch(x: float, flag: bool) => float {
     return if flag then strict(x) else strict(x + 1.0)
 }
 
-func main(x: float) => int sync {
+func main(x: float) sync {
     println(strict(x), underflow_sensitive(x), strict_coefficients(x))
     println(relaxed_coefficients(x), mixed_permissions(x))
     println(integer_coefficients(7), integer_chain(7), integer32(i32(7)))
     println(strict32(f32(x)))
     println(shared_product(x))
     println(branch(x, true), branch(x, false))
-    return 0
 }

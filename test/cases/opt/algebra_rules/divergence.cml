@@ -31,9 +31,8 @@ func effect_mul_zero() => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println(anchor_add(7))
     println(anchor_mul32(9))
     println(effect_mul_zero())
-    return 0
 }

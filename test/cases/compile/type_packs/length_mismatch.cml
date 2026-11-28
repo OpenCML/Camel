@@ -10,6 +10,5 @@ func f(x: Mix<Weighted>) => int {
     return 0
 }
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

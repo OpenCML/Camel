@@ -13,9 +13,8 @@ func log(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     let a = log(1)
     let b = log(a)
     println(b)
-    return 0
 }

@@ -10,7 +10,6 @@ func pick(x: i32) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(pick(1))
-    return 0
 }

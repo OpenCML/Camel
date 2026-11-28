@@ -7,7 +7,7 @@ func make(n: int) => int[] {
     return loop xs = [0] while len(xs) < n do xs->append<7>
 }
 
-func main() => int sync {
+func main() sync {
     let a = std::mem::blocks()
     let xs = make(100)
     let b = std::mem::blocks()
@@ -15,5 +15,4 @@ func main() => int sync {
     println(b.allocs - b.frees == b.live)
     println(b.live - a.live, b.allocs - a.allocs, b.frees - a.frees, b.bytes > a.bytes)
     println(len(xs), xs[99])
-    return 0
 }

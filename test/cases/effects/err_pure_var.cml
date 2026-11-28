@@ -8,8 +8,7 @@ func bump(var c: int) => int pure sync {
     return c
 }
 
-func main() => int sync {
+func main() sync {
     var n = 1
     println(bump(n))
-    return 0
 }

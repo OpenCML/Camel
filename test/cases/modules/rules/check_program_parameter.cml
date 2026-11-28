@@ -23,12 +23,11 @@ func touch(x: Vec) => Vec {
     return x + x
 }
 
-func main() => int sync {
+func main() sync {
     // `over` left out: the law is checked at the types the registered operator groups give.
     println(check_text([add_zero, sum_swap]->check<100, 1>))
     // `over` given: the program's own types join the candidate set.
     println(check_text([add_zero, sum_swap]->check<100, 1>(main)))
     // Every parameter but the rules left out.
     println(check_text([add_zero, sum_swap]->check))
-    return 0
 }

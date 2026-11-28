@@ -17,8 +17,7 @@ func loss() => (float, float) {
     return (x * x, x * 3.0)
 }
 
-func main() => int sync {
+func main() sync {
     let d = grad(loss, has_aux: false)<2.0>()
     println(d)
-    return 0
 }

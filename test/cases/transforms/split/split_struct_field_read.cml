@@ -19,7 +19,7 @@ func g(qq: Point) => float {
     return qq.a * 4.0 + qq.b
 }
 
-func main() => int sync {
+func main() sync {
     let p = { a: 2.0, b: 3.0 }
     let lifted = jvp(g)
     let (v, t) = lifted(p, { a: 1.0, b: 0.0 })
@@ -28,5 +28,4 @@ func main() => int sync {
     let (value, lin) = fwd(p)
     println('forward y=', value)
     println('lin dp=', lin({ a: 1.0, b: 0.0 }))
-    return 0
 }

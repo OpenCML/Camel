@@ -56,12 +56,11 @@ func cube() => float {
     return sum(xs)
 }
 
-func main() => int sync {
+func main() sync {
     println(grad(rank_one_short)<0.0>())
     println(grad(rank_one_two)<0.0>())
     println(grad(rank_one_three)<0.0>())
     println(grad(square_three)<0.0>())
     println(grad(square_four)<0.0>())
     println(grad(cube)<0.0>())
-    return 0
 }

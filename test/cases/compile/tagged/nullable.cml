@@ -30,7 +30,7 @@ func fallback() => int sync {
     return -1
 }
 
-func main() => int sync {
+func main() sync {
     let a = positive(5)
     let b = positive(-5)
     println(a)
@@ -53,5 +53,4 @@ func main() => int sync {
     println(b ?? fallback())
     let xs = [a, b, c]
     println(xs)
-    return 0
 }

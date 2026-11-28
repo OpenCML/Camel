@@ -8,7 +8,7 @@ func same(a: P, b: P) => P {
     return a
 }
 
-func main() => int sync {
+func main() sync {
     let ps = [{ x: 7, y: 10 }]->map<func (p: P) => P {
         p
     }>
@@ -28,5 +28,4 @@ func main() => int sync {
         p.y
     }>
     println(named[0])
-    return 0
 }

@@ -8,11 +8,10 @@ func inc(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     let t = true
     let n = 2
     println(!t->always, (!t)->always, !(t->always))
     println(~n->inc, ~(n->inc), ~n * 3, -~n)
     println(!t == false, !false & t, !(!t))
-    return 0
 }

@@ -7,9 +7,8 @@ func pick(a: int, b: int) => int {
     return if a > 0 then a + b else 100 / b
 }
 
-func main() => int sync {
+func main() sync {
     println(pick(1, 0))
     println(pick(-1, 0))
     println('not reached')
-    return 0
 }

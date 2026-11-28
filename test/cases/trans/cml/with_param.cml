@@ -13,9 +13,8 @@ func clamp(x: int) => int {
     else if x > hi then hi else x
 }
 
-func main() => int sync {
+func main() sync {
     let a = scale<3>(4)
     let b = clamp<0, 10>(15)
     println(a, b)
-    return 0
 }

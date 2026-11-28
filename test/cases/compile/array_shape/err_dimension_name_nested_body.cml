@@ -11,7 +11,6 @@ func outer(xs: f32[n]) => int {
     return inner()
 }
 
-func main() => int sync {
+func main() sync {
     println(outer([1.0, 2.0]))
-    return 0
 }

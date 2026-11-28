@@ -49,7 +49,7 @@ func bitsOfF32(value: f32) => int[] {
     return to_array(to_bytes(one))
 }
 
-func main() => int sync {
+func main() sync {
     // ---- f16 to f32, at both ends of the range and in the subnormals ----
     let largest: f16 = 65504.0
     println(bitsOfF32(f32(largest)))
@@ -87,5 +87,4 @@ func main() => int sync {
     // ---- the widened value is an f32: two of them are eight bytes ----
     let two: f32[] = [f32(third), f32(bfThird)]
     println(len(to_bytes(two)))
-    return 0
 }

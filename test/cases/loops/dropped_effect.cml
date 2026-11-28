@@ -8,7 +8,6 @@ func f() => int {
     return 5
 }
 
-func main() => int sync {
+func main() sync {
     println(f())
-    return 0
 }

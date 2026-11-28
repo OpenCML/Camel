@@ -32,12 +32,11 @@ func throughExponent(n: float) => float {
     return pow(2.0, n)
 }
 
-func main() => int sync {
+func main() sync {
     let (value, tangent) = jvp(cube)(2.0, 1.0)
     `jvp pow value={} d={}`->format<value, tangent>->println
     let (fracValue, fracTangent) = jvp(fractional)(2.0, 1.0)
     `jvp pow fractional value={} d={}`->format<fracValue, fracTangent>->println
     let (expValue, expTangent) = jvp(throughExponent)(3.0, 1.0)
     `jvp pow exponent value={} d={}`->format<expValue, expTangent>->println
-    return 0
 }

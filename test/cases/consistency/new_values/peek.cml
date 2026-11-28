@@ -15,7 +15,7 @@ func size_of(xs: int[]) => int {
     return len(xs)
 }
 
-func main() => int sync {
+func main() sync {
     var acc: int[] = []
     acc = acc->append<1>
     let n0 = len(acc) // cannot keep the array
@@ -41,5 +41,4 @@ func main() => int sync {
     let before = xs
     xs = xs->append<7>
     println(before, k, xs)
-    return 0
 }

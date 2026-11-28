@@ -8,7 +8,7 @@ func boom() => never {
     return fail('NoPremise')
 }
 
-func main() => int sync {
+func main() sync {
     println('before')
-    return boom()
+    boom()
 }

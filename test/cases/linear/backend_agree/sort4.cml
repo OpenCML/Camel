@@ -31,7 +31,7 @@ func network4(a: int, b: int, c: int, d: int) => int[] {
     return [q0, r1, r2, q3]
 }
 
-func main() => int sync {
+func main() sync {
     let one = network4(3, 1, 4, 2)
     println(one[0], one[1], one[2], one[3])
     let two = network4(4, 3, 2, 1)
@@ -40,5 +40,4 @@ func main() => int sync {
     println(three[0], three[1], three[2], three[3])
     let four = network4(9, 0, 5, 2)
     println(four[0], four[1], four[2], four[3])
-    return 0
 }

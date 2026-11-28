@@ -21,7 +21,6 @@ func run(n: int, left: int, total: int) => int {
     return if left == 0 then total else run(n, left - 1, total + round(n, left))
 }
 
-func main(n: int, reps: int) => int sync {
+func main(n: int, reps: int) sync {
     println('map_chain total={}'->format<run(n, reps, 0)>)
-    return 0
 }

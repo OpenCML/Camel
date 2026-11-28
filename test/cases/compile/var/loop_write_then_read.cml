@@ -13,7 +13,7 @@
  *
  * Run: camel test/cases/compile/var/loop_write_then_read.cml std::nvm
  */
-func main() => int sync {
+func main() sync {
     var total = 0
     let _ = loop i = 0 while i < 3 do sync {
         total = total + 1
@@ -21,5 +21,4 @@ func main() => int sync {
         i + 1
     }
     println(total)
-    return 0
 }

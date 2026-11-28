@@ -15,12 +15,11 @@ func f64_pair(x: f64[2], y: f64[2]) => float {
     return float(sum(x * y)) + float(sum(x * 2.0))
 }
 
-func main() => int sync {
+func main() sync {
     let a = reshape<[2]>([1.0, 2.0] as f32[])
     let b = reshape<[2]>([3.0, 4.0] as f32[])
     let c = reshape<[2]>([1.0, 2.0] as f64[])
     let d = reshape<[2]>([3.0, 4.0] as f64[])
     println(f32_pair(a, b))
     println(f64_pair(c, d))
-    return 0
 }

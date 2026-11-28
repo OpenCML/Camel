@@ -23,16 +23,15 @@ func r10(a11: int, a12: string) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let n41 = func (p39: string, p40: float) => int {
         0
     }
     println('')
     let n57 = if false then sync {
         let n56 = n41(r10(5, 'yz'), 2.0)
-        return { x: 0, y: 0 }
+        { x: 0, y: 0 }
     } else sync {
-        return { x: 0, y: 0 }
+        { x: 0, y: 0 }
     }
-    return 0
 }

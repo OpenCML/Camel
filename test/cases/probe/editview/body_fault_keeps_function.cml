@@ -28,8 +28,7 @@ func edited(f: (x: int) => int) => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println('block=', edited(inc))
     println('old=', inc(5))
-    return 0
 }

@@ -12,11 +12,10 @@ func ident::<T>(xs: T[...]) => T[...] {
     return xs
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [1.0, 2.0, 3.0] as float[...]
     let fixed = [1.0, 2.0, 3.0]
     println(`ident(6.0) = ${ident(6.0):.1f}`)
     println(`ident(xs) = ${ident(xs):.1f}`)
     println(`ident(fixed) = ${ident(fixed):.1f}`)
-    return 0
 }

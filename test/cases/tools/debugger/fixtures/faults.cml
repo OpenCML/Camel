@@ -3,10 +3,9 @@ func risky(d: int) => int {
     return q
 }
 
-func main() => int sync {
+func main() sync {
     let safe = attempt(risky)(0) !! -1 // mark:isolated
     println(safe) // mark:after
     let boom = risky(0) // mark:uncaught
     println(boom)
-    return 0
 }

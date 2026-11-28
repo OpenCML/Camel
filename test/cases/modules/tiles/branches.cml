@@ -25,7 +25,7 @@ func nested(flag: bool, x: f32[...]) => float {
     let expected = choose(x)
     return float(sum(abs(actual.0 - expected.0))) + float(sum(abs(actual.1 - expected.1)))
 }
-func main() => int sync {
+func main() sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(check(true, x))
     println(check(false, x))
@@ -33,5 +33,4 @@ func main() => int sync {
     println(prune(true, x))
     println(nested(true, x))
     println(nested(false, x))
-    return 0
 }

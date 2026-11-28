@@ -53,7 +53,6 @@ func halve(x: f64) => f64 {
     return x / 2.0
 }
 
-func main() => int sync {
+func main() sync {
     println(halve(8.0))
-    return 0
 }

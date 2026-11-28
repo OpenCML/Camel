@@ -49,7 +49,7 @@ func each() => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     // The same question many times: the answer may not depend on the run.
     (0 .. 40)->foreach<func (round: int) sync {
         let r = attempt(all)()
@@ -79,5 +79,4 @@ func main() => int sync {
         case v => 'no fault'
     })
     println('after')
-    return 0
 }

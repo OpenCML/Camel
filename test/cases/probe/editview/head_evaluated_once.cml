@@ -20,7 +20,6 @@ func edited() => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println('block=', edited())
-    return 0
 }

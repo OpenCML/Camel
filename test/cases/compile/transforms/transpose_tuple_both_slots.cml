@@ -16,11 +16,10 @@ func both(x: float) => float {
     return t.0 + t.1
 }
 
-func main() => int sync {
+func main() sync {
     println(both(1.0))
     let back = transpose(both)
     println(back(1.0))
     // Twice the cotangent, 6: the transpose's own reading, since the forward line prints 3.
     println(back(2.0))
-    return 0
 }

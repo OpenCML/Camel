@@ -1,9 +1,8 @@
 import { argmax } from array
 
-func main() => int sync {
+func main() sync {
     let xs: int[] = []
     println('before')
     println(argmax(xs))
     println('not reached')
-    return 0
 }

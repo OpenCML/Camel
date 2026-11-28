@@ -24,7 +24,7 @@ func stopped() => float {
     return x * x + stop_gradient(x * 10.0)
 }
 
-func main() => int sync {
+func main() sync {
     let d = grad(square)<2.0>()
     let vg = with_grad(square)<2.0>()
     let ds = grad(stopped)<2.0>()
@@ -32,5 +32,4 @@ func main() => int sync {
     println(d)
     println(vg)
     println(ds)
-    return 0
 }

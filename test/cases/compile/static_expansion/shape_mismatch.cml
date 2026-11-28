@@ -6,7 +6,6 @@ func build(u: B) {
     return A { static for n, F in fields B do u.[n] }
 }
 
-func main() => int sync {
+func main() sync {
     println(build({ b: 1, c: 2 }))
-    return 0
 }

@@ -20,8 +20,7 @@ func pick(n: int) => int sync {
     return v
 }
 
-func main() => int sync {
+func main() sync {
     println('branch 1', pick(3))
     println('branch 2', pick(4))
-    return 0
 }

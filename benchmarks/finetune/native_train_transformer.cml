@@ -89,7 +89,7 @@ func spin(m: Block, i: int, steps: int, nb: int) => Block {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let m = {
         ln1_gamma: weight('ln1_gamma'),
         ln1_beta: weight('ln1_beta'),
@@ -111,5 +111,4 @@ func main() => int sync {
     let steps = int(get_env('CAMEL_FT_STEPS') ?? '')
     let nb = int(get_env('CAMEL_FT_NBATCHES') ?? '')
     let final = spin(m, 0, steps, nb)
-    return 0
 }

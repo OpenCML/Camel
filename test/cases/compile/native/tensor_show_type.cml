@@ -6,7 +6,6 @@
 
 import { show } from tensor
 
-func main() => int sync {
+func main() sync {
     show('x')
-    return 0
 }

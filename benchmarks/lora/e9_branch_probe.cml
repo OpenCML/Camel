@@ -93,10 +93,10 @@ func do_step(m: Mlp, x: float[...]) => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let m = load()
     let x = reshape<[2, 2]>([1.0, 2.0, -1.0, 0.5])
     let what = get_env('WHAT') ?? ''
-    return if what == 'fwd' then do_fwd(m, x)
+    if what == 'fwd' then do_fwd(m, x)
     else if what == 'nobranch' then do_nobranch(m, x) else do_step(m, x)
 }

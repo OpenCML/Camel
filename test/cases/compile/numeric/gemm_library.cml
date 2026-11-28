@@ -28,7 +28,7 @@ func max_abs(t: f32[...]) => float {
     return float(sum(max<0>(max<0>(abs(t)))))
 }
 
-func main() => int sync {
+func main() sync {
     seed(20261023)
     let a = next_key()->normal::<f32><shape: [1024, 1024]>
     let b = next_key()->normal::<f32><shape: [1024, 1024]>
@@ -37,5 +37,4 @@ func main() => int sync {
     let difference = max_abs(library - canonical)
     let bound = 1024.0 * 1024.0 * 5.9604645e-8 * max_abs(a) * max_abs(b)
     'gemm_library sums={} {} diff={} bound={}'->format<sum(library), sum(canonical), difference, bound>->println
-    return 0
 }

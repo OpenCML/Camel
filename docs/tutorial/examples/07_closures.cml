@@ -20,7 +20,7 @@ func adder(n: int) => (x: int) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let g = inc // a function name is a value
     println(g(1), apply_twice(dbl, 3))
     
@@ -37,5 +37,4 @@ func main() => int sync {
         state::set(total, state::get(total) + x)
     }>
     println(state::get(total))
-    return 0
 }

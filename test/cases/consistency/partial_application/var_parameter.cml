@@ -22,11 +22,10 @@ func add(x: int) => int sync {
     return next
 }
 
-func main() => int sync {
+func main() sync {
     let t = state::ref(0)
     let g = add<t>
     println(g(1), g(2), g(3), state::get(t))
     let direct = add<t>
     println(direct(10), state::get(t))
-    return 0
 }

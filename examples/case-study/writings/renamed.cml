@@ -30,7 +30,7 @@ func train(
     return if n == 0 then layer else train(step(layer, X, y, rate), X, y, rate, n - 1)
 }
 
-func main() => int sync {
+func main() sync {
     let X = reshape<[4, 2]>([1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0] as f32[])
     let y = reshape<[4, 1]>([2.0, -1.0, 1.0, 3.0] as f32[])
     let start: Linear = { weight: reshape<[2, 1]>([0.0, 0.0] as f32[]) }
@@ -38,5 +38,4 @@ func main() => int sync {
     println(format<loss<start, y>(X)>('loss before: {:.4f}'))
     println(format<loss<trained, y>(X)>('loss after:  {:.4f}'))
     println(trained.weight)
-    return 0
 }

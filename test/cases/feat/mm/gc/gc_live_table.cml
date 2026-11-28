@@ -20,8 +20,7 @@ func churn(keep: Row[], n: int, left: int, total: int) => int {
     return if left == 0 then total + keep[0][0] else churn(keep, n, left - 1, total + table(n, left)[n - 1][15])
 }
 
-func main(rows: int, reps: int) => int sync {
+func main(rows: int, reps: int) sync {
     let keep = table(rows, 0)
     println('gc_live_table total={}'->format<churn(keep, rows / 10, reps, 0)>)
-    return 0
 }

@@ -39,6 +39,5 @@ func w210(a211: int, var c212: int, a213: int) => int sync {
     }
 }
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

@@ -17,7 +17,7 @@ func negate(x: float) => float {
     return -x
 }
 
-func main() => int sync {
+func main() sync {
     let inf = mul(1.0e308, 10.0)
     let ninf = mul(-1.0e308, 10.0)
     let nan = sub(inf, inf)
@@ -49,5 +49,4 @@ func main() => int sync {
     println<'{:.2f}'>(negativeNaN)
     println<'{:>8}'>(negativeNaN)
     println<'{:+}'>(negativeNaN)
-    return 0
 }

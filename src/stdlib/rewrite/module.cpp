@@ -4058,6 +4058,8 @@ void checkOneRule(
     std::string failure;
     std::string failureEvidence;
     std::string failureReason;
+    /// The condition was asked on the samples and held on none of them (`sampled`, not `refuted`).
+    bool conditionNeverHeld = false;
     double worstRatio = 0.0;
     std::set<std::vector<int64_t>> shapesSeen;
     std::set<int64_t> axesSeen;
@@ -4170,9 +4172,18 @@ void checkOneRule(
             }
         }
     }
-    // The engine applies the rule to the left side, with random constants for the const
-    // parameters: it must fire, and the function it gives must agree too.
+    // The engine applies the rule to the left side with a drawn value standing for every scalar
+    // parameter: a `const` one because the pattern matches a constant only there, and an ordinary
+    // one because the condition is asked about the values the pattern matched and a bare port has
+    // no value to ask about (`nonnegative(x)` on a port reads no value and the condition's fact
+    // falls back to false, so no instance is ever rewritten). It must fire, and the function it
+    // gives must agree too.
     size_t fired = 0, tried = 0;
+    // What the condition answered over the instances. Two ways of not firing are different
+    // faults -- the samples (or the condition) never met it, or it held and the engine still
+    // rewrote nothing -- and the counts are what tells them apart in the report.
+    size_t heldInstances      = 0; // instances the condition admitted
+    size_t heldWithoutRewrite = 0; // of those, the ones the engine rewrote nothing on
     if (failure.empty()) {
         auto compiled            = camel::runtime::compileRule(ctx, source);
         camel::runtime::Rule one = std::move(compiled.front());
@@ -4197,19 +4208,53 @@ void checkOneRule(
                 draft.normPorts().end());
             std::vector<slot_t> args;
             std::vector<Sample> values = drawValues(instance);
-            double scale               = 1.0;
+            // Where the sample stands in the graph: the node of the parameter's drawn value, which
+            // is what the condition is asked about (see below).
+            std::vector<camel::runtime::gc_node_ref_t> sampleNodes(
+                params,
+                camel::runtime::kInvalidNodeRef);
+            double scale = 1.0;
             for (size_t i = 0; i < params; ++i) {
                 const bool isConst = i < 64 && ((constParams >> i) & 1) != 0;
                 Type *type         = lhsType->normTypeAt(i);
                 scale              = std::max(scale, std::abs(values[i].asDouble) + 1.0);
-                if (isConst) {
+                // A tensor argument is an Array the call makes, so it does not stand in the graph;
+                // every scalar does, `const` or not (see above).
+                if (isConst || values[i].tensor == nullptr) {
                     const auto constant = draft.materializeStaticValue(values[i].slot, type);
                     draft.replaceAllValueUses(ports[i], constant);
+                    sampleNodes[i] = constant;
                 }
             }
             camel::runtime::DraftWritings writings(transaction, policy);
+            // The condition is asked about the sample itself: each of its parameters is the node
+            // the sample's value has in the graph, so the question is the one the engine would ask
+            // at a match -- which is what says whether this sample is an instance of the law at
+            // all.
+            bool held = false;
+            if (one.when) {
+                const camel::runtime::Match match{
+                    writings,
+                    camel::runtime::kInvalidNodeRef,
+                    sampleNodes,
+                    camel::runtime::MatchRemainder{}};
+                held = one.when(match);
+            }
             const auto stats = writings.rewrite(std::span<const camel::runtime::Rule>(&one, 1));
+            if (conditional) {
+                if (!held) {
+                    // The sample is not an instance of the law: the two sides say nothing about it
+                    // and nothing is compared there.
+                    continue;
+                }
+                ++heldInstances;
+            }
             if (stats.applied == 0) {
+                if (conditional) {
+                    // The condition held and the engine still rewrote nothing: the count of those
+                    // is what the report names after the loop.
+                    ++heldWithoutRewrite;
+                }
                 continue;
             }
             ++fired;
@@ -4295,18 +4340,50 @@ void checkOneRule(
             }
         }
         if (failure.empty() && fired == 0) {
-            // The engine never applied the rule to its own left side. That is not a counterexample
-            // to the equation -- no values were compared -- so the evidence is `none` and the
-            // reason says what happened; the verdict is still `refuted`, because a rule the engine
-            // cannot fire on its own left side must not pass a check that guards the library.
-            failureEvidence = "none";
-            failureReason =
-                std::format("the rule never fired on its own left side in {} tries", tried);
-            failure = "the rule never fired on its own left side";
+            if (conditional && heldInstances > 0) {
+                // The condition held on samples whose values the engine had in hand and the engine
+                // still rewrote nothing there: the rule or the matcher is what to look at, so the
+                // verdict is `refuted`, and the sentence names the samples it is about.
+                failureEvidence = "none";
+                failureReason   = std::format(
+                    "the condition held on {} of the {} samples and the rule was not rewritten "
+                    "there",
+                    heldWithoutRewrite,
+                    heldInstances);
+                failure = std::format(
+                    "the rule did not fire on the {} samples where its condition held",
+                    heldWithoutRewrite);
+            } else if (conditional) {
+                // The condition said no on every sample, so no value was ever compared: that is
+                // not a counterexample to the equation and not a fault of the rule -- the samples
+                // or the condition are what to look at. It is `sampled` with that reason, never
+                // `refuted`.
+                conditionNeverHeld = true;
+            } else {
+                // The engine never applied the rule to its own left side. That is not a
+                // counterexample to the equation -- no values were compared -- so the evidence is
+                // `none` and the reason says what happened; the verdict is still `refuted`,
+                // because a rule the engine cannot fire on its own left side must not pass a
+                // check that guards the library.
+                failureEvidence = "none";
+                failureReason =
+                    std::format("the rule never fired on its own left side in {} tries", tried);
+                failure = "the rule never fired on its own left side";
+            }
         }
     }
+    // A conditional rule is credited with the samples its condition met: a sample the condition
+    // rejects is not an instance of the law, and saying `fired 0 of 64` about the ones it never
+    // admitted would read as a fault of the rule.
+    const size_t admitted = conditional ? heldInstances : tried;
     if (!failure.empty()) {
         addRow(kVerdictRefuted, failureEvidence, failureReason, failure);
+    } else if (conditionNeverHeld) {
+        addRow(
+            kVerdictSampled,
+            std::format("samples {}", samples),
+            std::format("the condition never held on any of the {} samples", tried),
+            "");
     } else if (accuracy) {
         std::string shapesText;
         for (const auto &shape : shapesSeen) {
@@ -4325,7 +4402,7 @@ void checkOneRule(
         const std::string ratio =
             std::isinf(worstRatio) ? "inf" : std::format("{:.3g}", worstRatio);
         std::string detail =
-            std::format("worst error ratio {}, fired {} of {}", ratio, fired, tried);
+            std::format("worst error ratio {}, fired {} of {}", ratio, fired, admitted);
         if (!shapesText.empty()) {
             detail += ", shapes " + shapesText;
         }
@@ -4334,14 +4411,16 @@ void checkOneRule(
         }
         addRow(kVerdictSampled, std::format("samples {}", samples), "", detail);
     } else if (conditional) {
-        // The two sides were never compared: a condition cannot be asked about sampled values, so
-        // the engine path is the whole of what this rule got. It is `sampled`, and the detail says
-        // which path was walked, so a reader does not take it for a value comparison.
+        // The values were compared where the condition held: the engine path rewrote the left
+        // side on those samples, and the function it gave was called and compared there. The
+        // detail says how many of the samples the condition admitted were rewritten, and how many
+        // of the drawn samples it admitted at all, so a reader can tell a condition that selects
+        // few samples from one that selects none.
         addRow(
             kVerdictSampled,
             std::format("samples {}", samples),
-            "the condition selects the instances, so no sampled value was compared",
-            std::format("the condition selects the instances, fired {} of {}", fired, tried));
+            "",
+            std::format("fired {} of {} admitted", fired, admitted));
     } else {
         addRow(
             kVerdictSampled,

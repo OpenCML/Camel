@@ -30,7 +30,7 @@ with <p: Broadcast>
 func weighted_loss() => float {
     return float(sum(p.a * p.b))
 }
-func main() => int sync {
+func main() sync {
     let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     let derivative = func (v: f32[...]) => f32[...] {
         grad(square)<v>()
@@ -67,5 +67,4 @@ func main() => int sync {
     let ep = { a: zeros::<f32>([1, 3]), b: zeros::<f32>([0, 3]) }
     let eg = download(run_preferred_resident<broad_grad>(ep))
     println(sum(abs(eg.a)) + sum(abs(eg.b)))
-    return 0
 }

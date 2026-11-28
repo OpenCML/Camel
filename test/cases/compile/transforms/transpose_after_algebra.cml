@@ -29,7 +29,7 @@ func deep(x: float) => float {
     return ((x * 2.0 + x * 3.0) * 4.0) * 2.0
 }
 
-func main() => int sync {
+func main() sync {
     let back_linear = transpose(linear)
     let back_chain = transpose(chain)
     let back_deep = transpose(deep)
@@ -38,5 +38,4 @@ func main() => int sync {
     println('algebra chain f(1)={} f(2)={}'->format<chain(1.0), chain(2.0)>)
     println('algebra chain back(1.0)={} back(2.0)={}'->format<back_chain(1.0), back_chain(2.0)>)
     println('algebra deep back(1.0)={} back(2.0)={}'->format<back_deep(1.0), back_deep(2.0)>)
-    return 0
 }

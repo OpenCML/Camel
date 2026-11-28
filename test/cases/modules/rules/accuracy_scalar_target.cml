@@ -38,7 +38,7 @@ func guarded_exp(x: float) => float {
     return exp(x) - 2.0
 }
 
-func main() => int sync {
+func main() sync {
     let tiny = 1e-300
     let near = -1.0 + 1e-15
     let tiny32: f32 = 1e-8
@@ -49,5 +49,4 @@ func main() => int sync {
     println('expm1 one  ', naive_expm1(1.0), expm1(1.0))
     println('expm1 tiny32', naive_expm1_32(tiny32), expm1(tiny32))
     println('guarded log', guarded_log(0.5), 'guarded exp', guarded_exp(0.5))
-    return 0
 }

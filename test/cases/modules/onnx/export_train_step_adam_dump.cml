@@ -35,7 +35,7 @@ func spin(
     }
 }
 
-func main() => int sync {
+func main() sync {
     let m = {
         w1: reshape<[2, 3]>([0.5, -0.25, 0.75, 1.0, -0.5, 0.25] as f32[]),
         b1: reshape<[3]>([0.1, 0.0, -0.1] as f32[]),
@@ -44,5 +44,4 @@ func main() => int sync {
     }
     let x = reshape<[2, 2]>([1.0, 2.0, -1.0, 0.5] as f32[])
     spin(m, adam_state(m), x, 0, int(get_env('STEPS') ?? ''), get_env('DUMP_DIR') ?? '')
-    return 0
 }

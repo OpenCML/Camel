@@ -9,7 +9,7 @@ func noisy(tag: string, v: bool) => bool sync {
     return v
 }
 
-func main() => int sync {
+func main() sync {
     // the right side runs only when the left does not decide
     println(noisy('a1', false) && noisy('a2', true))
     println(noisy('b1', true) && noisy('b2', false))
@@ -40,5 +40,4 @@ func main() => int sync {
         x > 1 && x < limit + 2
     }>)
     if noisy('m1', true) && noisy('m2', true) then println('both')
-    return 0
 }

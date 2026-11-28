@@ -12,9 +12,8 @@ func describe(value: string?) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(describe(get_env('CAMEL_TEST_ENV_UNSET_ABC')))
     println(describe(get_env('CAMEL_TEST_ENV_SET')))
     println(get_env('CAMEL_TEST_ENV_UNSET_ABC') ?? 'default')
-    return 0
 }

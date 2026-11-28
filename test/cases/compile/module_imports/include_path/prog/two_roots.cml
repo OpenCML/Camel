@@ -4,7 +4,6 @@
 import alpha
 import beta
 
-func main() => int sync {
+func main() sync {
     println(alpha::value() + beta::value())
-    return 0
 }

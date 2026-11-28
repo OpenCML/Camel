@@ -11,8 +11,7 @@ export func pick(s: string) => string {
     return 'body ' + s
 }
 
-func main() => int sync {
+func main() sync {
     println(pick([10, 20, 30], 1))
     println(pick('text'))
-    return 0
 }

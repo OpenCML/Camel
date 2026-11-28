@@ -13,6 +13,6 @@ func show(f: (n: int) => int) => int {
     return f(1)
 }
 
-func main() => int sync {
-    return show(step)
+func main() sync {
+    show(step)
 }

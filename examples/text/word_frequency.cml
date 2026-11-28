@@ -19,7 +19,7 @@ func show(e: Entry) => string {
     return `  ${e.0:<6} ${e.1}`
 }
 
-func main() => int sync {
+func main() sync {
     let text = '
         The quick fox sees the lazy dog.
         The dog sees the fox, and the fox runs.
@@ -53,5 +53,4 @@ func main() => int sync {
     }>
     println('top 3:')
     println(ranked->take<3>->map<show>->join<'\n'>)
-    return 0
 }

@@ -14,11 +14,10 @@ func pick() => (x: int) => int {
     return twice
 }
 
-func main() => int sync {
+func main() sync {
     println([1, 2, 3]->map<twice>)
     let f = twice
     println(f(4), apply(twice, 5), pick()(6))
     // an imported name with two functions: the parameter says which is meant
     println(apply(area, 3), area(2, 5))
-    return 0
 }

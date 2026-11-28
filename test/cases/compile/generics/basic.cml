@@ -20,7 +20,7 @@ func swap::<A, B>(p: (A, B)) => (B, A) {
     return (p.1, p.0)
 }
 
-func main() => int sync {
+func main() sync {
     println(first([1, 2, 3]))
     println(first(['a', 'b']))
     println(first([1.5, 2.5]))
@@ -31,5 +31,4 @@ func main() => int sync {
     println(p)
     println(swap(p))
     println(swap((1.5, true)))
-    return 0
 }

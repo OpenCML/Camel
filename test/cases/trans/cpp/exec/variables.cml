@@ -17,7 +17,7 @@ func count(n: int) => int sync {
     return i + total
 }
 
-func main() => int sync {
+func main() sync {
     var c = 10
     bump(c)
     bump(c)
@@ -31,5 +31,4 @@ func main() => int sync {
     let after5 = acc
     acc += 7
     println(after5, acc, acc)
-    return 0
 }

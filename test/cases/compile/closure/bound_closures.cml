@@ -3,7 +3,7 @@
  * and that with-arguments given at a call `f<a>(x)` do not disturb a closure's captures.
  */
 
-func main() => int sync {
+func main() sync {
     let k = 3
     let scale = 2.5
     let plain = func (x: int) => int {
@@ -24,5 +24,4 @@ func main() => int sync {
     let w = bound<1>(2)
     'bound_closures plain={} captured={} float={}'->format<a, c, f>->println
     'bound_closures with={}'->format<w>->println
-    return 0
 }

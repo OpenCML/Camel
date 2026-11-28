@@ -13,7 +13,6 @@ func twice() => int sync {
     return c
 }
 
-func main() => int sync {
+func main() sync {
     println(twice())
-    return 0
 }

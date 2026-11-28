@@ -36,7 +36,7 @@ func only_nullable(v: int?) => int {
     return v ?? -1
 }
 
-func main() => int sync {
+func main() sync {
     var x: int = 0
     println(only_nullable(from_name(x, true)))
     println(only_nullable(from_name(x, false)))
@@ -60,5 +60,4 @@ func main() => int sync {
     println(x)
     println(same_type(true, 7))
     println(same_type(false, 7))
-    return 0
 }

@@ -4,7 +4,6 @@
 
 import { whoami } from os
 
-func main() => int sync {
+func main() sync {
     println(whoami())
-    return 0
 }

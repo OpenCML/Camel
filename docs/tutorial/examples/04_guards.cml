@@ -9,7 +9,6 @@ func label(n: int) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(label(1), label(2), label(0))
-    return 0
 }

@@ -10,11 +10,10 @@ func even(x: int) => bool {
     return x % 2 == 0
 }
 
-func main() => int sync {
+func main() sync {
     println((0 .. 3)->map<double>)
     println(map<double>(0 .. 3))
     println((0 .. 5)->filter<even>)
     println((0 .. 5)->count<even>)
     (0 .. 3)->foreach<func (x: int) sync { println(x * 3) }>
-    return 0
 }

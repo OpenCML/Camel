@@ -36,7 +36,7 @@ func inc(var x: int) => int sync {
     return x
 }
 
-func main() => int sync {
+func main() sync {
     println(cnt, bump())
     println(bump(), cnt)
     println(cnt + bump())
@@ -60,5 +60,4 @@ func main() => int sync {
     println((lit, lit_step(), lit))
     let fields = { a: lit, b: lit_step(), c: lit }
     println(fields.a, fields.b, fields.c)
-    return 0
 }

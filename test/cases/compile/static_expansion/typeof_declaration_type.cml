@@ -9,8 +9,7 @@ func text() => string {
     return 's'
 }
 
-func main() => int sync {
+func main() sync {
     let a: typeof (text()) = 7
     println(a)
-    return 0
 }

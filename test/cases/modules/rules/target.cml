@@ -7,7 +7,6 @@ func chain(x: int) => int {
     return ((x + 0) * 3) * 2
 }
 
-func main() => int sync {
+func main() sync {
     println(coefficients(7), chain(7))
-    return 0
 }

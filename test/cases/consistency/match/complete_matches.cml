@@ -38,12 +38,11 @@ func text_of(r: int!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let none: int? = null
     let some: int? = 5
     println(with_default('a'), with_default('q'))
     println(both(true), both(false), either(true), either(false))
     println(or_zero(none), or_zero(some))
     println(text_of(parse_int('12')), text_of(parse_int('x')))
-    return 0
 }

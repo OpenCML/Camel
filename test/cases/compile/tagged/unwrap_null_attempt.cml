@@ -7,8 +7,7 @@ func unwrap_it(slot: int?) => int {
     return __unwrap__(slot)
 }
 
-func main() => int sync {
+func main() sync {
     let slot: int? = null
     println(attempt(unwrap_it)(slot) !! -12345)
-    return 0
 }

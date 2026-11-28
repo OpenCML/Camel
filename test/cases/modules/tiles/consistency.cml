@@ -15,7 +15,7 @@ func add(a: f32[...], b: f32[...]) => f32[...] {
 func flatten(x: f32[...]) => f32[...] {
     return reshape<[6]>(x)
 }
-func main() => int sync {
+func main() sync {
     seed(17)
     let a = (next_key()->uniform::<f32><shape: [17, 35]> * 2.0 - 1.0)
     let b = (next_key()->uniform::<f32><shape: [35, 23]> * 2.0 - 1.0)
@@ -28,5 +28,4 @@ func main() => int sync {
     println(sum(abs(download(run_preferred_resident<add>((changed, bias))) - add(changed, bias))))
     let small = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     println(sum(abs(download(run_preferred_resident<flatten>(small)) - flatten(small))))
-    return 0
 }

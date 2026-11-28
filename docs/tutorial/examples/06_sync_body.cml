@@ -11,7 +11,6 @@ func g() => int sync {
     return 2
 }
 
-func main() => int sync {
+func main() sync {
     println(f() + g())
-    return 0
 }

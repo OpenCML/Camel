@@ -30,7 +30,6 @@ rule three_rule(a: float, b: float, c: float) { three(a, b, c) => func (ba: floa
     three(ba, bb, bc)
 } }
 
-func main() => int sync {
+func main() sync {
     println(1)
-    return 0
 }

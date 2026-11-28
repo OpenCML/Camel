@@ -6,7 +6,6 @@ func after_leaf::<T>(t: T) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(after_leaf(1))
-    return 0
 }

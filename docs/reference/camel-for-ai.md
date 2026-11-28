@@ -117,10 +117,9 @@ func inc(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     let total = (1..6)->map<inc>->reduce<func (a: int, b: int) => int { a + b }, 0>
     println(total)
-    return 0
 }
 ```
 
@@ -142,9 +141,8 @@ func sum(xs: int[]) => int {
     return loop acc = 0 for x in xs do acc + x
 }
 
-func main() => int sync {
+func main() sync {
     println(sum(1..5), [1, 2, 3]->reduce<func (a: int, b: int) => int { a + b }, 0>)
-    return 0
 }
 ```
 
@@ -168,9 +166,8 @@ func f(y: float) => float {
     return x * x * y + y
 }
 
-func main() => int sync {
+func main() sync {
     println(f<3.0>(2.0), grad(f)<3.0>(2.0))
-    return 0
 }
 ```
 
@@ -191,9 +188,8 @@ func half(n: int) => int? {
     return if n % 2 == 0 then n / 2 else null
 }
 
-func main() => int sync {
+func main() sync {
     println(half(10) ?? -1, half(7) ?? -1)
-    return 0
 }
 ```
 
@@ -216,9 +212,8 @@ func area(s: Shape) => float {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(area(Shape::Rect { w: 2.0, h: 3.0 }))
-    return 0
 }
 ```
 
@@ -268,10 +263,9 @@ that: it is used by the region it is written in, so it runs although nothing rea
 ```camel
 import { get_env } from env
 
-func main() => int {
+func main() {
     println('before')
     get_env("CAMEL_AI_REFERENCE_NO_SUCH_VARIABLE")     // no diagnostic, and nothing is printed for it
-    return 0
 }
 ```
 

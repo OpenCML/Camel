@@ -8,7 +8,7 @@ func arithmetic(
 ) => (f32[...], f32[...], f32[...], f32[...], f32[...], f32[...]) {
     return (a + b, a - b, a * b, a / b, sqrt(a), a * b + a)
 }
-func main() => int sync {
+func main() sync {
     let folder = get_env('TILES_TEST_OUT') ?? ''
     let a = load_npy::<f32>(folder + '/a.npy') as f32[...]
     let b = load_npy::<f32>(folder + '/b.npy') as f32[...]
@@ -26,5 +26,4 @@ func main() => int sync {
     save_npy(gpu.3, folder + '/gpu3.npy')
     save_npy(gpu.4, folder + '/gpu4.npy')
     save_npy(gpu.5, folder + '/gpu5.npy')
-    return 0
 }

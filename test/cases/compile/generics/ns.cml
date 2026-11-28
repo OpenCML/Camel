@@ -8,10 +8,9 @@ namespace util {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(util::id(3))
     println(util::dup('s'))
     let p: util::Pair<int> = (1, 2)
     println(p)
-    return 0
 }

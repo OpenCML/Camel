@@ -4,7 +4,7 @@
  * to the value with one place changed.
  */
 
-func main() => int sync {
+func main() sync {
     var m = [{ x: 1, y: 2 }, { x: 3, y: 4 }]
     m[0].x = 9
     println(m)
@@ -24,5 +24,4 @@ func main() => int sync {
     var s = { x: 1 }
     s.x += 5
     println(s)
-    return 0
 }

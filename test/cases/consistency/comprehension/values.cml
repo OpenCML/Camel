@@ -15,7 +15,7 @@ func shout(x: int) => string sync {
     return string(x) + '!'
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [1, 2, 3, 4, 5, 6]
     let k = 10
     println(squares_of_even(xs), [x + k for x in xs], [string(x) for x in xs if x > k])
@@ -28,5 +28,4 @@ func main() => int sync {
     // an element expression with an effect, as in the element function of `map`: here the
     // function it calls has a sync body and its result is the element, so it runs
     println([shout(x) for x in [7]])
-    return 0
 }

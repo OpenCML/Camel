@@ -31,7 +31,7 @@ func my_map::<T, U>(xs: T[]) => U[] {
     return xs->map<f>
 }
 
-func main() => int sync {
+func main() sync {
     println(first([1, 2, 3]))
     println(first(['a', 'b']))
     println(first([[1.5], [2.5]]))
@@ -49,5 +49,4 @@ func main() => int sync {
     println(['a']->my_map<func (s: string) {
         len(s)
     }>)
-    return 0
 }

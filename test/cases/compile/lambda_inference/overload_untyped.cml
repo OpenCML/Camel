@@ -13,9 +13,8 @@ func over(f: (x: float) => float, v: float) => float {
     return f(v) + 0.5
 }
 
-func main() => int sync {
+func main() sync {
     println(over(func (x) {
         x * 2
     }, 20))
-    return 0
 }

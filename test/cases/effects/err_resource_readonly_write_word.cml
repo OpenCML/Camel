@@ -6,7 +6,6 @@
 
 resource geometry readonly idempotent
 
-func main() => int {
+func main() {
     println(42)
-    return 0
 }

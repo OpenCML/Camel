@@ -36,7 +36,7 @@ func describe(r: int!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     // !!
     println(attempt(half)(4) !! -1)
     println(attempt(half)(0) !! -1)
@@ -66,5 +66,4 @@ func main() => int sync {
     }
     println(text2)
     println('end')
-    return 0
 }

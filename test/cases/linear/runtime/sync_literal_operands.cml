@@ -12,7 +12,7 @@ func loud(s: string) => string sync {
     return s
 }
 
-func main() => int sync {
+func main() sync {
     println('one')
     let m = { a: loud('two'), b: loud('three') }
     println('four')
@@ -20,5 +20,4 @@ func main() => int sync {
     let arr = [loud('seven'), loud('eight')]
     println('nine')
     println(m.a + m.b + t.0 + t.1 + arr[0] + arr[1])
-    return 0
 }

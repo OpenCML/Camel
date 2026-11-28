@@ -46,7 +46,7 @@ rule fold(x: float, const c1: float, const c2: float) { x * c1 + x * c2 => x * (
 #requires(refine_accuracy)
 rule near_zero(x: float) { log(1.0 + x) => log1p(x) }
 
-func main() => int sync {
+func main() sync {
     let r = [holds, differ, anywhere, fold, near_zero]->check<100, 7>
     print(check_text(r))
     println('rows', len(r.rows))
@@ -55,5 +55,4 @@ func main() => int sync {
     println('2', r.rows[2].verdict, r.rows[2].proposition, r.rows[2].evidence, '[', r.rows[2].reason, ']')
     println('3', r.rows[3].verdict, r.rows[3].proposition, r.rows[3].evidence, '[', r.rows[3].rule, ']')
     println('4', r.rows[4].verdict, r.rows[4].proposition, r.rows[4].evidence, '[', r.rows[4].instance, ']')
-    return 0
 }

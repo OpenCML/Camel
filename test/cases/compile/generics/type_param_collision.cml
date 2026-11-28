@@ -10,7 +10,6 @@ func id::<T>(a: T) => T {
     return a
 }
 
-func main() => int sync {
+func main() sync {
     println(id(1))
-    return 0
 }

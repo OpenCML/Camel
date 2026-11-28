@@ -26,6 +26,5 @@ func literals(p: () => int, function: string) => int spelling {
     return loop total = 0 for n in nodesOf(p, function) do total + literal_of(n)
 }
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

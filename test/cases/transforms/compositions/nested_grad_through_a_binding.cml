@@ -33,9 +33,8 @@ func cube() => float {
     return x * x * x
 }
 
-func main() => int sync {
+func main() sync {
     let inner = grad(cube)
     let outer = grad(inner)
     println('nested_grad_through_a_binding second={}'->format<outer<2.0>()>)
-    return 0
 }

@@ -61,7 +61,7 @@ func keep(x: int?) => int? {
     return if x == null then x else x + 100
 }
 
-func main() => int sync {
+func main() sync {
     let present: string? = 'abc'
     let absent: string? = null
     println(len_or_zero(present), len_or_zero(absent))
@@ -87,5 +87,4 @@ func main() => int sync {
     // a name bound by `let` is narrowed like a parameter
     let n: int? = 41
     println(if n != null then n + 1 else 0)
-    return 0
 }

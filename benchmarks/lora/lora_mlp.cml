@@ -247,10 +247,10 @@ func do_train_ce_adam(m: LoraMlp) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     let m = load()
     let workload = get_env('CAMEL_BENCH_WORKLOAD') ?? ''
-    return if workload == 'export_lora' then do_export_lora(m)
+    if workload == 'export_lora' then do_export_lora(m)
     else if workload == 'export_full' then do_export_full(m)
     else if workload == 'export_ce' then do_export_ce(m)
     else if workload == 'export_ce_adam' then do_export_ce_adam(m)

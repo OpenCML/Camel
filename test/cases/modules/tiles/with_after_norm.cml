@@ -18,7 +18,7 @@ func written() => float {
     return float(sum(sum<0>(reshape<[2, 3]>(x))))
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[6]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     let angled_grad = func (v: f32[...]) => f32[...] {
         grad(angled)<v>()
@@ -30,5 +30,4 @@ func main() => int sync {
     println(sum(abs(angled_grad(x) - written_grad(x))))
     println(inspect<angled_grad>(x))
     println(inspect<written_grad>(x))
-    return 0
 }

@@ -59,7 +59,7 @@ with <x: f32[...]>
 func wide_loss() => float {
     return float(sum(wide_mark(sum<1>(x))))
 }
-func main() => int sync {
+func main() sync {
     let folder = get_env('TILES_TEST_OUT') ?? ''
     let x = load_npy::<f32>(folder + '/x.npy') as f32[2, 3, 4]
     save_npy(chained(x), folder + '/chain_cpu.npy')
@@ -113,5 +113,4 @@ func main() => int sync {
     println('EXPAND_SOURCE')
     println(source<df>(a))
     println('VIEWS_COMPLETE')
-    return 0
 }

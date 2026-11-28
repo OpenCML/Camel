@@ -67,7 +67,7 @@ func add_base::<T>(x: T) => T {
 
 let base = 100
 
-func main() => int sync {
+func main() sync {
     println(name_of({ name: 'n' }))
     println(scaled<2>(21))
     println(only_int(5))
@@ -75,5 +75,4 @@ func main() => int sync {
     println(any_above([1, 9, 2], 8))
     println(four_times(7))
     println(add_base(1))
-    return 0
 }

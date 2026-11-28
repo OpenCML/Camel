@@ -20,8 +20,7 @@ func cut() => float {
     return stop_gradient(x)
 }
 
-func main() => int sync {
+func main() sync {
     let (value, gradient) = with_grad(cut)<4.0>()
     `stop_gradient engine value={} dL/dx={}`->format<value, gradient>->println
-    return 0
 }

@@ -20,7 +20,7 @@
 import { nan } from math
 import { argmax, argmin, max, min, reshape, shape } from tensor
 
-func main() => int sync {
+func main() sync {
     let m: float[3, 2] = [[1.0, -2.0], [5.0, 0.0], [-3.0, 4.0]]
     println(argmax<0, false>(m))
     println(argmax<1, false>(m))
@@ -41,5 +41,4 @@ func main() => int sync {
     println(shape(argmax<0, true>(line)), argmax<0, true>(line))
     println(argmin<0, false>(line), shape(argmin<0, false>(line)))
     println(max<0, false>(line), min<0, false>(line))
-    return 0
 }

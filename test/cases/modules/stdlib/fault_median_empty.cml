@@ -1,9 +1,8 @@
 import { median } from statistics
 
-func main() => int sync {
+func main() sync {
     println('before')
     let none: float[] = []
     println(median(none))
     println('not reached')
-    return 0
 }

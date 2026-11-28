@@ -28,7 +28,6 @@ func forward(x: f32[...]) => f32[...] {
     return run(0, s[1], x, zeros::<f32>([s[0]]) + 1.0)
 }
 
-func main() => int sync {
+func main() sync {
     println(forward(ones::<f32>([2, 3])))
-    return 0
 }

@@ -14,7 +14,7 @@ func use_top(a: int) => int {
     return top(a) * 2
 }
 
-func main() => int sync {
+func main() sync {
     let g = inc
     println(g(1))
     println([1]->map<func (x: int) => int {
@@ -24,5 +24,4 @@ func main() => int sync {
     println(use_top(4))
     let h = g
     println(h(10))
-    return 0
 }

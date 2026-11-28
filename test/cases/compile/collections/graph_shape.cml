@@ -7,9 +7,8 @@ func lookup(m: Map<string, int>, s: Set<int>, xs: int[], k: string) => int {
     return if s->contains<found> then len(grown) else found
 }
 
-func main() => int sync {
+func main() sync {
     let m = [('a', 1), ('b', 2)] as Map<string, int>
     let s = [1, 2, 3] as Set<int>
     println(lookup(m, s, [10], 'a'), lookup(m, s, [10], 'z'))
-    return 0
 }

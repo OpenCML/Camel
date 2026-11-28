@@ -8,12 +8,11 @@
 import { cpu_count } from process
 import { num_threads } from tensor
 
-func main(expected: int) => int sync {
+func main(expected: int) sync {
     let actual = num_threads()
     let want = if expected > 0 then expected else cpu_count()
     'threads={} expected={}'->format<actual, want>->println
     if actual != want then {
-        return 1
+        1
     }
-    return 0
 }

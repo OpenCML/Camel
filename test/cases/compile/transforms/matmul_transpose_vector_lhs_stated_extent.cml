@@ -62,7 +62,7 @@ func product_with_v(w: float[2, 2]) => float {
     return sum(matmul(v, w))
 }
 
-func main() => int sync {
+func main() sync {
     let v = [1.0, 2.0] as float[2]
     let w = [[0.5, 0.25], [0.125, 1.0]] as float[2, 2]
     
@@ -84,5 +84,4 @@ func main() => int sync {
     let dw11 = abs(dw[1][1] - engine_w[1][1])
     let dw_diff = max(max(dw00, dw01), max(dw10, dw11))
     `matmul_t vector_lhs max_abs_diff_library_vs_engine v={:.12e} w={:.12e} value={:.12e}`->format<max(dv0, dv1), dw_diff, dvalue>->println
-    return 0
 }

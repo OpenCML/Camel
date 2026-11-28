@@ -37,12 +37,11 @@ func plain() => float {
     return w * w
 }
 
-func main() => int sync {
+func main() sync {
     let a = grad(counted, has_aux: true)<3.0>()
     let b = grad(triple, has_aux: true)<3.0>()
     let c = grad(plain, has_aux: true)<3.0>()
     println(a)
     println(b)
     println(c)
-    return 0
 }

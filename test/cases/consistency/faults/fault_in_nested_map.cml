@@ -8,9 +8,8 @@ func row(i: int) => int[] {
     }>
 }
 
-func main() => int sync {
+func main() sync {
     println('before')
     println((0 .. 4)->map<row>)
     println('not reached')
-    return 0
 }

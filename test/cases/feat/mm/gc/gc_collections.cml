@@ -48,7 +48,7 @@ func nested(
     }
 }
 
-func main() => int sync {
+func main() sync {
     let m = build(60, 0, [] as Map<string, int[]>)
     println(format<len(m), total(m)>('map entries={} total={}'))
     println(format<m['key-7'] ?? [0], m['key-59'] ?? [0], m->has<'key-60'>>('m[7]={} m[59]={} has60={}'))
@@ -66,5 +66,4 @@ func main() => int sync {
     let last = deep[11] ?? ([] as Map<string, int[]>)
     println(format<len(deep), len(last), total(last)>('nested={} last={} total={}'))
     println(format<merge(m, m) == m, items(dropped)>('merge same={} items={}'))
-    return 0
 }

@@ -37,7 +37,7 @@ func depth(s: string) => int {
     return depth(len(s))
 }
 
-func main() => int sync {
+func main() sync {
     println(f(1))
     println(f('a'))
     println(f(1, 2))

@@ -8,7 +8,7 @@ func make_adder(base: int) => (x: int) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let offset = 10
     let add = func (x: int) {
         x + offset
@@ -19,5 +19,4 @@ func main() => int sync {
     }
     let plus3 = make_adder(3)
     println(add(5), twice(4), plus3(7))
-    return 0
 }

@@ -35,7 +35,7 @@ func loss() => float {
     return float(sum(gelu(x)))
 }
 
-func main() => int sync {
+func main() sync {
     seed(29)
     let ffn = (next_key()->uniform::<f32><shape: [16, 32, 512]> * 16.0 - 8.0)
     'gelu_grad_bits ffn={}'->format<sha256(to_bytes(grad(loss)<ffn>()))>->println
@@ -43,5 +43,4 @@ func main() => int sync {
     'gelu_grad_bits tail={}'->format<sha256(to_bytes(grad(loss)<tail>()))>->println
     let single = (next_key()->uniform::<f32><shape: [1]> * 16.0 - 8.0)
     'gelu_grad_bits single={}'->format<sha256(to_bytes(grad(loss)<single>()))>->println
-    return 0
 }

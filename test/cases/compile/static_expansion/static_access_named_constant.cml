@@ -10,8 +10,7 @@ func first_of::<T>(t: T) {
     return t.[first]
 }
 
-func main() => int sync {
+func main() sync {
     println(first_of({ a: 1, b: 2 }))
     println(first_of((3, 4)))
-    return 0
 }

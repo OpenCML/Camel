@@ -23,7 +23,7 @@ func quadratic(x: float[...]) => float {
     return matmul([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], x)[0]
 }
 
-func main() => int sync {
+func main() sync {
     let x = [1.0, 2.0] as float[]
     let e0 = [1.0, 0.0] as float[]
     let e1 = [0.0, 1.0] as float[]
@@ -31,5 +31,4 @@ func main() => int sync {
     let (v1, d1) = jvp(quadratic)(x, e1)
     `jvp matmul dx=(1,0) value=${v0:.4f} tangent=${d0:.4f}`->println
     `jvp matmul dx=(0,1) value=${v1:.4f} tangent=${d1:.4f}`->println
-    return 0
 }

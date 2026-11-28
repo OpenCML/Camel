@@ -26,9 +26,8 @@ func square_plus_one() => float {
     return x * x + 1.0
 }
 
-func main() => int sync {
+func main() sync {
     println(grad(plus_one)<3.0>())
     println(grad(cube_plus_one)<3.0>())
     println(grad(square_plus_one)<3.0>())
-    return 0
 }

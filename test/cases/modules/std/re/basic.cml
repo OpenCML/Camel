@@ -4,7 +4,7 @@
 
 import { has_match } from re
 
-func main() => int sync {
+func main() sync {
     println('=== RE Module Basic Tests ===')
     
     println("\n[1] has_match('\\d+', 'abc123')")
@@ -20,5 +20,4 @@ func main() => int sync {
     println('  match =', r3)
     
     println('\n=== RE tests completed ===')
-    return 0
 }

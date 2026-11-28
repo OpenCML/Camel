@@ -45,7 +45,7 @@ func pooled(x: f32[1, 1, 4, 4]) => f32[...] {
     return max_pool2d<2, 2, 1>(x)
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]) as f32[2, 3]
     let b = reshape<[3]>([0.5, -0.5, 1.5] as f32[]) as f32[3]
     let w = ones::<f32>([3, 4]) as f32[3, 4]
@@ -58,5 +58,4 @@ func main() => int sync {
     println(unordered_reduce<func (acc: int, item: int) => int {
         acc + item
     }, 0>(1 .. 11))
-    return 0
 }

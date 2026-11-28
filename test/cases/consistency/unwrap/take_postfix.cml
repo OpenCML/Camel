@@ -13,12 +13,11 @@ func twice(x: int) => int {
     return x * 2
 }
 
-func main() => int sync {
+func main() sync {
     let xs: (int!)[] = [parse(12), parse(12)]
     println(xs[0]!)
     println(twice(parse(12)!))
     println((parse(12)!))
     println(parse(12)! + parse(12)!)
     println(parse(12)! != 7)
-    return 0
 }

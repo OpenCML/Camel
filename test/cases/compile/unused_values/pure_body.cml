@@ -8,7 +8,6 @@ func twice(a: int) => int {
     return a
 }
 
-func main() => int sync {
+func main() sync {
     println(twice(1))
-    return 0
 }

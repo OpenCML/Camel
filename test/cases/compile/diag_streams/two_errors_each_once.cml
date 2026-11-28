@@ -3,8 +3,7 @@
 // streams"). The reading is the pair of counts -- nothing on stdout, two reports on stderr --
 // so a run that drops a report and a run that prints one twice are both red.
 
-func main() => int sync {
+func main() sync {
     println(not_defined_one)
     println(not_defined_two)
-    return 0
 }

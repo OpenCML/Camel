@@ -8,11 +8,10 @@
  *
  * Run: camel test/cases/compile/var/closure_read_let.cml std::nvm
  */
-func main() => int sync {
+func main() sync {
     let x = 2
     let read = func () {
         x
     }
     println(read())
-    return 0
 }

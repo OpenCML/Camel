@@ -17,7 +17,7 @@ func wrap::<T>(x: T) => PyObject {
     return must(to_py(x))
 }
 
-func main() => int sync {
+func main() sync {
     println('=== Python Module Basic Tests ===')
     
     println("\n[1] [wrap('hello')]->call<print>")
@@ -33,5 +33,4 @@ func main() => int sync {
     println('  ' + (to_string(obj) !! 'failed'))
     
     println('\n=== Basic tests completed ===')
-    return 0
 }

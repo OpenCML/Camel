@@ -7,7 +7,7 @@ func bump(var x: int) {
     x += 5
 }
 
-func main() => int sync {
+func main() sync {
     var i = 1
     let a = i + 1
     bump(i)
@@ -18,5 +18,4 @@ func main() => int sync {
     println(b)
     println(c)
     println(i)
-    return 0
 }

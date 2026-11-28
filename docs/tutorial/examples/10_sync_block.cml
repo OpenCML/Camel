@@ -15,7 +15,6 @@ func report(second: bool) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println(report(true))
-    return 0
 }

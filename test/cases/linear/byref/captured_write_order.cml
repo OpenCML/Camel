@@ -141,7 +141,7 @@ func nested_then_read() => int sync {
     return state::get(x) * 10 + a
 }
 
-func main() => int sync {
+func main() sync {
     println(call_then_call())
     println(call_then_read())
     println(use_then_call())
@@ -153,5 +153,4 @@ func main() => int sync {
     println(recursion_then_read())
     println(fib_then_read())
     println(nested_then_read())
-    return 0
 }

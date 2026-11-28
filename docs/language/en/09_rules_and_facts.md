@@ -152,9 +152,8 @@ func distance(a: int, b: int) => int {
     return abs(a + b)
 }
 
-func main() => int sync {
+func main() sync {
     println(distance(3, 4))
-    return 0
 }
 ```
 
@@ -321,10 +320,9 @@ rule sub_self(x: int) { x - x => 0 }
 
 rule fold_scales(x: int, const c1: int, const c2: int) { x * c1 + x * c2 => x * (c1 + c2) }
 
-func main() => int sync {
+func main() sync {
     println(check_text([sub_self]->check<100, 1>))
     println(check_text([fold_scales]->check<100, 1>))
-    return 0
 }
 ```
 
@@ -362,9 +360,8 @@ func distance(a: int, b: int) => int {
     return abs(a + b)
 }
 
-func main() => int sync {
+func main() sync {
     println(distance(1, -2))
-    return 0
 }
 ```
 

@@ -66,13 +66,12 @@ fs.writeFileSync(
 import math
 import { kind_of } from json
 
-func main() => int sync {
+func main() sync {
     let kind: string = json::decode('123') -> kind_of !! 'none'
     println(kind)
     let tag: json::Tag = { level: 7, text: 'ok' }
     println(tag.level, tag.text)
     println(math::tau)
-    return 0
 }
 `,
 )

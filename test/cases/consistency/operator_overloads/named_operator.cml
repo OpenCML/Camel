@@ -7,8 +7,7 @@ func operator(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     let operator2 = operator(1)
     println(operator2)
-    return 0
 }

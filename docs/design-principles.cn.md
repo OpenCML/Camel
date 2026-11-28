@@ -134,10 +134,10 @@ func log(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     let a = log(1)
     let b = log(a)
-    return b            // 返回 3，打印 1、2
+    b            // 返回 3，打印 1、2
 }
 ```
 

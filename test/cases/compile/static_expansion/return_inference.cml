@@ -22,10 +22,9 @@ func inside::<T>(t: T) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     println(classified({ a: 1 }))
     println(classified((1, 2)))
     println(classified(3))
     println(inside(1))
-    return 0
 }

@@ -12,7 +12,6 @@ func f64_c(x: float) => float {
     return x * 3.0 + x * 5.0
 }
 
-func main() => int sync {
+func main() sync {
     println(i32_c(2), i64_c(2), f32_c(2.0), f64_c(2.0))
-    return 0
 }

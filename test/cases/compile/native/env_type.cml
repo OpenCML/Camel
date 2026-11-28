@@ -6,7 +6,6 @@
 
 import { get_env } from env
 
-func main() => int sync {
+func main() sync {
     println(get_env(42))
-    return 0
 }

@@ -6,8 +6,7 @@ func firstTwo(x: f32[n]) => f32[2] {
     return x
 }
 
-func main() => int sync {
+func main() sync {
     let v: f32[3] = [1.0, 2.0, 3.0]
     println(len(firstTwo(v)))
-    return 0
 }

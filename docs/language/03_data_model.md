@@ -89,12 +89,11 @@ type Pair<T> = (T, T)
 ### 3.3.1 数组
 
 ```cml
-func main() => int sync {
+func main() sync {
     let xs = [1, 2, 3]
     let names: string[] = []          // 空数组要写出类型
     let grid = [[1, 2], [3]]          // int[][]
     println(xs[0], len(xs), grid[0][1])
-    return 0
 }
 ```
 
@@ -126,11 +125,10 @@ func main() => int sync {
 ### 3.3.2 元组
 
 ```cml
-func main() => int sync {
+func main() sync {
     let pair = (1, 'one')
     let (n, s) = pair              // 解构
     println(pair.0, pair.1, n, s)
-    return 0
 }
 ```
 
@@ -152,11 +150,10 @@ func main() => int sync {
 ```cml
 type Point = { x: int, y: int }
 
-func main() => int sync {
+func main() sync {
     let p: Point = { x: 3, y: 4 }
     let q = { x: p.x + 1, y: p.y }     // “修改”就是造一个新的
     println(p, q.x)
-    return 0
 }
 ```
 
@@ -195,10 +192,9 @@ func main() => int sync {
 ```cml
 import { split, trim, to_upper } from str
 
-func main() => int sync {
+func main() sync {
     println('a, b ,c'->split<','>->map<func (w) { trim(w) }>)
     println('héllo'->to_upper, len('héllo'), 'héllo'[1], 'hello'[1])
-    return 0
 }
 ```
 
@@ -229,11 +225,10 @@ func safe_div(a: int, b: int) => int! {
     return if b == 0 then { return error('DivByZero', 'the divisor is zero') } else a / b
 }
 
-func main() => int sync {
+func main() sync {
     println(positive(4) ?? 0, positive(-4) ?? 0)
     println(safe_div(9, 3) !! -1, safe_div(9, 0) !! -1)
     println(safe_div(9, 0))
-    return 0
 }
 ```
 
@@ -320,7 +315,7 @@ func area(s: Shape) => float {
 `Map<K, V>` 与 `Set<T>` 是内建类型，不需要 `import`。没有专门的字面量，用数组加 `as` 构造：
 
 ```cml
-func main() => int sync {
+func main() sync {
     let ages = [('bob', 31), ('alice', 28)] as Map<string, int>
     let more = ages->put<'carol', 45>->remove<'bob'>
     println(ages)
@@ -330,7 +325,6 @@ func main() => int sync {
     let seen = [3, 1, 2, 3, 1] as Set<int>
     println(seen, seen->contains<2>, union(seen, [9] as Set<int>))
     println([] as Map<string, int>)
-    return 0
 }
 ```
 
@@ -372,9 +366,8 @@ func count_words(words: string[]) => Map<string, int> {
     return words->reduce<func (acc: Map<string, int>, w: string) => Map<string, int> { acc->put<w, (acc[w] ?? 0) + 1> }, [] as Map<string, int>>
 }
 
-func main() => int sync {
+func main() sync {
     println(count_words(['a', 'b', 'a']))
-    return 0
 }
 ```
 
@@ -402,7 +395,7 @@ func main() => int sync {
 - **一切值按引用传递。** `var` 形参是引用：函数对它的写入就是对调用方变量的写入。lambda 与分支对变量的捕获也是引用。
 
 ```cml
-func main() => int sync {
+func main() sync {
     var count = 0
     count = count + 1
     count += 10
@@ -413,7 +406,6 @@ func main() => int sync {
     let ys = xs->append<4>     // 新数组；xs 不变
     xs = xs->append<5>         // 追加到变量上：与 x = x + 1 一样，绑定到新数组
     println(xs, ys)
-    return 0
 }
 ```
 

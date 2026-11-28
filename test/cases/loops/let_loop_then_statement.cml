@@ -67,12 +67,11 @@ func in_sync() => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     after_statement()
     after_var()
     second_loop()
     as_statement()
     println(returned())
     in_sync()
-    return 0
 }

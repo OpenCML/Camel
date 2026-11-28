@@ -14,11 +14,10 @@ func loss() => float {
     return float(sum(columns * columns))
 }
 
-func main(n: int) => int sync {
+func main(n: int) sync {
     let xs = [f32(i + 1) for i in 0 .. n]
     let rows = reshape<[2, 3]>(xs)
     println(rows)
     println(sum<0>(rows), sum<1>(rows))
     println(grad(loss)<xs>())
-    return 0
 }

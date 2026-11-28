@@ -18,7 +18,7 @@ func first(x: float) => float {
     return t.0
 }
 
-func main() => int sync {
+func main() sync {
     println(first(1.0))
     let back = transpose(first)
     println(back(1.0))
@@ -26,5 +26,4 @@ func main() => int sync {
     // line cannot print. Without it a plan asserting `1.0` would be satisfied by the forward line
     // alone, and a transpose that answered nothing at all would look green.
     println(back(2.0))
-    return 0
 }

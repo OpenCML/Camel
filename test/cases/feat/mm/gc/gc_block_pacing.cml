@@ -6,7 +6,7 @@
  * program runs, and the number of collections is the volume divided by the window.
  */
 
-func main(steps: int, temp: int) => int sync {
+func main(steps: int, temp: int) sync {
     let keep = (0 .. 5000000)->to_array()
     let start = std::mem::blocks()
     let base = start.bytes
@@ -18,5 +18,4 @@ func main(steps: int, temp: int) => int sync {
         (i - 1, if bytes > peak then bytes else peak, if bytes < low then bytes else low, now.frees - start.frees, total + n)
     }
     println('gc_block_pacing base={} peak={} low={} released={} total={}'->format<base, peak, low, released, total>)
-    return 0
 }

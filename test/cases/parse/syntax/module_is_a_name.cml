@@ -15,7 +15,6 @@ func add_module(e: Entry) => int {
     return e.module + module + e.other
 }
 
-func main() => int sync {
+func main() sync {
     println('sum {}'->format<add_module({ module: 3, other: 4 })>)
-    return 0
 }

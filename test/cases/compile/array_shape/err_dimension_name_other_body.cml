@@ -11,7 +11,7 @@ func other() => int {
     return len(y)
 }
 
-func main() => int sync {
+func main() sync {
     println(len(ones([1.0])))
-    return other()
+    other()
 }

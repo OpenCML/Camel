@@ -16,10 +16,9 @@ func keep(x: int) => int {
     return (x + 1) * 2 - x
 }
 
-func main() => int sync {
+func main() sync {
     println(chain(3, 4))
     println(small(5, 6))
     println(anchor(7))
     println(keep(8))
-    return 0
 }

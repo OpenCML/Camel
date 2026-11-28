@@ -44,7 +44,7 @@ func loss_with(x: float[2, 2], t: float[2, 2]) => float {
     return 0.5 * sum(e * e)
 }
 
-func main() => int sync {
+func main() sync {
     let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let t = [[0.0, 0.0], [1.0, 1.0]] as float[2, 2]
     let w = [[0.5, 0.25], [0.125, 1.0]] as float[2, 2]
@@ -71,5 +71,4 @@ func main() => int sync {
     let dw = max(max(abs(d00 - engine_00), abs(d01 - engine_01)), max(abs(d10 - engine_10), abs(d11 - engine_11)))
     let dv = abs(loss - engine_loss)
     `first_step tensor max_abs_diff_library_vs_engine w={:.12e} loss={:.12e}`->format<dw, dv>->println
-    return 0
 }

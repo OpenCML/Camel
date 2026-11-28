@@ -30,7 +30,6 @@ func make(base: int) => int sync {
     return kept(n)
 }
 
-func main() => int sync {
+func main() sync {
     println(make(7))
-    return 0
 }

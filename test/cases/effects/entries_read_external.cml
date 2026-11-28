@@ -18,8 +18,7 @@ func stamp() => int uses var console sync {
     return 2
 }
 
-func main() => int sync {
+func main() sync {
     println(probe())
     println(stamp())
-    return 0
 }

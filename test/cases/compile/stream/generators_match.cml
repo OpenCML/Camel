@@ -14,8 +14,7 @@ func kind(x: int) => int.. sync {
     yield 0
 }
 
-func main() => int sync {
+func main() sync {
     println(loop acc = 0 for v in kind(1) do acc * 10 + v)
     println(loop acc = 0 for v in kind(3) do acc * 10 + v)
-    return 0
 }

@@ -20,7 +20,7 @@ func add(a: int, b: int) => int {
     return a - (0 - b)
 }
 
-func main() => int sync {
+func main() sync {
     let by_body = add
     let k1 = add(19, 23)
     let b1 = by_body(19, 23)
@@ -31,5 +31,4 @@ func main() => int sync {
     let k4 = add(1000000, -999999)
     let b4 = by_body(1000000, -999999)
     'kernel={},{},{},{} body={},{},{},{}'->format<k1, k2, k3, k4, b1, b2, b3, b4>->println
-    return 0
 }

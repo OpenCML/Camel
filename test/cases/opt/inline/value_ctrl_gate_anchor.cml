@@ -8,8 +8,7 @@ func calc() => int sync {
     return y
 }
 
-func main() => int sync {
+func main() sync {
     let out = calc()
     'inline_value_ctrl_gate_anchor out={}'->format<out>->println
-    return 0
 }

@@ -8,7 +8,6 @@ func kind::<T>(x: T) => string when is_complex::<T>() {
     return 'complex'
 }
 
-func main() => int sync {
+func main() sync {
     println(kind('text'))
-    return 0
 }

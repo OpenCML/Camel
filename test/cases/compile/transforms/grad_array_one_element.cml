@@ -7,10 +7,9 @@ func g(xs: float[]) => float {
     return xs[0]
 }
 
-func main() => int sync {
+func main() sync {
     let (value, pullback) = vjp(g)([3.0])
     println(value)
     let cotangents = pullback(1.0)
     println(cotangents.0)
-    return 0
 }

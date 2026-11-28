@@ -8,7 +8,7 @@ func step(n: int) => int {
     return n * 2 + 1
 }
 
-func main() => int sync {
+func main() sync {
     println('linear 0')
     let a = step(1)
     println('linear 1', a)
@@ -22,5 +22,5 @@ func main() => int sync {
     let p = step(40)
     let q = step(41)
     println('linear 4', p + q)
-    return 0
+    0
 }

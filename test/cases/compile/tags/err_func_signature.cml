@@ -10,6 +10,5 @@ func twice_float(x: float) => float {
 
 type Box = { #rule(twice_float) scaled: int }
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

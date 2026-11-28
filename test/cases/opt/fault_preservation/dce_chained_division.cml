@@ -9,7 +9,7 @@ func check(z: int) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println('before')
-    return check(0)
+    check(0)
 }

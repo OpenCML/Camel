@@ -22,9 +22,8 @@ func twoRounds(first: int..) => (int, int..) {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let (rounds, rest) = twoRounds(count(3))
     println(rounds)
     println(loop acc = 0 for x in rest do acc + x)
-    return 0
 }

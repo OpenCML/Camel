@@ -24,8 +24,7 @@ func show(r: int?!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(show(lookup(-1)))
     println(show(lookup(5)))
-    return 0
 }

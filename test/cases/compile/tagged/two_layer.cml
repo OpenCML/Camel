@@ -24,7 +24,7 @@ func absent() => int?! {
     return null
 }
 
-func main() => int sync {
+func main() sync {
     // `int!?` (nullable(fallible(int))): the outer form is the null, so `case null` is
     // exhaustive; the value arm still holds an `int!`, which `!!` opens.
     let a = seven()
@@ -49,5 +49,4 @@ func main() => int sync {
         case error e => -7
         case v => v ?? -8
     })
-    return 0
 }

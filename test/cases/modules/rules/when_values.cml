@@ -32,7 +32,6 @@ func negative_case(x: float) => float {
     return x * -3.0
 }
 
-func main() => int sync {
+func main() sync {
     println(positive_case(5.0), negative_case(5.0))
-    return 0
 }

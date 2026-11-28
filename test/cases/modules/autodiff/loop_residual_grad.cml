@@ -68,7 +68,7 @@ func mag(x: float) => float {
     return if x < 0.0 then 0.0 - x else x
 }
 
-func main() => int sync {
+func main() sync {
     let w = [0.5, -1.0, 2.0, 0.25] as float[4]
     let xs = [[1.0, 2.0, 3.0, 4.0], [2.0, 0.0, -1.0, 1.0], [0.5, 0.5, 0.5, 0.5], [-1.0, 1.0, -1.0, 1.0], [3.0, 3.0, 3.0, 3.0], [0.0, 0.0, 0.0, 0.0]] as float[6, 4]
     let ts = [5.0, 0.0, 1.0, -3.0, 5.0, 0.0] as float[6]
@@ -95,5 +95,5 @@ func main() => int sync {
     println('worst {}'->format<worst>)
     let stepped = [w[0] - 0.1 * g.w[0], w[1] - 0.1 * g.w[1], w[2] - 0.1 * g.w[2], w[3] - 0.1 * g.w[3]] as float[4]
     println('stepped {}'->format<stepped>)
-    return if worst <= 0.000000001 then 0 else 1
+    if worst <= 0.000000001 then 0 else 1
 }

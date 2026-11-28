@@ -29,7 +29,7 @@ func active_array() => float {
     return float(sum(y))
 }
 
-func main() => int sync {
+func main() sync {
     let w = reshape<[2]>([10.0, 20.0])
     let g = grad(skip_constant_array)<w>()
     'concat_array_part sum={:.1f} sq={:.1f}'->format<sum(g), sum(g * g)>->println
@@ -43,5 +43,4 @@ func main() => int sync {
         d0 * d0 + d1 * d1,
         sum(concat<0>(xs, reshape<[2]>([10.0, 20.0])))
     >->println
-    return 0
 }

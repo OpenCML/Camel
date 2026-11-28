@@ -14,7 +14,6 @@ func twice::<T>(x: T) => T when is_real::<T>() {
     return x + x
 }
 
-func main() => int sync {
+func main() sync {
     println(twice(21), twice(1.25))
-    return 0
 }

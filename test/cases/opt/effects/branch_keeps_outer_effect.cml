@@ -10,8 +10,7 @@ func pick(c: bool) => int {
     return r + println(3)
 }
 
-func main() => int sync {
+func main() sync {
     println(pick(true))
     println(pick(false))
-    return 0
 }

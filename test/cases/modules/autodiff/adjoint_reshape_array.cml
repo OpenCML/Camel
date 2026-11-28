@@ -47,7 +47,7 @@ func distance(g: float[], e0: float, e1: float, e2: float, e3: float) => float {
     return d0 * d0 + d1 * d1 + d2 * d2 + d3 * d3
 }
 
-func main() => int sync {
+func main() sync {
     let model = { w: 2.0 }
     let g = grad(loss)<model>()
     let w = [1.0, 2.0, 3.0, 4.0]
@@ -58,5 +58,4 @@ func main() => int sync {
         gw,
         distance(gw, 2.0, 3.0, 5.0, 7.0)
     >->println
-    return 0
 }

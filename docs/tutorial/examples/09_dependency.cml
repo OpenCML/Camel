@@ -26,7 +26,6 @@ func total_with_a_spare(n: int) => int {
     return total(n)
 }
 
-func main() => int sync {
+func main() sync {
     println(total(10), total_with_a_spare(10))
-    return 0
 }

@@ -9,7 +9,6 @@ func scaled(
 ) => float {
     return float(sum(a)) + float(sum(b)) + float(sum(c))
 }
-func main() => int sync {
+func main() sync {
     println(scaled(ones::<f32>([2]), ones::<f32>([3]), ones::<f32>([99])))
-    return 0
 }

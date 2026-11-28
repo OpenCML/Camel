@@ -8,8 +8,7 @@ func to_set::<T>(x: T) => Set<T> {
     return [x] as Set<T>
 }
 
-func main() => int sync {
+func main() sync {
     println(to_set(Boxed::Empty))
     println('never printed')
-    return 0
 }

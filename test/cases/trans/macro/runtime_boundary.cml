@@ -11,8 +11,7 @@ func add_one(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     let value = add_one(seed())
     'macro_runtime_boundary value={}'->format<value>->println
-    return 0
 }

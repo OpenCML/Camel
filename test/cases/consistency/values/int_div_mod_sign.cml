@@ -9,7 +9,7 @@ func rem(a: int, b: int) => int {
     return a % b
 }
 
-func main() => int sync {
+func main() sync {
     println(div(7, 2))
     println(div(-7, 2))
     println(div(7, -2))
@@ -20,5 +20,4 @@ func main() => int sync {
     println(rem(-7, -2))
     println(div(-1, 2))
     println(rem(-1, 2))
-    return 0
 }

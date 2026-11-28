@@ -12,10 +12,9 @@ func both(xs: float[]) => float {
     return xs[1] * xs[0]
 }
 
-func main() => int sync {
+func main() sync {
     let (value, pullback) = vjp(both)([3.0, 2.0])
     let cotangents = pullback(1.0)
     println(value)
     println(cotangents)
-    return 0
 }

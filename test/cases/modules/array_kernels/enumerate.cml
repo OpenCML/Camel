@@ -4,9 +4,8 @@
 
 import { enumerate } from array
 
-func main() => int sync {
+func main() sync {
     println(['a', 'b']->enumerate)
     let none: string[] = []
     println(len(none->enumerate))
-    return 0
 }

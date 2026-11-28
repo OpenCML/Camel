@@ -16,6 +16,6 @@ func report(j: Json) => int sync {
     return 0
 }
 
-func main() => int sync {
-    return decode('{"a":1}')->report !! 1
+func main() sync {
+    decode('{"a":1}')->report !! 1
 }

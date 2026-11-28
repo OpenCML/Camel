@@ -1,8 +1,8 @@
 /**
- * An error value that is handled before `main` returns is not reported.
+ * An error value that is handled with `!!` before `main` returns is not reported. `main`
+ * declares no return type, so the value of its body (`println`'s argument, -1) is not written.
  */
 
-func main() => int sync {
+func main() sync {
     println(parse_int('12abc') !! -1)
-    return 0
 }

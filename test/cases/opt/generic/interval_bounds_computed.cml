@@ -11,8 +11,7 @@ func counted(n: int) => int sync {
     return v
 }
 
-func main() => int sync {
+func main() sync {
     let n = 2
     println('counted', counted(n))
-    return 0
 }

@@ -19,7 +19,7 @@ func nested(n: int) => int sync {
     return r
 }
 
-func main() => int sync {
+func main() sync {
     let a = show('a', 1)
     let b = show('b', a)
     if b > 2 then sync {
@@ -32,5 +32,4 @@ func main() => int sync {
     let c = show('c', b)
     let d = show('d', a)
     println(c + d)
-    return 0
 }

@@ -16,10 +16,9 @@ func three() => int {
     return 3
 }
 
-func main() => int sync {
+func main() sync {
     let a = reshape<[2, 3]>([0.5, 0.5, 0.5, 0.5, 0.5, 0.5] as f32[]) as f32[2, 3]
     let b = weights() as f32[?, 3]
     let n = float(three())
     println(float(sum(a * b)) * n)
-    return 0
 }

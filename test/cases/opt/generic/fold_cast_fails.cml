@@ -10,9 +10,8 @@ func weights() => f32[...] {
     return reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
 }
 
-func main() => int sync {
+func main() sync {
     println('before')
     let c = weights() as f32[3, 2]
     println(sum(c))
-    return 0
 }

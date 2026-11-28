@@ -96,7 +96,7 @@ func after_the_write() => int {
     return report('after', a, c)
 }
 
-func main() => int sync {
+func main() sync {
     through_var_argument()
     through_assignment()
     through_array_assignment()
@@ -104,5 +104,4 @@ func main() => int sync {
     through_loop()
     between_two_writes()
     after_the_write()
-    return 0
 }

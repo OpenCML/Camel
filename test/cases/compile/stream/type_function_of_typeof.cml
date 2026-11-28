@@ -11,7 +11,6 @@ func first(xs: int[]) => int sync {
     return e
 }
 
-func main() => int sync {
+func main() sync {
     println(first([7, 8]))
-    return 0
 }

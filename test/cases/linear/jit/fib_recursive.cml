@@ -11,11 +11,10 @@ func check(n: int, expected: int, code: int) => int {
     return if actual == expected then 0 else code
 }
 
-func main() => int sync {
+func main() sync {
     let f0 = fib(0)
     let f1 = fib(1)
     let f10 = fib(10)
     let f15 = fib(15)
     'fib_recursive f0={} f1={} f10={} f15={}'->format<f0, f1, f10, f15>->println
-    return 0
 }

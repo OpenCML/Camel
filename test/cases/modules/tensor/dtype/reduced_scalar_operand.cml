@@ -24,7 +24,7 @@
 
 import { reshape, sum, where } from tensor
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[4]>([1.0, 2.0, 3.0, 4.0] as f32[])
     let b = bf16(x)
     let h = f16(x)
@@ -37,5 +37,4 @@ func main() => int sync {
     
     // The same lines with the tensor on the right: the scalar is read by the same rule.
     println(sum(2.0 * b), sum(2.0 + b), sum(2.0 - b))
-    return 0
 }

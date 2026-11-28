@@ -6,18 +6,18 @@
 import { export_model } from onnx
 import { reshape } from tensor
 
-func main() => int sync {
+func main() sync {
     let r = export_model<out: 'tmp/test/onnx/refusal_arity.onnx'>(func (a: float[...], b: float[...]) => float[...] {
         a + b
     }, reshape<[2]>([1.0, 2.0]))
-    return match r {
+    match r {
         case error e => sync {
             println(e)
-            return 1
+            1
         }
         case _ => sync {
             println('exported')
-            return 0
+            0
         }
     }
 }

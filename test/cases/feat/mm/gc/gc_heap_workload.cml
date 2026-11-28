@@ -22,7 +22,7 @@ func map_one(xs: int[]) => int[] sync {
     }>
 }
 
-func main() => int sync {
+func main() sync {
     let boxes = (0 .. 16)->map<func (i: int) => Box {
         let vals = [i, i + 1, i + 2]
         return { label: 'box{}'->format<i>, values: vals }
@@ -37,5 +37,4 @@ func main() => int sync {
     let mapped3 = mapped[3]
     
     'gc_heap boxes={} first={} last={} mapped3={}'->format<len(boxes), score(first), score(last), mapped3>->println
-    return 0
 }

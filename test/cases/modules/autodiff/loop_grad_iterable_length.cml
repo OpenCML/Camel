@@ -13,7 +13,6 @@ func f(n: int) => float {
     return loop acc = 0.0 for x in xs do acc + x
 }
 
-func main() => int sync {
+func main() sync {
     'loop_grad_iterable_length n2={} n4={}'->format<grad(f)<2.0>(2), grad(f)<2.0>(4)>->println
-    return 0
 }

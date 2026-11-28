@@ -8,7 +8,6 @@ func g() sync {
     yield 1
 }
 
-func main() => int sync {
+func main() sync {
     g()
-    return 0
 }

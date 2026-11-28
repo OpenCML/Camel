@@ -7,7 +7,6 @@ func id::<A>(x: A) => A {
 func pair::<A>(x: A) => (A, A) {
     return (x, x)
 }
-func main() => int sync {
+func main() sync {
     println(apply(id, 3), [1, 2]->map<pair>)
-    return 0
 }

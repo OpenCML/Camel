@@ -51,9 +51,8 @@ func total(x: float[...]) => float {
     return sum(log_softmax<0>(x))
 }
 
-func main() => int sync {
+func main() sync {
     let (value, pullback) = vjp(total)([1.0, 2.0, 3.0] as float[])
     let d = pullback(1.0).0
     `log_softmax library value={} d={}`->format<value, d>->println
-    return 0
 }

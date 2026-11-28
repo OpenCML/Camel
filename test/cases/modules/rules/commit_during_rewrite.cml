@@ -35,9 +35,9 @@ func redex(x: int) => int {
 
 import { exit } from process
 
-func main() => int sync {
+func main() sync {
     let p = redex
-    return match p->rewrite<[add_zero]> {
+    match p->rewrite<[add_zero]> {
         case error e => sync {
             println('outer error value: ', e.kind, ' | ', e.message)
             exit(1)

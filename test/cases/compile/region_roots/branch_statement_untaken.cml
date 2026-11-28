@@ -17,7 +17,6 @@ func untaken() => int {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     untaken()
-    return 0
 }

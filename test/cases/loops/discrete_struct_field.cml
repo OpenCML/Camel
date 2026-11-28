@@ -12,7 +12,6 @@ func f() => float {
     return p.w * float(p.n)
 }
 
-func main() => int sync {
+func main() sync {
     println(grad(f)<2.0>())
-    return 0
 }

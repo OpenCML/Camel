@@ -16,6 +16,6 @@ func report() => int sync {
     return 0
 }
 
-func main() => int sync {
-    return report()
+func main() sync {
+    report()
 }

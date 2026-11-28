@@ -2,7 +2,6 @@
 /// which file is used does not depend on the order the directory is listed in.
 import { value } from thing
 
-func main() => int sync {
+func main() sync {
     println(value)
-    return 0
 }

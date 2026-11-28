@@ -21,6 +21,6 @@ func spin() => int sync {
     return 0
 }
 
-func main() => int sync {
-    return spin()
+func main() sync {
+    spin()
 }

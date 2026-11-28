@@ -12,6 +12,6 @@ func caller(on: bool) => int {
     return add<on>(41)
 }
 
-func main() => int sync {
-    return caller(true)
+func main() sync {
+    caller(true)
 }

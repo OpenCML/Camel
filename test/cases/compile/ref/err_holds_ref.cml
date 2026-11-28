@@ -6,10 +6,9 @@
 
 import state
 
-func main() => int sync {
+func main() sync {
     let inner = state::ref(1)
     let outer = state::ref(inner)
     let back = state::get(outer)
     println(state::get(back))
-    return 0
 }

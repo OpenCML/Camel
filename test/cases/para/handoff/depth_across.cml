@@ -32,11 +32,10 @@ func descend(a: int, b: int) => int {
     return if a == 0 then bottom(b) else 1 + descend(a - 1, b)
 }
 
-func main() => int sync {
+func main() sync {
     let a = int(get_env('A') ?? '')
     let b = int(get_env('B') ?? '')
     println('start')
     println(descend(a, b))
     println('done')
-    return 0
 }

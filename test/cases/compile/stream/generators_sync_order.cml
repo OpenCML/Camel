@@ -29,7 +29,7 @@ func opening() => int.. sync {
     println('end')
 }
 
-func main() => int sync {
+func main() sync {
     println(loop acc = 0 for v in counted() do sync {
         println(v)
         acc + v
@@ -38,5 +38,4 @@ func main() => int sync {
         println(v)
         acc + v
     })
-    return 0
 }

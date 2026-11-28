@@ -34,7 +34,7 @@ func plane_argmax(x: float[2, 2]) => int {
     return argmax(x)
 }
 
-func main() => int sync {
+func main() sync {
     let xs: float[3, 3] = [[1.0, 2.0, 3.0], [4.0, 9.0, 6.0], [7.0, 8.0, 5.0]]
     println(vmap(row_argmax)(xs))
     println(row_vmap(row_argmax)(xs))
@@ -44,5 +44,4 @@ func main() => int sync {
     let planes: float[2, 2, 2] = [[[1.0, 5.0], [3.0, 2.0]], [[9.0, 1.0], [2.0, 3.0]]]
     println(vmap(plane_argmax)(planes))
     println(row_vmap(plane_argmax)(planes))
-    return 0
 }

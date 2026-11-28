@@ -26,8 +26,7 @@ func positioned(c: bool) => int sync {
     return int(v)
 }
 
-func main() => int sync {
+func main() sync {
     println(free(true), free(false))
     println(positioned(true), positioned(false))
-    return 0
 }

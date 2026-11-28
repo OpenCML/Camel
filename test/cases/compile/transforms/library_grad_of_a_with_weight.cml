@@ -50,7 +50,7 @@ func mulxy(x: float, y: float) => float {
     return x * y
 }
 
-func main() => int sync {
+func main() sync {
     // The engine's leg, for the number the library's leg has to match.
     let (engine_value, engine_gradient) = with_grad(weighted)<3.0>(2.0)
     
@@ -69,5 +69,4 @@ func main() => int sync {
         mulxy(rr, ss)
     })(3.0, 2.0)
     'twoparam value={} pullback={}'->format<twoValue, twoPullback(1.0)>->println
-    return 0
 }

@@ -35,9 +35,8 @@ func both_kept() => int sync {
     return println(2)
 }
 
-func main() => int sync {
+func main() sync {
     println(first_dropped())
     println(write_used())
     println(both_kept())
-    return 0
 }

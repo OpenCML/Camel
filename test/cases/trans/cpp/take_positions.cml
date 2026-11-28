@@ -6,12 +6,11 @@ func take(xs: int[], order: int[]) => int[] {
     return xs[order]
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [10, 20, 30, 40]
     let order = [3, 0, 2]
     println(take(xs, order), take(xs, [1, 1]), xs)
     
     let f: f32[3] = [1.5, 2.5, 3.5]
     println(f[[2, 0, 2]])
-    return 0
 }

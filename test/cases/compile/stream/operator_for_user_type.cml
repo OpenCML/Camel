@@ -31,12 +31,11 @@ func operator for(c: Counter) => int.. {
     return counter_upto(c.lo, c.hi)
 }
 
-func main() => int sync {
+func main() sync {
     let c: Counter = { lo: 2, hi: 5 }
     // The loop calls the type's own operator: the rounds are 2, 3, 4.
     println(loop acc = 0 for i in c do acc * 10 + i)
     // Walked again: the operator answers a fresh stream each time, so the second loop reads all
     // three rounds of 2, 3, 4 rather than continuing the first one.
     println(loop n = 0 for i in c do n + 1)
-    return 0
 }

@@ -5,10 +5,9 @@
 import { embedding } from nn
 import { reshape, sum } from tensor
 
-func main() => int sync {
+func main() sync {
     let table = reshape<[2, 2]>([0.1, 0.2, 0.3, 0.4])
     let indices = reshape<[2]>([0, 2])
     let gathered = embedding(table, indices)
     'embedding_index_error gathered_sum={}'->format<sum(gathered)>->println
-    return 0
 }

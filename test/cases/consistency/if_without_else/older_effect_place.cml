@@ -15,9 +15,8 @@ func older(c: bool) => int sync {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     println('before')
     println(older(true), older(false))
     println('after')
-    return 0
 }

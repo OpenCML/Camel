@@ -7,7 +7,6 @@ func keep(x: int) => int {
     return y
 }
 
-func main() => int sync {
+func main() sync {
     println(keep(3))
-    return 0
 }

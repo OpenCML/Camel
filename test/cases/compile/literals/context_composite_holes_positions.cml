@@ -26,9 +26,8 @@ func receiverPosition(n: float) => f32 {
     return [1.0000000596046447753906251, f32(n)]->first
 }
 
-func main() => int sync {
+func main() sync {
     println('{:.9g}'->format<argumentPosition(2.0)>)
     println('{:.9g}'->format<declarationPosition(2.0)>)
     println('{:.9g}'->format<receiverPosition(2.0)>)
-    return 0
 }

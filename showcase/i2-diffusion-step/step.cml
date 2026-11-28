@@ -126,7 +126,7 @@ func initial(seed: int) => Denoiser {
 // Every step trains on the *same* timestep and the same noise (both follow from `seed` and `t`),
 // which is what makes the three lines comparable: a curve over steps that each drew their own
 // noise would mix the noise level into the reading.  `--arg t=0..3` walks the schedule.
-func main(seed: int = 7, steps: int = 3, lr: float = 0.02, t: int = 1) => int sync {
+func main(seed: int = 7, steps: int = 3, lr: float = 0.02, t: int = 1) sync {
     let x0 = batch()
     let model = initial(seed)
     let loss_with_grad = with_grad(loss)
@@ -141,7 +141,7 @@ func main(seed: int = 7, steps: int = 3, lr: float = 0.02, t: int = 1) => int sy
         let (value, gradient) = loss_with_grad<m>(x_t, eps)
         `i2 step=${step} loss=${value:.6f}`->println
         let next = adam(m, gradient, opt, lr)
-        return (next.0, next.1, step + 1)
+        (next.0, next.1, step + 1)
     }
     let _ = optimizer
     let _ = final_step
@@ -149,5 +149,4 @@ func main(seed: int = 7, steps: int = 3, lr: float = 0.02, t: int = 1) => int sy
     // The same objective on the trained parameters: what a reader compares with the last line.
     let after = loss<trained>(x_t, eps)
     `i2 trained t=${t % 4} loss=${after:.6f}`->println
-    return 0
 }

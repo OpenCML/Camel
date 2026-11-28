@@ -31,7 +31,7 @@ func by_body_d(xs: float[], ys: float[]) => float[] {
     return all[argsort(all)]
 }
 
-func main() => int sync {
+func main() sync {
     let a_i: i32[] = [1, 4, 6]
     let b_i: i32[] = [2, 3, 7]
     let a_l: int[] = [10, 40, 60]
@@ -67,5 +67,4 @@ func main() => int sync {
     
     // the inputs are unchanged
     println('input', a_i, b_i, u_i, v_i)
-    return 0
 }

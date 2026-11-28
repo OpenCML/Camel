@@ -35,7 +35,7 @@ func operator <(a: Vec, b: Vec) => bool {
     return a.x < b.x
 }
 
-func main() => int sync {
+func main() sync {
     let m: Mask = { bits: 1 }
     let n: Mask = { bits: 0 }
     println((m & n).bits, (m | n).bits, (!n).bits)
@@ -51,5 +51,4 @@ func main() => int sync {
     mask &= m
     mask |= m
     println(acc.x, acc.y, mask.bits)
-    return 0
 }

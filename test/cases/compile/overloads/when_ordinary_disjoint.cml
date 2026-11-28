@@ -33,7 +33,6 @@ func label(x: int) => string when is_text::<int>() {
     return 'text'
 }
 
-func main() => int sync {
+func main() sync {
     println(label(7))
-    return 0
 }

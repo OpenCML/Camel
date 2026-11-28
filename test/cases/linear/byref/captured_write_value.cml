@@ -73,11 +73,10 @@ func used_case() => int sync {
     return r * 10 + m
 }
 
-func main() => int sync {
+func main() sync {
     println(two_case())
     println(void_case())
     println(plain_case())
     println(unused_case())
     println(used_case())
-    return 0
 }

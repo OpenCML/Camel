@@ -15,7 +15,7 @@ func one(i: int) => f32 {
     return 1.0
 }
 
-func main() => int sync {
+func main() sync {
     // (1 + 2^-23) * (1 - 2^-23) rounds to 1 in f32 before adding -1.
     // The normative matmul FMA chain must retain the residual -2^-46, which rounds into the operand's
     // element type with no loss; the f64 reading the assertion names is the conversion written here
@@ -28,5 +28,4 @@ func main() => int sync {
     let ordered = reshape<[1, 34]>((0 .. 34)->map<ordered_term>)
     let ones = reshape<[34, 1]>((0 .. 34)->map<one>)
     println(float(sum(download(run_preferred_resident<product>((ordered, ones))))))
-    return 0
 }

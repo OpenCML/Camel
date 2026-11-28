@@ -16,6 +16,6 @@ func second(p: int) => int {
     return p
 }
 
-func main() => int {
-    return first(1) + second(2)
+func main() {
+    first(1) + second(2)
 }

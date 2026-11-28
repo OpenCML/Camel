@@ -9,7 +9,6 @@ func never_called::<T>(x: T) => T {
     return x + no_such_name
 }
 
-func main() => int sync {
+func main() sync {
     println('ok')
-    return 0
 }

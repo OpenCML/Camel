@@ -13,7 +13,6 @@ func later_than_epoch() => bool uses clock sync {
     return now() > 0.0
 }
 
-func main() => int sync {
+func main() sync {
     println(later_than_epoch())
-    return 0
 }

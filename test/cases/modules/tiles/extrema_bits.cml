@@ -17,7 +17,7 @@ func fused(a: f32[...], b: f32[...]) => f32[...] {
 func rows(a: f32[...]) => f32[...] {
     return max<-1>(a)
 }
-func main() => int sync {
+func main() sync {
     let folder = get_env('TILES_TEST_OUT') ?? ''
     let a = load_npy::<f32>(folder + '/a.npy') as f32[...]
     let b = load_npy::<f32>(folder + '/b.npy') as f32[...]
@@ -38,5 +38,4 @@ func main() => int sync {
     save_npy(rows(r), folder + '/rows_cpu.npy')
     save_npy(download(run_preferred_resident<rows>(r)), folder + '/rows_gpu.npy')
     println(inspect<fused>((a, b)))
-    return 0
 }

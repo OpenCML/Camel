@@ -26,9 +26,8 @@ func total() => float {
     return sum(relu(w))
 }
 
-func main() => int sync {
+func main() sync {
     let slope = grad(total)
     let d = slope<[-2.0, 0.0, 3.0, -0.5] as float[]>()
     `relu engine dL/dw={}`->format<d>->println
-    return 0
 }

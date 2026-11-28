@@ -8,8 +8,7 @@ func square(x: float) => float {
     return x * x
 }
 
-func main() => int sync {
+func main() sync {
     let (value, tangent) = jvp(square)(3.0, 1.0)
     println(`jvp square at 3 = ${value:.1f} and ${tangent:.1f}`)
-    return 0
 }

@@ -33,7 +33,7 @@ func adder::<T>(n: T) => (x: T) => T {
     }
 }
 
-func main() => int sync {
+func main() sync {
     // a lambda whose parameter types are written out instantiates the generic function
     println([1, 2, 3]->map<func (x: int) {
         id(x) * 2
@@ -66,5 +66,4 @@ func main() => int sync {
     println(greet('hi'))
     // method-call syntax
     println(7->id)
-    return 0
 }

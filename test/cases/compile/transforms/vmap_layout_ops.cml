@@ -58,7 +58,7 @@ func width(r: float[2, 2]) => int {
     return dim<1>(r)
 }
 
-func main() => int sync {
+func main() sync {
     let rows: float[3, 4] = [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0], [9.0, 1.0, 2.0, 3.0]]
     println(vmap(to_matrix)(rows))
     println(vmap(to_cube)(rows))
@@ -74,5 +74,4 @@ func main() => int sync {
     println(vmap(flip)(planes))
     println(vmap(join)(planes))
     println(vmap(width)(planes))
-    return 0
 }

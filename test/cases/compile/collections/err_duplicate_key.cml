@@ -1,6 +1,5 @@
 // Two equal constant keys in a literal converted to a map are taken for a mistake.
-func main() => int sync {
+func main() sync {
     let m = [('a', 1), ('b', 2), ('a', 3)] as Map<string, int>
     println('never printed')
-    return 0
 }

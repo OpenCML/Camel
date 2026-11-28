@@ -6,7 +6,6 @@ func same::<T, T>(a: T, b: T) => T {
     return a
 }
 
-func main() => int sync {
+func main() sync {
     println(same(1, 2))
-    return 0
 }

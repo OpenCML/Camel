@@ -5,8 +5,7 @@ type Pair = { a: int, b: int }
 
 type Rec = enum { Tag, Point(Pair) }
 
-func main() => int sync {
+func main() sync {
     let s = [Rec::Tag] as Set<Rec>
     println('never printed')
-    return 0
 }

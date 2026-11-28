@@ -63,10 +63,9 @@ func targetIn::<F>(p: F) => Graph {
     return found[0]
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     let rules: Rule[] = [drop_one]
     let q = user->rewrite<rules> !! user
     println('gr', addOnes(targetIn(user)), addOnes(targetIn(q)))
     println('val', user(5), q(5))
-    return 0
 }

@@ -8,7 +8,7 @@ func f(a: int, b: int = 2) => int {
     return a + b
 }
 
-func main() => int sync {
+func main() sync {
     let g = f
-    return g(1)
+    g(1)
 }

@@ -21,7 +21,7 @@ func valid_points(points: Point[]) => Point[] {
     }>
 }
 
-func main() => int sync {
+func main() sync {
     let points = [
         { x: 1, y: 2 },
         { x: 9, y: 9 },
@@ -34,5 +34,4 @@ func main() => int sync {
     let p1 = cleaned[1]
     let p2 = cleaned[2]
     'lambda_points len={} p0x={} p1y={} p2x={}'->format<len(cleaned), p0.x, p1.y, p2.x>->println
-    return 0
 }

@@ -10,6 +10,5 @@ func operator for(c: Counter) => int {
     return c.n
 }
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

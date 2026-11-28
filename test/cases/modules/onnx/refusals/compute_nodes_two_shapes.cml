@@ -26,7 +26,7 @@ func spin(n: int) => int sync {
     return if n <= 0 then 0 else spin(n - 1)
 }
 
-func main() => int sync {
+func main() sync {
     // The refusal is what this case measures, and binding it would add compute nodes to the
     // function whose size the refusal reports, so the value stays unbound: the compiler reports
     // that with its own warning.
@@ -39,5 +39,5 @@ func main() => int sync {
     println(x)
     println(v)
     println(x)
-    return spin(x)
+    spin(x)
 }

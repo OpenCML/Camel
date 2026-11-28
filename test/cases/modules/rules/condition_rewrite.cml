@@ -25,16 +25,16 @@ func redex(x: int) => int {
     return x * 1 + 0
 }
 
-func main() => int sync {
+func main() sync {
     let p = redex
-    return match p->rewrite<[add_zero]> {
+    match p->rewrite<[add_zero]> {
         case error e => sync {
             println('outer error value: ', e.kind)
-            return 1
+            1
         }
         case q => sync {
             println('rewritten')
-            return 0
+            0
         }
     }
 }

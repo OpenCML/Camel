@@ -10,7 +10,6 @@ func f(s: string) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(f('a'), f('b'))
-    return 0
 }

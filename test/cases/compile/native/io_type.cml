@@ -6,7 +6,6 @@
 
 import { get_chars } from io
 
-func main() => int sync {
+func main() sync {
     println(get_chars('3'))
-    return 0
 }

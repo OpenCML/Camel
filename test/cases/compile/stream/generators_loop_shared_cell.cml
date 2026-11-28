@@ -14,7 +14,6 @@ func count() => int.. sync {
     yield i
 }
 
-func main() => int sync {
+func main() sync {
     println(loop acc = 0 for v in count() do acc * 10 + v)
-    return 0
 }

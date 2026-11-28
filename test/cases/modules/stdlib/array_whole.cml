@@ -9,7 +9,7 @@
 import { find_index, chunks, flatten, mean, argmax, argmin, sum, min, max, sort_by, unique, take, drop } from array
 import { nan } from math
 
-func main() => int sync {
+func main() sync {
     let xs = [3, 9, 2, 9]
     println(xs->find_index<func (x) {
         x > 4
@@ -31,5 +31,4 @@ func main() => int sync {
     println(['pear', 'fig', 'apple']->sort_by<func (w) {
         len(w)
     }>)
-    return 0
 }

@@ -33,9 +33,8 @@ func twice::<T>(x: T) => T when is_numeric::<T>() {
     return x + x
 }
 
-func main() => int sync {
+func main() sync {
     println(double(21))
     println(twice(4))
     println(twice(1.5))
-    return 0
 }

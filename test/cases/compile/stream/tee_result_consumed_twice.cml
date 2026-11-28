@@ -20,10 +20,9 @@ func total(s: int..) => int {
     return loop acc = 0 for x in s do acc + x
 }
 
-func main() => int sync {
+func main() sync {
     let (left, right) = stream::tee<2>(count(3))
     println(total(left))
     println(total(left))
     println(total(right))
-    return 0
 }

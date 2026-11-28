@@ -19,7 +19,6 @@ resource cell_v overwriting idempotent
 resource geometry readonly
 resource trace observed
 
-func main() => int {
+func main() {
     println(42)
-    return 0
 }

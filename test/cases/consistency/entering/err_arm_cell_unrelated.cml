@@ -18,7 +18,6 @@ func bad(c: bool) => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(bad(true))
-    return 0
 }

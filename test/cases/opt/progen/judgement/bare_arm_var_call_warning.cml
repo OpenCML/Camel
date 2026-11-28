@@ -14,10 +14,9 @@ func wr(var c: int, x: int) => int sync {
     return c
 }
 
-func main() => int sync {
+func main() sync {
     let a = 3
     var c = 0
     let r = if a > 2 then wr(c, 5) else 0
     println('after')
-    return 0
 }

@@ -2,7 +2,6 @@
  * The program the `capture_pass` pass runs over.
  */
 
-func main() => int sync {
+func main() sync {
     println('target ok')
-    return 0
 }

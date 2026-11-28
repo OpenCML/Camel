@@ -51,10 +51,9 @@ func lane_mean(t: float[4]) => float {
     return mean<0, false>(t)
 }
 
-func main() => int sync {
+func main() sync {
     let t: float[4] = [1.0, 2.0, 3.0, 4.0]
     let d = transpose(lane_mean)(1.0).0
     'lane_mean value={}'->format<lane_mean(t)>->println
     'lane_mean d = {} {} {} {}'->format<d[0], d[1], d[2], d[3]>->println
-    return 0
 }

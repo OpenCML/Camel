@@ -34,12 +34,11 @@ func through_conditions(c: float) => int[] {
     }]
 }
 
-func main() => int sync {
+func main() sync {
     println(through_array(3, 1.5))
     println(through_call(3, 1.5))
     println(through_while(3, 1.5))
     println(through_branch(3, 1.5, true), through_branch(3, 1.5, false))
     println(through_match(1, 0.5))
     println(through_conditions(1.5), through_conditions(0.5))
-    return 0
 }

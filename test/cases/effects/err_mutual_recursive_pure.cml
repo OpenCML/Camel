@@ -11,7 +11,6 @@ func pong(n: int) => int sync {
     return if n <= 0 then 0 else ping(n - 1)
 }
 
-func main() => int sync {
+func main() sync {
     println(ping(3))
-    return 0
 }

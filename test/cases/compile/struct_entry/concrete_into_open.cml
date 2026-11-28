@@ -21,12 +21,11 @@ func make() => Mlp {
     return { w: ones::<f32>([784, 10]), b: ones::<f32>([10]) }
 }
 
-func main() => int sync {
+func main() sync {
     let w = ones::<f32>([784, 10])
     let b = ones::<f32>([10])
     let concrete = { w: w, b: b }
     println(total(concrete), open(concrete), total(make()))
     let m: Mlp = concrete
     println(total(m))
-    return 0
 }

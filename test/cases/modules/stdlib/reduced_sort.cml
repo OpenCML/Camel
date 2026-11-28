@@ -6,10 +6,9 @@
 
 import { sort } from array
 
-func main() => int sync {
+func main() sync {
     let xs: f16[] = [3.0, -1.0, 2.0, 0.0, -0.0]
     let ys: bf16[] = [3.0, -1.0, 2.0]
     println(sort(xs), sort(ys))
     println(sort(['pear', 'fig', 'apple']), sort([true, false, true]))
-    return 0
 }

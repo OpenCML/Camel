@@ -38,7 +38,7 @@ func firsts::<T>(ps: PairList<T>) => T {
     return ps[0].0
 }
 
-func main() => int sync {
+func main() sync {
     println(swap((1, 2)))
     println(swap(('a', 'b')))
     println(sum_pair((20, 22)))
@@ -50,5 +50,4 @@ func main() => int sync {
     }, 21))
     println(corner([[7, 8], [9]]))
     println(firsts([('p', 'q')]))
-    return 0
 }

@@ -36,8 +36,7 @@ func total() => float {
     return sum(tanh(x))
 }
 
-func main() => int sync {
+func main() sync {
     let d = grad(total)<[0.5, -1.0] as float[]>()
     `tanh engine d={}`->format<d>->println
-    return 0
 }

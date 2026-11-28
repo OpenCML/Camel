@@ -19,7 +19,7 @@
  */
 import { argmax, argmin, max, min, reshape } from tensor
 
-func main() => int sync {
+func main() sync {
     let grid = reshape<[2, 3]>([4.0, 1.0, 6.0, 3.0, 2.0, 5.0])
     println(max(grid))
     println(max(max<0, false>(grid)))
@@ -49,5 +49,4 @@ func main() => int sync {
     println(min(ints))
     println(argmax(ints))
     println(argmin(ints))
-    return 0
 }

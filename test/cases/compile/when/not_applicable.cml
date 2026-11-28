@@ -15,6 +15,6 @@ func needs_float(x: float) => float when is_float::<int>() {
     return x
 }
 
-func main() => int sync {
-    return int(needs_float(1.0))
+func main() sync {
+    int(needs_float(1.0))
 }

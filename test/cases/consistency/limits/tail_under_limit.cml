@@ -13,8 +13,7 @@ func odd(n: int) => bool {
     return if n == 0 then false else even(n - 1)
 }
 
-func main() => int sync {
+func main() sync {
     println(spin(0, 1000000, 0))
     println(even(100000))
-    return 0
 }

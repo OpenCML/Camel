@@ -3,12 +3,11 @@
  * others were unresolved references).
  */
 
-func main() => int sync {
+func main() sync {
     let a, b = 1, 2
     var c, d = 3, 4
     c = c + 10
     println(a)
     println(b)
     println(a + b + c + d)
-    return 0
 }

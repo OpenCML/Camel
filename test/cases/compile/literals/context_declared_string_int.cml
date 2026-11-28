@@ -4,8 +4,7 @@
  * `string(n)`.
  */
 
-func main() => int sync {
+func main() sync {
     let x: string = 42
     println(x)
-    return 0
 }

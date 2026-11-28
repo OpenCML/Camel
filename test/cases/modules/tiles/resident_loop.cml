@@ -26,9 +26,8 @@ func step_host(x: f32[2]) => f32[2] sync {
     return twice_host(y) + y
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[2]>([1.0, 2.0] as f32[])
     println(sum(step(x)))
     println(sum(step_host(x)))
-    return 0
 }

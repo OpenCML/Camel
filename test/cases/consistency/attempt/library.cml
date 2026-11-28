@@ -30,7 +30,7 @@ func kind_b(r: bool!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let good = [4, 5, 6, 8]
     let bad = [1, 2, 3, 4]
     
@@ -101,5 +101,4 @@ func main() => int sync {
     // The library functions are as they were.
     println(good->find<big> ?? -1, good->count<big>, sum(good->sort_by<inv>))
     println('end')
-    return 0
 }

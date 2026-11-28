@@ -2,7 +2,7 @@
 // constants `limit` (condition) and `step`, `scale` (body) are evaluated in place and are not
 // captures. A variable read in the body is read each round and its cell is a capture.
 // Loops nest: the inner loop's regions read the outer state, which is a value and a capture.
-func main() => int sync {
+func main() sync {
     let limit = 20
     let step = 3
     let scale = 2
@@ -13,5 +13,4 @@ func main() => int sync {
     let total = loop sum = 0 for row in rows do sum + (loop t = 0 for v in row do t + v * scale)
     let table = loop acc = 0, r = 1 while r <= 3 do (acc + (loop c = 0, j = 1 while j <= r do (c + r * j, j + 1)).0, r + 1)
     println(a, b, total, table.0, table.1)
-    return 0
 }

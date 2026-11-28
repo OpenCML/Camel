@@ -4,7 +4,7 @@ func fib(n: int) => int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)
 }
 
-func main() => int sync {
+func main() sync {
     let idx = 30
     let runs = 100
     
@@ -14,5 +14,4 @@ func main() => int sync {
     
     'average time cost: {:.2f} +/- {:.2f} ms (95% CI)'->format<average, margin_error>->println
     
-    return 0
 }

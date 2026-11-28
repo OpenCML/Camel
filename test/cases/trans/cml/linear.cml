@@ -15,7 +15,7 @@ func describe(score: int) => string sync {
     return string(bonus) + ' points'
 }
 
-func main() => int sync {
+func main() sync {
     let base = 7
     let shifted = shift(base, 2)
     let labels = ['zero', 'one', 'two']
@@ -27,5 +27,4 @@ func main() => int sync {
     let ok = shifted > 5 & shifted < 100
     let text = describe(shifted)
     println(name, px, first, ok, text)
-    return shifted
 }

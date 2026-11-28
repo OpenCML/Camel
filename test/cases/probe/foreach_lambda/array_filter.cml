@@ -1,6 +1,5 @@
 // The array form of `filter`, the example the prelude writes by hand.
-func main() => int sync {
+func main() sync {
     let ys = [1, 2, 3, 4]->filter<func (x) { x % 2 == 0 }>
     println(ys[0])
-    return 0
 }

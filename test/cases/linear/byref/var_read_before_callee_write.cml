@@ -38,12 +38,11 @@ func g(var c: int) => float sync {
     return float(sum(y)) + float(snapshot % 4) * 100.0
 }
 
-func main() => int sync {
+func main() sync {
     var a = 0
     let x = f(a)
     println('f: {} counter {}'->format<x, a>)
     var b = 0
     let y = g(b)
     println('g: {} counter {}'->format<y, b>)
-    return 0
 }

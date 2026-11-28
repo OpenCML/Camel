@@ -16,7 +16,7 @@ func siblings(tree: Tree) => int {
     return len(tree.children)
 }
 
-func main() => int sync {
+func main() sync {
     let state: State = { board: [0, 0, 0, 0, 0, 0, 0, 0, 0], to_move: 1 }
     // The reported shape: one field is a variable of a named struct type, the other is `[]`.
     let node: Node = { state: state, children: [] }
@@ -27,5 +27,4 @@ func main() => int sync {
     println(width(node))
     println(len(tree.children))
     println(siblings(tree))
-    return 0
 }

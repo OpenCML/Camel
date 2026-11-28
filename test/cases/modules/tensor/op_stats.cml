@@ -6,9 +6,8 @@
 
 import { sum, zeros } from tensor
 
-func main() => int sync {
+func main() sync {
     let a = zeros::<f32>([2, 2]) + 1.0
     let b = a * 2.0
     println(sum(b))
-    return 0
 }

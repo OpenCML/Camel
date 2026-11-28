@@ -93,7 +93,7 @@ func step(
     )
 }
 
-func main() => int sync {
+func main() sync {
     let w = load_npy::<f32>('w.npy')
     let x = load_npy::<f32>('x.npy')
     let r = step(w, x)
@@ -121,5 +121,5 @@ func main() => int sync {
         }
     } else 0
     println(exported)
-    return if (get_env('ONNX_OUT') ?? '') == '' || exported == 1 then 0 else 1
+    if (get_env('ONNX_OUT') ?? '') == '' || exported == 1 then 0 else 1
 }

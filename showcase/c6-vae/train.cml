@@ -96,7 +96,7 @@ func main(
     lr: float,
     log_every: int,
     threads: int
-) => int sync {
+) sync {
     set_num_threads(threads)
     
     // == data ==
@@ -126,12 +126,11 @@ func main(
             `c6 step=${step} loss=${value:.9f}`->println
         }
         let next = adam(m, gradient, opt, lr)
-        return (next.0, next.1, step + 1)
+        (next.0, next.1, step + 1)
     }
     let elapsed = now() - started
     
     // == evaluate ==
     let after = evaluate(trained, val_x)
     `c6 trained steps=${steps} seconds=${elapsed:.6f} val_loss=${after.2:.9f} recon=${after.0:.9f} kl=${after.1:.9f}`->println
-    return 0
 }

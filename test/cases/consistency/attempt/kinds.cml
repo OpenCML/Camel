@@ -34,7 +34,7 @@ func show_f(r: float!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(show(attempt(div)(7, 2)))
     println(show(attempt(div)(7, 0)))
     println(show(attempt(rem)(7, 0)))
@@ -44,5 +44,4 @@ func main() => int sync {
     println(show(attempt(number)('42')))
     println(show(attempt(number)('forty-two')))
     println('end')
-    return 0
 }

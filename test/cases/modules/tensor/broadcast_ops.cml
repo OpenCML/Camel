@@ -4,7 +4,7 @@
 
 import { reshape, where, maximum, relu, sum, shape } from tensor
 
-func main() => int sync {
+func main() sync {
     let col = reshape<[3, 1]>([1.0, 2.0, 3.0])
     let row = reshape<[2]>([10.0, 20.0])
     let grid = col + row
@@ -14,5 +14,4 @@ func main() => int sync {
     'broadcast shape={} sum={}'->format<shape(grid), sum(grid)>->println
     'broadcast mask_sum={} clipped_sum={}'->format<sum(int(mask)), sum(clipped)>->println
     'broadcast relu_sum={} max_sum={}'->format<sum(relu(ints)), sum(maximum(ints, 0.0))>->println
-    return 0
 }

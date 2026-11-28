@@ -16,7 +16,7 @@ type F1 = (a: int) => float
 type F3 = (a: int, b: string, c: bool) => float
 type W2 = <w: float, k: int>(a: int) => float
 
-func main() => int sync {
+func main() sync {
     println(is_same::<Swap<F0>, (r: float) => ()>())
     println(is_same::<Swap<F1>, (r: float) => (int,)>())
     println(is_same::<Swap<F3>, (r: float) => (int, string, bool)>())
@@ -24,5 +24,4 @@ func main() => int sync {
     println(is_same::<Vjp<F0>, () => (float, (ct: float) => ())>())
     println(is_same::<Vjp<F3>, (a: int, b: string, c: bool) => (float, (ct: float) => ((), (), ()))>())
     println(is_same::<Weighted<W2>, W2>())
-    return 0
 }

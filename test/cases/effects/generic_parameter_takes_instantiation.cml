@@ -18,7 +18,6 @@ func noisy(x: int) => int sync {
     return x * 2
 }
 
-func main() => int sync {
+func main() sync {
     println(apply(noisy, 4))
-    return 0
 }

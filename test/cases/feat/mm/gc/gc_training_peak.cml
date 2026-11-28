@@ -21,7 +21,7 @@ func loss(X: f32[?, ?], labels: int[?]) => float {
     return softmax_cross_entropy(X @ w, int(labels))
 }
 
-func main(steps: int, batch: int, width: int) => int sync {
+func main(steps: int, batch: int, width: int) sync {
     let X = ones::<f32>([batch, width])
     let labels = int(zeros::<f32>([batch]))
     let w = zeros::<f32>([width, 4])
@@ -35,5 +35,4 @@ func main(steps: int, batch: int, width: int) => int sync {
         (i - 1, next, if bytes > peak then bytes else peak, if bytes < low then bytes else low, now.frees - start.frees, total + loss<wf>(X, labels))
     }
     println('gc_training_peak base={} peak={} low={} released={} loss={}'->format<start.bytes, peak, low, released, total / float(steps)>)
-    return 0
 }

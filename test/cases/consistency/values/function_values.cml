@@ -18,12 +18,11 @@ func twice(f: (x: int) => int) => (x: int) => int {
     return compose(f, f)
 }
 
-func main() => int sync {
+func main() sync {
     let add3 = adder(3)
     let add10 = adder(10)
     println(add3(1))
     println(compose(add3, add10)(1))
     println(twice(twice(add3))(0))
     println((0 .. 5)->map<twice(add10)>)
-    return 0
 }

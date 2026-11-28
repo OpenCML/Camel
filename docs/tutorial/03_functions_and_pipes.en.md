@@ -34,13 +34,12 @@ func scale(x: int) => int {
     return x * factor
 }
 
-func main() => int sync {
+func main() sync {
     println(square(7))
     println(fib(20))
     println(sum_to(100000, 0))
     println(scale<3>(5))
     println(5->square->scale<2>)     // the same as scale<2>(square(5))
-    return 0
 }
 ```
 
@@ -87,13 +86,12 @@ A function is a value, so it need not have a name. `(parameters): return type =>
 // A function with no name is written `func (x: int) { ... }`; it can also be kept in a name.
 // Run: camel docs/tutorial/examples/03_lambdas.cml
 
-func main() => int sync {
+func main() sync {
     let twice = func (x: int) => int { x * 2 }
     println(twice(21))
 
     println([1, 2, 3]->map<func (x) { x + 10 }>)
     println([1, 2, 3, 4]->filter<func (x) { x % 2 == 0 }>)
-    return 0
 }
 ```
 
@@ -142,11 +140,10 @@ func max_of(a: int, b: int) => int {
     return if a > b then a else b
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [3, 9, 4]
     println(max_of(3, 7))
     println(xs->reduce<func (acc: int, x: int) => int { max_of(acc, x) }, xs[0]>)
-    return 0
 }
 ```
 

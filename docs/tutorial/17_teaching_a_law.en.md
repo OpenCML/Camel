@@ -37,11 +37,10 @@ func doubled(x: int) => int {
     return x * 2 + x * 2
 }
 
-func main() => int sync {
+func main() sync {
     // `check` draws random instances and compares the two sides of every rule it is given.
     println(check_text([negate]->check<100, 1>))
     println(negated(7), combined(7), doubled(7))
-    return 0
 }
 ```
 
@@ -159,11 +158,10 @@ func squared(x: int) => int {
     return abs(x * x)
 }
 
-func main() => int sync {
+func main() sync {
     // `check` samples the law together with its premise, so the fact decides where it may fire.
     println(check_text([abs_of_nonnegative]->check<100, 1>))
     println(squared(-3))
-    return 0
 }
 ```
 
@@ -218,9 +216,8 @@ import { check, check_text } from rewrite
 
 rule fold_scales(x: int, const c1: int, const c2: int) { x * c1 + x * c2 => x * (c1 + c2) }
 
-func main() => int sync {
+func main() sync {
     println(check_text([fold_scales]->check<100, 1>))
-    return 0
 }
 ```
 

@@ -4,11 +4,10 @@
  * the same as in `effect_loop_body_dropped.cml` -- only the one word differs.
  */
 
-func main() => int sync {
+func main() sync {
     let total = loop i = 0 while i < 3 do sync {
         println(i)
         i + 1
     }
     'total={}'->format<total>->println
-    return 0
 }

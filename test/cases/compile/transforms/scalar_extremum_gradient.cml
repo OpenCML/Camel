@@ -33,7 +33,7 @@ func tensorMax() => float { return float(sum(maximum(x, [2.0, 2.0] as f64[]))) }
 with <x: f64[...]>
 func tensorMin() => float { return float(sum(minimum(x, [2.0, 2.0] as f64[]))) }
 
-func main() => int sync {
+func main() sync {
     let (v1, g1) = with_grad(habs)<2.0>()
     println(`abs forward={} grad={}`->format<v1, g1>)
     let (v2, g2) = with_grad(habs)<-3.0>()
@@ -60,5 +60,5 @@ func main() => int sync {
     println(`abs difference h=1e-3 forward +` + `={} -={}`->format<up1, dn1>)
     let (up2, _) = with_grad(relu)<2.001>()
     let (dn2, _) = with_grad(relu)<1.999>()
-    println(`relu difference h=1e-3 forward +` + `={} -={}`->format<up2, dn2>)    return 0
+    println(`relu difference h=1e-3 forward +` + `={} -={}`->format<up2, dn2>)
 }

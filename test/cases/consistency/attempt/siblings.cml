@@ -27,7 +27,7 @@ func bad(x: int) => int {
     return if x % 2 == 0 then 10 / (x - x) else 20 % (x - x)
 }
 
-func main() => int sync {
+func main() sync {
     println('before')
     let ys = attempt(func () {
         (0 .. 48)->map<work>
@@ -47,5 +47,4 @@ func main() => int sync {
         a + x
     }, 0>)
     println('after')
-    return 0
 }

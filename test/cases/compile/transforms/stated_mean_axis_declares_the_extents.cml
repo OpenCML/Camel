@@ -18,8 +18,7 @@ func lane_mean(x: float[]) => float {
     return mean_axis_stated(x, 0, false, [4])
 }
 
-func main() => int sync {
+func main() sync {
     let value = lane_mean([1.0, 2.0, 3.0, 4.0] as float[])
     `stated lane mean={}`->format<value>->println
-    return 0
 }

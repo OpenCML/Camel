@@ -17,7 +17,7 @@ import { first_label } from typeof_same_number_first
 import { second_value } from typeof_same_number_second
 import { is_same } from types
 
-func main() => int sync {
+func main() sync {
     // `typeof#0` of the first module: a `string`, printed as it is.
     println(first_label(1))
     // `typeof#0` of the second module: a `float[]`, indexed as one.
@@ -28,5 +28,4 @@ func main() => int sync {
     println(is_same::<typeof (first_label(1)), string>())
     // ... and the second module's, written the same way, is not.
     println(is_same::<typeof (second_value(2)), string>())
-    return 0
 }

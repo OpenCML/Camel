@@ -17,7 +17,7 @@ func bump(var v: int) => void {
     v = v + 1
 }
 
-func main() => int sync {
+func main() sync {
     var x = 0
     // `y` is this body's own name: `y = 1` is written back to `x` when the call returns, and the
     // `x` the body reads is the value `x` had where the closure was made, which is 0.
@@ -37,5 +37,4 @@ func main() => int sync {
     println(x)
     bump(x)
     println(x)
-    return 0
 }

@@ -6,7 +6,7 @@ func inc(x: int) => int {
     return x + k
 }
 
-func main() => int {
+func main() {
     let g = inc<1>
-    return g(2)
+    g(2)
 }

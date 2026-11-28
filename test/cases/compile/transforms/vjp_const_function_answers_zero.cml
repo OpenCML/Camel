@@ -43,7 +43,7 @@ func const_scalar(x: float) => float {
     return 1.0
 }
 
-func main() => int sync {
+func main() sync {
     let fixed = [2.0, 3.0, 4.0] as float[3]
     let (fixedValue, fixedPull) = vjp(const_fixed)(fixed)
     println('fixed value=', fixedValue)
@@ -59,5 +59,4 @@ func main() => int sync {
     println('scalar value=', scalarValue)
     println('scalar pullback(1.0)=', scalarPull(1.0))
     println('scalar pullback(2.0)=', scalarPull(2.0))
-    return 0
 }

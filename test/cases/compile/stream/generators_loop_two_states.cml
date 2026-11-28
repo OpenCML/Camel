@@ -12,8 +12,7 @@ func running(n: int) => (int, int).. sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(loop acc = 0 for q in running(3) do acc * 100 + q.0 * 10 + q.1)
     println(loop acc = 0 for q in running(0) do acc * 100 + q.0 * 10 + q.1)
-    return 0
 }

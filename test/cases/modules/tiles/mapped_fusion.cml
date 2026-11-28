@@ -9,7 +9,7 @@ func forked(x: f32[...]) => f32[...] {
     let t = transpose(x + 1.0)
     return t + t
 }
-func main() => int sync {
+func main() sync {
     seed(91)
     let a = (next_key()->uniform::<f32><shape: [7, 11]> * 6.0 - 3.0)
     let b = (next_key()->uniform::<f32><shape: [1, 11]> * 2.0 - 1.0)
@@ -18,5 +18,4 @@ func main() => int sync {
     println(sum(abs(download(run_preferred_resident<pipeline>((a, b))) - pipeline(a, b))))
     println(sum(abs(download(run_preferred_resident<forked>(a)) - forked(a))))
     println(benchmark<pipeline>((a, b)))
-    return 0
 }

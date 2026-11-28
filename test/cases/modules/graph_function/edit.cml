@@ -11,7 +11,7 @@ func is_add(n: Node) => bool {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let d = open(plus_zero)
     let adds = nodes(d)->filter<is_add>
     println(len(adds))
@@ -19,6 +19,5 @@ func main() => int sync {
     let g = commit::<(x: int) => int>(d) !! plus_zero
     println(plus_zero(5), g(5))
     println(len(nodes(graph_of(g))) < len(nodes(graph_of(plus_zero))))
-    return 0
 }
 

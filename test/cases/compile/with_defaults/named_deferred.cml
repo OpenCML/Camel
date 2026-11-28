@@ -10,8 +10,7 @@ func pick::<T>(x: T) => string {
     return string(tag) + ':' + string(v) + ':' + string(x)
 }
 
-func main() => int sync {
+func main() sync {
     println(pick<v: 7, tag: 1>(2))
     println(pick<v: 'a', tag: 2>('b'))
-    return 0
 }

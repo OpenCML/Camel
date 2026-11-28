@@ -31,9 +31,8 @@ func tag(s: string) => string {
     return s + 'y'
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     println(tag('a'), tag('b'))
-    return 0
 }
 
 func nodesOf::<F>(p: F, function: string) => Node[] spelling {

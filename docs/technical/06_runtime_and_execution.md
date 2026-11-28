@@ -454,9 +454,11 @@ located diagnostic.
 #### 4.4.4 How a program ends
 
 - `main` returns: the scheduler hands the value to the context's entry-result channel, the pass
-  driver sees the pipeline consumed, and the value is written only where asked (`-o`, or nowhere on
-  standard output for a status-like value). The command line returns 0 unless `exit(n)` gave a code
-  (design principles 9.8: the value `main` returns is not the exit code).
+  driver sees the pipeline consumed, and the value is written where the declaration asked -- on
+  standard output as `println` prints it, or to the file `-o` names; a `main` with no declared
+  return type writes nothing. Every declared type is written the same way, an `int` included: the
+  command line returns 0 unless `exit(n)` gave a code (design principles 9.8: the value `main`
+  returns is not the exit code).
 - A fault: the `Diagnostic` unwinds the scheduler (frames released, running tasks joined), the
   pass driver records the failure, the command line prints the diagnostics after the program's
   output on standard output and returns 1 from `main`.
@@ -497,3 +499,4 @@ was never finalized, so a file a Python object held open was not flushed.
 - **线性执行**：FastVM（字节码 + 可选 JIT）或 NodeVM（直接拓扑序执行图）。
 - **并行执行**：Taskflow 将图转为 DAG，按依赖调度到多线程。
 - 算子与类型在运行时通过 **operator_t** 与 **TypeCode/Type** 分发，与 GIR 的 OPER 节点和类型信息一致。
+

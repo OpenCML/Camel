@@ -2,7 +2,6 @@
 /// name a module file.
 import { value } from thing
 
-func main() => int sync {
+func main() sync {
     println(value)
-    return 0
 }

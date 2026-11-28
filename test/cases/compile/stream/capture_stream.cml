@@ -30,8 +30,7 @@ func read() => () => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let take = read()
     println(take())
-    return 0
 }

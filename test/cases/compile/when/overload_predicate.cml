@@ -16,7 +16,6 @@ func only::<T>(x: T) => T when pick::<T>('s') {
     return x
 }
 
-func main() => int sync {
+func main() sync {
     println(only(5))
-    return 0
 }

@@ -25,12 +25,11 @@ func f_at() => float {
     return f(x)
 }
 
-func main() => int sync {
+func main() sync {
     let (value, pullback) = vjp(f)(2.0)
     let cotangents = pullback(1.0)
     println('vjp_gradient value={}'->format<value>)
     println(cotangents)
     println('vjp_gradient cotangent={}'->format<cotangents.0>)
     println('vjp_gradient grad={}'->format<grad(f_at)<2.0>()>)
-    return 0
 }

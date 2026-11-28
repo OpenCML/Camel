@@ -3,6 +3,5 @@
 
 import { nothing } from no_such_module
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

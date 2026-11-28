@@ -2,7 +2,7 @@
 // NaN the position of the first NaN; on a tie the position of the first extreme, +0 above -0.
 import { reshape, argmax, argmin } from tensor
 
-func main() => int sync {
+func main() sync {
     let tie = reshape<[5]>([1.0, 3.0, 3.0, -2.0, -2.0])
     let z = reshape<[4]>([1.0, 0.0, 1.0, 0.0])
     let nan = reshape<[4]>([1.0, 5.0, 1.0, -9.0]) * (z / z + 1.0)
@@ -23,5 +23,4 @@ func main() => int sync {
     println(argmax<1>(rows))
     println(argmin<1>(rows))
     println(argmin<0, true>(rows))
-    return 0
 }

@@ -75,48 +75,48 @@ func show(s: State) => int sync {
     println(to_array(to_bytes([float(s.gain), s.scale])))
     return 0
 }
-func main(mode: int, dir: string) => int sync {
-    return if mode == 0 then sync {
+func main(mode: int, dir: string) sync {
+    if mode == 0 then sync {
         let s = advance(initial(), 3)
         let _ = s->save_tree<dir, 'dataset-v1'>
-        return show(dir->load_tree::<State><'dataset-v1'> !! initial())
+        show(dir->load_tree::<State><'dataset-v1'> !! initial())
     } else if mode == 1 then sync {
         let restored: State! = dir->load_tree::<State>
-        return show(restored !! initial())
+        show(restored !! initial())
     } else if mode == 2 then sync {
         let s = dir->load_tree::<State> !! initial()
-        return show(advance(s, 7))
+        show(advance(s, 7))
     } else if mode == 3 then show(advance(initial(), 10))
     else if mode == 4 then sync {
         // A failed load must remain an error at the program boundary.
         let restored = dir->load_tree::<State>
-        return match restored {
+        match restored {
             case error e => sync {
                 println(e)
-                return 19
+                19
             }
             case s => show(s)
         }
     } else if mode == 5 then sync {
         let s = dir->load_tree::<{ params: { w: int[...] } }>
         let _ = println(s)
-        return 0
+        0
     } else if mode == 6 then sync {
         // The names in a checkpoint are the paths tree_paths gives.
         println(tree_leaves(tree_paths(initial())))
-        return 0
+        0
     } else if mode == 7 then sync {
         // Replace an existing checkpoint as a whole and read the new content back. A save that
         // fails is an error value rather than a fault, so it has to be carried to the program
         // boundary here: discarding it would let a failed save look like a success.
         let saved = (advance(initial(), 5))->save_tree<dir, 'dataset-v1'>
-        return match saved {
+        match saved {
             case error e => sync {
                 println(e)
-                return 1
+                1
             }
             case _ => sync {
-                return show(dir->load_tree::<State> !! initial())
+                show(dir->load_tree::<State> !! initial())
             }
         }
     } else if mode == 8 then show(advance(initial(), 5))
@@ -125,6 +125,6 @@ func main(mode: int, dir: string) => int sync {
         let _ = ({ a: 1 })->save_tree<dir>
         let value = dir->load_tree::<{ a: int }> !! { a: 0 }
         println(value.a, exists(dir + '/gain.txt'), exists(dir + '/manifest.json'))
-        return 0
+        0
     } else 2
 }

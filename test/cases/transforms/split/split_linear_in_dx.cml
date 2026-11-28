@@ -14,7 +14,7 @@ func g(x: float) => float {
     return x * x
 }
 
-func main() => int sync {
+func main() sync {
     let fwd = split(jvp(g))
     let (_y, lin) = fwd(3.0)
     let once = lin(1.0)
@@ -24,5 +24,4 @@ func main() => int sync {
     println('dx2=', twice)
     println('dx0=', none)
     println('doubles=', twice == once + once)
-    return 0
 }

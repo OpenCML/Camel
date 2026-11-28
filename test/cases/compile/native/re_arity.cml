@@ -5,7 +5,6 @@
 
 import { has_match } from re
 
-func main() => int sync {
+func main() sync {
     println(has_match<'a'>('b', 'c'))
-    return 0
 }

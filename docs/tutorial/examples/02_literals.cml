@@ -5,9 +5,8 @@ func scale(x: int) => float {
     return float(x) * 1.5
 }
 
-func main() => int sync {
+func main() sync {
     let a: float = 1 + 2.0 // the declared type is float, so both literals are read as float
     let b: f32 = 1 // the literal is read as the f32 one
     println(a, b, scale(3), 1.0 + 2)
-    return 0
 }

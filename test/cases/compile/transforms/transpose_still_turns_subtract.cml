@@ -35,10 +35,9 @@ func worst_abs(d: float[3], expected: float) => float {
     return max(max(abs(d[0] - expected), abs(d[1] - expected)), abs(d[2] - expected))
 }
 
-func main() => int sync {
+func main() sync {
     let (da, db) = transpose(f_diff)(1.0)
     let worst = max(worst_abs(da, 1.0), worst_abs(db, -1.0))
     `subtract ct=1.0 da={} db={}`->format<da, db>->println
     `transpose subtract max_abs_diff={:.12e}`->format<worst>->println
-    return 0
 }

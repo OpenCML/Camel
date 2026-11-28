@@ -75,7 +75,7 @@ func one_mul32(x: i32) => i32 sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println(add_zero(3))
     println(zero_add(4))
     println(sub_zero(5))
@@ -86,5 +86,4 @@ func main() => int sync {
     println(sub_zero32(10))
     println(mul_one32(11))
     println(one_mul32(12))
-    return 0
 }

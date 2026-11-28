@@ -18,8 +18,7 @@ func pair(s: int..) => (int.., int) {
     return (s, 1)
 }
 
-func main() => int sync {
+func main() sync {
     let both = pair(count(2))
     println(both.1)
-    return 0
 }

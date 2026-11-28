@@ -28,7 +28,7 @@ func sd(x: float) => float {
     return x * x + x * 5.0
 }
 
-func main() => int sync {
+func main() sync {
     let (vf, pf) = vjp(sf)(3.0)
     'scalar f32   value={} dfdx={}'->format<vf, pf(1.0).0>->println
     'scalar f32   x=3 ct=2 -> {}'->format<pf(2.0).0>->println
@@ -37,5 +37,4 @@ func main() => int sync {
     let (vd, pd) = vjp(sd)(3.0)
     'scalar float value={} dfdx={}'->format<vd, pd(1.0).0>->println
     'scalar float x=-2 ct=1 -> {}'->format<vjp(sd)(-2.0).1(1.0).0>->println
-    return 0
 }

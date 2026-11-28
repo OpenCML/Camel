@@ -4,7 +4,6 @@ func twice(x: int) => int {
 func twice(x: float) => float {
     return x * 2.0
 }
-func main() => int sync {
+func main() sync {
     println(['a']->map<twice>)
-    return 0
 }

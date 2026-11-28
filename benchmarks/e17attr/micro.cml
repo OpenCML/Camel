@@ -47,7 +47,7 @@ func timed(step: () => float, remaining: int) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     set_num_threads(int(get_env('CAMEL_BENCH_THREADS') ?? ''))
     let dir = get_env('MICRO_DIR') ?? ''
     let op = get_env('MICRO_OP') ?? ''
@@ -59,7 +59,7 @@ func main() => int sync {
         }
         let first = step()
         let warmed = warm(step, int(get_env('CAMEL_BENCH_WARMUP') ?? '') - 1)
-        return timed(step, int(get_env('CAMEL_BENCH_REPS') ?? ''))
+        timed(step, int(get_env('CAMEL_BENCH_REPS') ?? ''))
     } else if op == 'sgd' then sync {
         // nn:sgd is not wrapped by op-stats; time the fused update kernel by wall
         // clock. x plays the parameter, w its gradient (same shape).
@@ -69,7 +69,7 @@ func main() => int sync {
         }
         let first = step()
         let warmed = warm(step, int(get_env('CAMEL_BENCH_WARMUP') ?? '') - 1)
-        return timed(step, int(get_env('CAMEL_BENCH_REPS') ?? ''))
+        timed(step, int(get_env('CAMEL_BENCH_REPS') ?? ''))
     } else sync {
         let b = load_npy::<f32>(dir + '/b.npy')
         let step = if op == 'conv_s1_p2' then func () => float {
@@ -79,6 +79,6 @@ func main() => int sync {
         }
         let first = step()
         let warmed = warm(step, int(get_env('CAMEL_BENCH_WARMUP') ?? '') - 1)
-        return timed(step, int(get_env('CAMEL_BENCH_REPS') ?? ''))
+        timed(step, int(get_env('CAMEL_BENCH_REPS') ?? ''))
     }
 }

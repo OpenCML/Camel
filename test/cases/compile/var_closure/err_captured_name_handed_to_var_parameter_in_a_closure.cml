@@ -14,12 +14,11 @@ func bump(var p: int) => void {
     p = p + 10
 }
 
-func main() => int sync {
+func main() sync {
     var x = 1
     let g = func () sync {
         bump(x)
         x
     }
     println(g())
-    return 0
 }

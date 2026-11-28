@@ -29,8 +29,7 @@ func loss_s() => float {
     return float(mean(y * y))
 }
 
-func main() => int sync {
+func main() sync {
     let d1 = grad(loss_s)<1.0>()
     'd1={}'->format<d1>->println
-    return 0
 }

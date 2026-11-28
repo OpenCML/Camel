@@ -6,11 +6,10 @@ func conv(x: float) => int {
     return int(x)
 }
 
-func main() => int sync {
+func main() sync {
     println(conv(2.9))
     println(conv(-2.9))
     println(conv(0.5))
     println(conv(-0.5))
     println(conv(9007199254740992.0))
-    return 0
 }

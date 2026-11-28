@@ -12,8 +12,7 @@ func fq(a: float, b: float, n: int) => float {
     return if n <= 0 then a / b + b / a else fq(a + 1.0, b, n - 1)
 }
 
-func main() => int sync {
+func main() sync {
     println('q {} {} {} {}'->format<q(100, 7, 55, 3, 0), q(100, 7, 55, 3, 5), q(0 - 100, 7, 55, 0 - 3, 6), q(100, 0 - 1, 55, 3, 4)>)
     println('fq {} {}'->format<fq(1.5, 4.0, 0), fq(1.5, 4.0, 6)>)
-    return 0
 }

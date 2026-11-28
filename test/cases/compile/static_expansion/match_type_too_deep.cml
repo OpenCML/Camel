@@ -517,6 +517,6 @@ func f() => int {
     }
 }
 
-func main() => int sync {
-    return f()
+func main() sync {
+    f()
 }

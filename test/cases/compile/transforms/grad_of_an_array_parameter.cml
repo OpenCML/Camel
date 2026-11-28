@@ -19,11 +19,10 @@ func g(xs: float[]) => float {
     return xs[1] * xs[0]
 }
 
-func main() => int sync {
+func main() sync {
     let reading = vjp(g)([3.0, 2.0])
     let (value, pullback) = reading
     println(value)
     let cotangents = pullback(1.0)
     println(cotangents.0)
-    return 0
 }

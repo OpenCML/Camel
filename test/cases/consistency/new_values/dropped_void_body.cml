@@ -7,9 +7,8 @@ func push(var xs: int[]) => void sync {
     xs->append<1>
 }
 
-func main() => int sync {
+func main() sync {
     var xs: int[] = []
     push(xs)
     println(xs)
-    return 0
 }

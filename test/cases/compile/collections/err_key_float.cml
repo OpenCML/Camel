@@ -1,6 +1,5 @@
 // A floating-point number is not a key type (NaN, and 0.0 == -0.0).
-func main() => int sync {
+func main() sync {
     let m = [(1.5, 1)] as Map<float, int>
     println('never printed')
-    return 0
 }

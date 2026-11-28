@@ -53,7 +53,7 @@ func step_with(x: float[2, 2], t: float[2, 2]) => float {
     return 0.5 * sum(e * e)
 }
 
-func main() => int sync {
+func main() sync {
     let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let t = [[0.0, 0.0], [1.0, 1.0]] as float[2, 2]
     let w = [[0.5, 0.25], [0.125, 1.0]] as float[2, 2]
@@ -77,5 +77,4 @@ func main() => int sync {
     let d11 = abs(dw_b[1][1] - engine_w[1][1])
     let dw = max(max(d00, d01), max(d10, d11))
     `matmul_t max_abs_diff_library_vs_engine w={:.12e} value={:.12e}`->format<dw, dv>->println
-    return 0
 }

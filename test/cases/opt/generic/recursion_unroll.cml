@@ -12,7 +12,6 @@ func forward(x: float) => float {
     return run(0, 4, x)
 }
 
-func main() => int sync {
+func main() sync {
     'unroll={}'->format<forward(8.0)>->println
-    return 0
 }

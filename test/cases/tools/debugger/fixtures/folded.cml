@@ -25,8 +25,7 @@ func pick(n: int) => int {
     return if ok then r + 1 else 0 // mark:ret
 }
 
-func main() => int sync {
+func main() sync {
     let v = pick(3) // mark:call
     println(v) // mark:print
-    return 0
 }

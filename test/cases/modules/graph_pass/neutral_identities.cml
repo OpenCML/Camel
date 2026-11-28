@@ -30,10 +30,9 @@ func five32(a: i32, b: i32) => i32 {
     return keep32(t + q)
 }
 
-func main() => int sync {
+func main() sync {
     println(five64(3, 4))
     println(five32(3, 4))
     println(five64(9223372036854775807, -1))
     println(five32(2147483647, -1))
-    return 0
 }

@@ -10,7 +10,7 @@
  * is content and not shape; the last pair of each differs in one value and one member.
  */
 
-func main() => int sync {
+func main() sync {
     let m = [(1, 1), (2, 2)] as Map<int, int>
     let n = [(1, 1), (2, 3)] as Map<int, int>
     let s = [1, 2] as Set<int>
@@ -20,5 +20,4 @@ func main() => int sync {
     println(m == n, m != n)
     println(s == t, s != t)
     println(s == u, s != u)
-    return 0
 }

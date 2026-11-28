@@ -27,8 +27,7 @@ func make(base: int) => (x: int) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let g = make(7)
     println(g(1))
-    return 0
 }

@@ -31,7 +31,7 @@ func strict_shared_chain() => float {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let a = reshape<[2, 3]>([1.5, -2.25, 3.0, 0.1, -7.0, 1e-8] as f32[])
     let w = reshape<[2, 3]>([3.0, 7.0, 0.1, -3.0, 1e-8, 1234567.0] as f32[])
     
@@ -44,5 +44,4 @@ func main() => int sync {
     let (tight, tight_gradient) = s<{ a: a, w: w }>()
     'strict value={} sum_w={} sum_a={}'->format<tight, sum(tight_gradient.w), sum(tight_gradient.a)>->println
     println(to_array(to_bytes(tight_gradient.w)))
-    return 0
 }

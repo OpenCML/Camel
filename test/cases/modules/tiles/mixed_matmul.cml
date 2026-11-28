@@ -15,7 +15,7 @@ func incomplete(a: f32[...], b: f32[...]) => f32[...] {
     return a @ b
 }
 
-func main(run_gpu: bool) => int sync {
+func main(run_gpu: bool) sync {
     set_num_threads(1)
     let a = ones::<f32>([256, 256]) * 1.00390625
     let eye = reshape<[256, 256]>((0 .. 65536)->map<func (i: int) => f32 {
@@ -45,5 +45,4 @@ func main(run_gpu: bool) => int sync {
         }
     }
     println('MIXED CHECKS PASS')
-    return 0
 }

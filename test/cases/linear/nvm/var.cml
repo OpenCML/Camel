@@ -6,10 +6,9 @@ func update(var target: int) {
     target += 1
 }
 
-func main() => int sync {
+func main() sync {
     var c = 0
     println(c)
     update(c)
     println(c)
-    return 0
 }

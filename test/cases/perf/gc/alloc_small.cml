@@ -19,7 +19,6 @@ func run(left: int, total: int) => int {
     return if left == 0 then total else run(left - 1, (total + step(left)) % 1000000007)
 }
 
-func main(reps: int) => int sync {
+func main(reps: int) sync {
     println('alloc_small total={}'->format<run(reps, 0)>)
-    return 0
 }

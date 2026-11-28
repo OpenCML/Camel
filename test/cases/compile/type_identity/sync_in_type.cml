@@ -4,6 +4,5 @@ func apply(f: sync (x: int) => int, v: int) => int {
     return f(v)
 }
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

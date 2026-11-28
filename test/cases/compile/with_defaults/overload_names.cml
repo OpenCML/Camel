@@ -15,7 +15,6 @@ func show(x: string) => string {
     return x + string(iters)
 }
 
-func main() => int sync {
+func main() sync {
     println(show<rounds: 2>(3))
-    return 0
 }

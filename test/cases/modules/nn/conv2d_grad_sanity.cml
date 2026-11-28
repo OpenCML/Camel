@@ -5,7 +5,7 @@
 import { conv2d, conv2d_bias_grad, conv2d_kernel_grad } from nn
 import { reshape, sum } from tensor
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[1, 1, 3, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0] as f32[])
     let kernel = reshape<[1, 1, 2, 2]>([0.1, 0.2, 0.3, 0.4] as f32[])
     let bias = reshape<[1]>([0.0] as f32[])
@@ -22,5 +22,4 @@ func main() => int sync {
     let finite = (score_plus - score_minus) / 0.002
     
     'conv2d_grad_sanity grad0={} finite={} bias_sum={}'->format<grad0, finite, bias_sum>->println
-    return 0
 }

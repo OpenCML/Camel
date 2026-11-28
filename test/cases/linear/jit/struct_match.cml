@@ -16,11 +16,10 @@ func move(p: Point, dir: string) => Point {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let p0 = { x: 4, y: 5 }
     let p1 = move(p0, 'up')
     let p2 = move(p1, 'right')
     let p3 = move(p2, 'down')
     'struct_match p1y={} p2x={} p3y={}'->format<p1.y, p2.x, p3.y>->println
-    return 0
 }

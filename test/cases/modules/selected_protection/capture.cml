@@ -16,8 +16,7 @@ func bump(k: int) => int {
     return w * 0
 }
 
-func main() => int sync {
+func main() sync {
     println(bump(41))
     println(counter)
-    return 0
 }

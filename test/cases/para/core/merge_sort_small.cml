@@ -24,11 +24,10 @@ func mergesort(arr: int[]) => (int[], int) {
     }
 }
 
-func main() => int sync {
+func main() sync {
     seed(1)
     let arr = to_array(0 .. 64)->shuffle<next_key()>
     let (res, met) = mergesort(arr)
     res->println
     println('leaf sorts that met a peer: {} of 8'->format<met>)
-    return 0
 }

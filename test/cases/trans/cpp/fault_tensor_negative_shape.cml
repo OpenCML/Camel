@@ -4,8 +4,7 @@ func neg(n: int) => int {
     return -n
 }
 
-func main() => int sync {
+func main() sync {
     let bad = neg(1)
     println(zeros::<f32>([bad, 2]))
-    return 0
 }

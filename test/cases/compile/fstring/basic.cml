@@ -1,4 +1,4 @@
-func main() => int sync {
+func main() sync {
     let name = 'Camel'
     let n = 42
     let pi = 3.5
@@ -9,5 +9,4 @@ func main() => int sync {
     println(`nested: ${'<' + `inner ${n}` + '>'}`)
     println(`braces { } are literal; \${not} interpolated`)
     println(`a backtick \` and a brace { stay`)
-    return 0
 }

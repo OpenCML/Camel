@@ -25,7 +25,7 @@ func init() => LinearBias {
     return { weight: zeros::<f32>([2, 1]), bias: zeros::<f32>([1]) }
 }
 
-func main() => int sync {
+func main() sync {
     let model = init()
     let X = ones::<f32>([4, 2])
     let y = ones::<f32>([4, 1])
@@ -40,5 +40,4 @@ func main() => int sync {
     'graph_autograd_multi_param_demo bias={}'->format<trained.bias>->println
     'graph_autograd_multi_param_demo weight_grad={}'->format<vg.1.weight>->println
     'graph_autograd_multi_param_demo bias_grad={}'->format<vg.1.bias>->println
-    return 0
 }

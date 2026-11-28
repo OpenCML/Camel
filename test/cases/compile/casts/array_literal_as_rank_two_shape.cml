@@ -4,7 +4,6 @@ func take22(m: float[2, 2]) => void {
     println(m)
 }
 
-func main() => int sync {
+func main() sync {
     take22([[1.5, 2.5], [3.5, 4.5]] as float[2, 2])
-    return 0
 }

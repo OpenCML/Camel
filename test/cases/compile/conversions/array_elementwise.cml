@@ -8,7 +8,7 @@
 
 import { ones } from tensor
 
-func main() => int sync {
+func main() sync {
     let ints = [1, 2, 3]
     let floats: f64[] = float(ints)
     println(floats + 0.5)
@@ -18,5 +18,4 @@ func main() => int sync {
     let wide: f64[2, 2] = f64(ones::<f32>([2, 2]))
     println(wide)
     println(float(3), f32(2), int(2.9))
-    return 0
 }

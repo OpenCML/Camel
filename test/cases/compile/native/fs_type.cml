@@ -6,7 +6,6 @@
 
 import { exists } from fs
 
-func main() => int sync {
+func main() sync {
     println(exists(42))
-    return 0
 }

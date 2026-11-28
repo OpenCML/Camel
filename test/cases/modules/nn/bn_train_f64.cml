@@ -49,7 +49,7 @@ func reference(
     return (y, new_rm, new_rv)
 }
 
-func main() => int sync {
+func main() sync {
     let g = reshape<[2]>([1.2, 0.8])
     let b = reshape<[2]>([0.3, -0.2])
     let rm = reshape<[2]>([0.1, -0.4])
@@ -72,5 +72,4 @@ func main() => int sync {
     'bn_train_f64 y={} rm={} rv={}'->format<sum(got.0), sum(got.1), sum(got.2)>->println
     'bn_train_f64 dx={} dgamma={} dbeta={}'->format<sum(manual.0), sum(manual.1), sum(manual.2)>->println
     'bn_train_f64 dx_abs={} dgamma_abs={} dbeta_abs={}'->format<dX, dG, dB>->println
-    return 0
 }

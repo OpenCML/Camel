@@ -12,8 +12,8 @@ func divide(a: int, b: int) => int {
     return 7 / b
 }
 
-func main() => int sync {
+func main() sync {
     println(1)
     let shown = show(2)
-    return divide(shown, 0)
+    divide(shown, 0)
 }

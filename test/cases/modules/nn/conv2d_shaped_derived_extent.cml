@@ -38,7 +38,7 @@ func opaque(t: f32[...]) => f32[...] {
     return t
 }
 
-func main() => int sync {
+func main() sync {
     let x = ones::<f32>([1, 1, 6, 6])
     let w = ones::<f32>([1, 1, 3, 3])
     let b = ones::<f32>([1])
@@ -68,5 +68,4 @@ func main() => int sync {
     let d7x = conv2d_input_grad_shaped(w, dy7, 2)
     let d7w = conv2d_kernel_grad_shaped(x7, dy7, 2)
     `divides dx={} dw={}`->format<shape(d7x), shape(d7w)>->println
-    return 0
 }

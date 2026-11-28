@@ -11,12 +11,11 @@ func apply_one(f: (x: float) => float) => float {
     return f(3.0)
 }
 
-func main() => int sync {
+func main() sync {
     let sum = apply(func (...xs) {
         0.0
     })
     let one = apply_one(func (...ys: float[...]) {
         1.0
     })
-    return 0
 }

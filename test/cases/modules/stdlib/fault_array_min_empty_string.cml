@@ -1,9 +1,8 @@
 import { min } from array
 
-func main() => int sync {
+func main() sync {
     let xs: string[] = []
     println('before')
     println(min(xs))
     println('not reached')
-    return 0
 }

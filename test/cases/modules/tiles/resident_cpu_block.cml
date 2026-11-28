@@ -22,8 +22,7 @@ func step(x: f32[2]) => f32[2] sync {
     return (out + out) as f32[2]
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[2]>([1.0, 2.0] as f32[])
     println(sum(step(x)))
-    return 0
 }

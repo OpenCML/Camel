@@ -20,8 +20,7 @@ func right(x: int) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(wrong(-1))
     println(right(-1))
-    return 0
 }

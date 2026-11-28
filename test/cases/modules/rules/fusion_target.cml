@@ -24,7 +24,7 @@ func after_matmul(x: f32[...], w: f32[...]) => f32[...] {
     return 1.0 / (1.0 + exp(-(x @ w)))
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[2, 3]>([0.3, -1.2, 0.5, 2.0, 1.1, 0.4] as f32[])
     let w = reshape<[3, 2]>([0.1, -0.2, 0.3, 0.4, -0.5, 0.6] as f32[])
     // The definition against its kernel: zero means bit for bit, at every element.
@@ -32,5 +32,4 @@ func main() => int sync {
     println('doubled sum        ', sum(doubled(x)))
     println('positive sum       ', sum(positive(x)))
     println('after matmul minus sigmoid', sum(abs(after_matmul(x, w) - sigmoid(x @ w))))
-    return 0
 }

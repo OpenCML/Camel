@@ -93,7 +93,7 @@ func mixed(seen: int, var written: int) => int sync {
     return seen
 }
 
-func main() => int sync {
+func main() sync {
     var c = 0
     bump(c)
     println(c)
@@ -147,5 +147,5 @@ func main() => int sync {
     var d = 0
     let seen = mixed(d, d)
     println('{} {}'->format<seen, d>)
-    return r1 + r2 + r3
+    r1 + r2 + r3
 }

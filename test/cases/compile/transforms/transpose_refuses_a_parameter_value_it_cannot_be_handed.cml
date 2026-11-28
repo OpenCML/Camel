@@ -35,8 +35,7 @@ func pick(x: float[3]) => float {
     return x[1]
 }
 
-func main() => int sync {
+func main() sync {
     let back = transpose(pick)
     println(back(1.0))
-    return 0
 }

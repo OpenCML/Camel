@@ -59,7 +59,7 @@ func initial() => Model {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let x = [[1.0, 0.5], [0.5, 1.0]] as float[2, 2]
     let m = initial()
     let (value, g) = with_grad(block)<m>(x)
@@ -84,5 +84,4 @@ func main() => int sync {
     g.g2->println
     'grad b2 '->print
     g.b2->println
-    return 0
 }

@@ -4,7 +4,7 @@ digraph GraphIR {
     edge [minlen=2];
     subgraph cluster_F01 {
         label="main";
-        tooltip="() => int uses var console";
+        tooltip="() => string uses var console";
         subgraph cluster_F02 {
             label="gate";
             tooltip="(t: f32[4]) => f32[4] pure";
@@ -53,9 +53,8 @@ digraph GraphIR {
         N13 [label="gate={}", type="DATA", shape=circle, style=solid, value_type="string", origin=<ORIGIN>, span="19:4-19:13", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="gate={}\nmain::node#n6"];
         N14 [label=":str/\nformat", type="OPER", shape=diamond, style="filled,solid", value_type="string", origin=<ORIGIN>, span="19:21-19:27", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", fillcolor="#cfe2f3", role="export-capability", tooltip=":str/format\nmain::node#n7\nrole export-capability: ':str/format' has no ONNX lowering at opset 17"];
         N15 [label=":io/p\nrintln", type="OPER", shape=diamond, style="filled,solid", value_type="string", origin=<ORIGIN>, span="19:29-19:36", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", fillcolor="#f4cccc", role="effect;export-capability", tooltip=":io/println\nmain::node#n8\nrole effect: :io/println\nrole export-capability: ':io/println' has no ONNX lowering at opset 17"];
-        N16 [label="0", type="DATA", shape=circle, style=solid, value_type="int", origin=<ORIGIN>, span="20:11-20:12", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="0\nmain::node#n9"];
-        N17 [label="GATE", type="GATE", shape=diamond, style=dashed, value_type="int", tooltip="GATE\nmain::node#n9"];
-        N17 -> O01 [label="0", type="EXIT", style=solid];
+        N16 [label="GATE", type="GATE", shape=diamond, style=dashed, value_type="string", tooltip="GATE\nmain::node#n8"];
+        N16 -> O01 [label="0", type="EXIT", style=solid];
         N0D -> N0F [label="0|0", type="WITH", style=dashed];
         N0E -> N0F [label="0|0", type="NORM"];
         N0F -> N10 [label="0|0", type="NORM"];
@@ -72,15 +71,15 @@ digraph GraphIR {
         N14 -> N15 [label="0|0", type="NORM"];
         N14 -> N15 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
         N14 -> N15 [label="SYNC", type="SYNC", style=solid, arrowhead=diamond];
-        N16 -> N17 [label="0|0", type="NORM"];
-        N15 -> N17 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
-        N15 -> N17 [label="SYNC", type="SYNC", style=solid, arrowhead=diamond];
+        N15 -> N16 [label="0|0", type="NORM"];
+        N15 -> N16 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
+        N15 -> N16 [label="SYNC", type="SYNC", style=solid, arrowhead=diamond];
     }
     O00 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-    N18 [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, value_type="() => int uses var console", origin=<ORIGIN>, span="17:0-21:1", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="Function(graph=main, tupleSlots=0)\n__root__::node#n0"];
-    N19 [label="CALL", type="CALL", shape=diamond, style=solid, value_type="int", tooltip="CALL\n__root__::node#n1"];
-    N19 -> O00 [label="0", type="EXIT", style=solid];
-    N18 -> N19 [label="0|0", type="WITH", style=dashed];
+    N17 [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, value_type="() => string uses var console", origin=<ORIGIN>, span="17:0-20:1", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="Function(graph=main, tupleSlots=0)\n__root__::node#n0"];
+    N18 [label="CALL", type="CALL", shape=diamond, style=solid, value_type="string", tooltip="CALL\n__root__::node#n1"];
+    N18 -> O00 [label="0", type="EXIT", style=solid];
+    N17 -> N18 [label="0|0", type="WITH", style=dashed];
     subgraph cluster_legend {
         label="roles";
         "legend_scalar-boundary" [label="scalar boundary (tensor <-> host number)", type="LEGEND", role="scalar-boundary", shape=box, fixedsize=false, style=filled, fillcolor="#fff2cc"];

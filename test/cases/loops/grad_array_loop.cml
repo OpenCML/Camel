@@ -29,7 +29,7 @@ func state_struct() => float {
     return ps[0].x + ps[1].x
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [1.0, 2.0, 3.0]
     println(capture<xs>())
     println(grad(capture)<xs>())
@@ -37,5 +37,4 @@ func main() => int sync {
     println(grad(state)<2.0>())
     println(state_struct<2.0>())
     println(grad(state_struct)<2.0>())
-    return 0
 }

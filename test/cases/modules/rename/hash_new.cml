@@ -11,8 +11,7 @@ func sha256_rounds(s: string, rounds: int) => string {
     return digest
 }
 
-func main() => int sync {
+func main() sync {
     println(sha256('abc'))
     println(sha256_rounds('abc', 1) == sha256('abc'))
-    return 0
 }

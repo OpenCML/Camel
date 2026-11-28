@@ -19,7 +19,6 @@ func make(x: int) => int {
     a
 }
 
-func main() => int sync {
+func main() sync {
     println(make(3))
-    return 0
 }

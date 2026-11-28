@@ -36,11 +36,10 @@ func loss32() => float {
     return float(sum(gelu(x)))
 }
 
-func main() => int sync {
+func main() sync {
     let x = [-1.0, 0.0, 1.0] as f64[]
     println('gelu_grad_f64 forward={}'->format<gelu(x)>)
     println('gelu_grad_f64 grad={}'->format<grad(loss64)<x>()>)
     let y = [-1.0, 0.0, 1.0] as f32[]
     println('gelu_grad_f32 grad={}'->format<grad(loss32)<y>()>)
-    return 0
 }

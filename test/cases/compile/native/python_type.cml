@@ -6,7 +6,6 @@
 
 import { import_module } from python
 
-func main() => int sync {
+func main() sync {
     import_module(1)
-    return 0
 }

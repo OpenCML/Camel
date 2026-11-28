@@ -7,7 +7,6 @@ func twice(x: int) => int {
     return x + x
 }
 
-func main() => int sync {
+func main() sync {
     println(twice(21))
-    return 0
 }

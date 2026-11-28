@@ -20,7 +20,6 @@ func quiet(tag: string) => int {
     return 4
 }
 
-func main() => int sync {
+func main() sync {
     println(quiet('never printed'))
-    return 0
 }

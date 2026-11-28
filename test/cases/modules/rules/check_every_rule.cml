@@ -69,7 +69,7 @@ import {
     array_sigmoid_chain
 } from rules
 
-func main() => int sync {
+func main() sync {
     print(check_text([
         add_self,
         int_add_zero,
@@ -108,5 +108,4 @@ func main() => int sync {
     ]->check<200, 1>))
     print(check_text([float_log1p, float_expm1]->check<100, 11>))
     print(check_text([array_log_softmax_of_softmax]->check<100, 1>))
-    return 0
 }

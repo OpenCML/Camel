@@ -38,7 +38,7 @@ func frozen() => (float, float) {
     return (1.0, w * w)
 }
 
-func main() => int sync {
+func main() sync {
     let pair = grad(loss, has_aux: true)<3.0>()
     let gradient = pair.0
     let aux = pair.1
@@ -57,5 +57,4 @@ func main() => int sync {
     let held_inner = held_step.0
     println('held grad={} aux={}'->format<held.0, held.1>)
     println('held value={} aux={} grad={}'->format<held_inner.0, held_inner.1, held_step.1>)
-    return 0
 }

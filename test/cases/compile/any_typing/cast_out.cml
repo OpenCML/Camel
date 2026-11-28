@@ -10,6 +10,6 @@ func show(a: Json) => int sync {
     return 0
 }
 
-func main() => int sync {
-    return decode('12345')->show !! 1
+func main() sync {
+    decode('12345')->show !! 1
 }

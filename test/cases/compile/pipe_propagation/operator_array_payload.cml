@@ -6,7 +6,6 @@ func wrapped(xs: int[]) => int[]! {
     return xs
 }
 
-func main() => int sync {
+func main() sync {
     println(wrapped([1, 2, 3])->len !! -1)
-    return 0
 }

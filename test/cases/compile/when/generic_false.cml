@@ -15,7 +15,6 @@ func add::<T>(x: T, y: T) => T when is_numeric::<T>() {
     return x + y
 }
 
-func main() => int sync {
+func main() sync {
     println(add('a', 'b'))
-    return 0
 }

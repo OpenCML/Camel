@@ -46,10 +46,9 @@ func pick(x: int) => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let first = pick(1)
     'after {}'->format<first>->println
     let second = pick(-1)
     'after {}'->format<second>->println
-    return 0
 }

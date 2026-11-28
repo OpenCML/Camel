@@ -19,6 +19,6 @@ func bad::<T>(x: int) => int when outer::<T>() {
     return x
 }
 
-func main() => int sync {
-    return bad(1)
+func main() sync {
+    bad(1)
 }

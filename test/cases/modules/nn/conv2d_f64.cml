@@ -22,7 +22,7 @@ func loss(x: float[...], kernel: float[...], bias: float[...]) => float {
     return sum(conv2d<1, 0>(x, kernel, bias))
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[1, 1, 3, 3]>([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
     let kernel = reshape<[2, 1, 2, 2]>([0.3, -0.2, 0.1, 0.4, -0.1, 0.5, 0.2, -0.3])
     let bias = reshape<[2]>([0.05, -0.15])
@@ -39,5 +39,4 @@ func main() => int sync {
     let fdX = (loss(x + xMask * h, kernel, bias) - loss(x - xMask * h, kernel, bias)) / (2.0 * h)
     let fdK = (loss(x, kernel + kMask * h, bias) - loss(x, kernel - kMask * h, bias)) / (2.0 * h)
     'conv2d_f64 grad_x={} fd_x={} grad_k={} fd_k={}'->format<gx, fdX, gk, fdK>->println
-    return 0
 }

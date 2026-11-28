@@ -7,7 +7,6 @@ func broken(t: { a: int, b: int }) {
     return {static for n, F in fields { a: int, b: int } do {}}
 }
 
-func main() => int sync {
+func main() sync {
     let r = broken({ a: 1, b: 2 })
-    return 0
 }

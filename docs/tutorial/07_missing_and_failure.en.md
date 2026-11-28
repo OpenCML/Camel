@@ -28,14 +28,13 @@ func show(x: int?) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [10, 20, 30]
     println(find(xs, 20, 0) ?? -1)
     println(find(xs, 99, 0) ?? -1)
     println(show(find(xs, 30, 0)), show(find(xs, 31, 0)))
     let maybe: int? = null
     println(maybe)
-    return 0
 }
 ```
 
@@ -86,14 +85,13 @@ func describe(r: int!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(safe_div(9, 3) !! -1)            // 3
     println(safe_div(9, 0) !! -1)            // -1: the substitute
     println(describe(safe_div(8, 2) -> inc))
     println(describe(safe_div(8, 0) -> inc))
     println(parse_int('12') !! 0, parse_int('twelve') !! 0)
     println(safe_div(1, 0))
-    return 0
 }
 ```
 
@@ -138,12 +136,11 @@ position, and `!!` cannot catch them. Here is `xs[5]` on a three-element array:
 // A fault is not an error value: reading past the end ends the program, with a position.
 // Run: camel docs/tutorial/examples/07_fault.cml
 
-func main() => int sync {
+func main() sync {
     let xs = [1, 2, 3]
     println('before')
     println(xs[5])
     println('after')
-    return 0
 }
 ```
 
@@ -176,10 +173,9 @@ does that:
 // The take `x!`: here the value must be there, and a failed value ends the program at the `!`.
 // Run: camel docs/tutorial/examples/07_take.cml
 
-func main() => int sync {
+func main() sync {
     let n = parse_int('40')!
     println(n + 2)
-    return 0
 }
 ```
 
@@ -223,9 +219,8 @@ func sum_ints(words: string[]) => int {
     return words->map<func (s) { parse_int(s) !! 0 }>->reduce<func (acc: int, x: int) => int { acc + x }, 0>
 }
 
-func main() => int sync {
+func main() sync {
     println(sum_ints(['12', 'x', '7']))
-    return 0
 }
 ```
 

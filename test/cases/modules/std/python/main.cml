@@ -25,7 +25,7 @@ func main_name(name: string) => PyObject sync {
     return must(import_module('__main__')->attr<name>)
 }
 
-func main() => int sync {
+func main() sync {
     println('=== Python Integration Tests ===')
     
     println('\n[1] [wrap(1)]->call<print>')
@@ -76,5 +76,4 @@ func main() => int sync {
     println(to_string(sqrt_result) !! 'failed')
     
     println('\n=== All tests completed ===')
-    return 0
 }

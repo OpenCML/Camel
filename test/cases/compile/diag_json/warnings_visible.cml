@@ -11,12 +11,12 @@ func inc(var x: int) => int sync {
     return 0
 }
 
-func main() => int {
+func main() {
     var c = 0
     inc(c)
     let r = if c > 0 then sync {
         c += 10
-        return 0
+        0
     } else 0
-    return println(c + r)
+    println(c + r)
 }

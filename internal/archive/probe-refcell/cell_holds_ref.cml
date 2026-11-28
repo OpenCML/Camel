@@ -57,11 +57,10 @@ func drain() => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(plain_let())
     println(var_same_region())
     println(cell_read_by_closure())
     println(cell_written_and_read())
     println(drain())
-    return 0
 }

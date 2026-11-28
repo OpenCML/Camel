@@ -22,7 +22,7 @@ func loss_engine(indices: int[]) => float {
     return sum(embedding(table, indices))
 }
 
-func main() => int sync {
+func main() sync {
     let table = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]] as float[4, 2]
     let indices = [0, 2, 2] as int[]
     let seed = [[1.0, 0.0], [0.0, 1.0], [2.0, 2.0], [0.0, 0.0]] as float[4, 2]
@@ -37,5 +37,4 @@ func main() => int sync {
     let forwardDiff = forward - sum(engine * seed)
     let forwardOk = forwardDiff < 1e-6 && forwardDiff > -1e-6
     `embedding forward={} forward_ok={} forward_diff={:.12e}`->format<forward, forwardOk, forwardDiff>->println
-    return 0
 }

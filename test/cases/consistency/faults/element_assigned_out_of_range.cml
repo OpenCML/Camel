@@ -4,10 +4,9 @@
  * fault comes from the element store it lowers to.
  */
 
-func main() => int sync {
+func main() sync {
     var xs = [1, 2, 3]
     println('before')
     xs[5] = 1
     println('not reached')
-    return 0
 }

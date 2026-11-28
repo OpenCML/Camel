@@ -50,7 +50,6 @@ func foldAndRun(which: int) => int spelling sync {
     return 0
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     foldAndRun(0)
-    return 0
 }

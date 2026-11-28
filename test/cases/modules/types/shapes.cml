@@ -25,7 +25,7 @@ func only_maps::<T>() => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(shape_of::<int[]>(), shape_of::<f32[...]>(), shape_of::<int?>(), shape_of::<string!>())
     println(shape_of::<Map<string, int>>(), shape_of::<Set<int>>(), shape_of::<{ a: int }>())
     println(shape_of::<(int, int)>(), shape_of::<(x: int) => int>(), shape_of::<float>())
@@ -33,5 +33,4 @@ func main() => int sync {
     println(is_array::<int[]>(), is_array::<int?>(), is_nullable::<int?>(), is_nullable::<int!>())
     println(is_fallible::<int!>(), is_fallible::<int>(), is_map::<Map<int, int>>(), is_map::<Set<int>>())
     println(is_set::<Set<int>>(), is_set::<int[]>())
-    return 0
 }

@@ -29,7 +29,7 @@ func returnedArray(n: int) => f32[] {
     return [1.0000000596046447753906251, f32(n)]
 }
 
-func main() => int sync {
+func main() sync {
     let n = 1
     // the parameter position, for a struct, a tuple and an array
     println('{:.9g}'->format<takeStruct({ n: n, t: (1.0000000596046447753906251, 2.0) })>)
@@ -39,5 +39,4 @@ func main() => int sync {
     println('{:.9g}'->format<returnedStruct(n).t.0>)
     println('{:.9g}'->format<returnedTuple(n).0>)
     println('{:.9g}'->format<returnedArray(n)[0]>)
-    return 0
 }

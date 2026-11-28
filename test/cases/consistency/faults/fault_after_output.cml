@@ -11,10 +11,9 @@ func work(z: int) => int sync {
     return r
 }
 
-func main() => int sync {
+func main() sync {
     println('main 1')
     println('main 2')
     println(work(0))
     println('not reached')
-    return 0
 }

@@ -28,7 +28,7 @@ func good(xs: string[]) => int {
     }, 0>
 }
 
-func main() => int sync {
+func main() sync {
     seed(7)
     let names = (0 .. 700)->map<func (i: int) => string {
         label(i)
@@ -39,5 +39,4 @@ func main() => int sync {
     let mixed = picked->shuffle<next_key()>
     let c2 = churn(64)
     println('mixed', len(mixed), good(mixed), c2)
-    return 0
 }

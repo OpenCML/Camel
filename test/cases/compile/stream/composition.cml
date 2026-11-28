@@ -10,10 +10,9 @@ func dbl(x: int) => int {
     return x * 2
 }
 
-func main() => int sync {
+func main() sync {
     let g = inc <> dbl
     println(g(3))
     let h = inc <> dbl
     println(h(3))
-    return 0
 }

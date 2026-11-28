@@ -17,7 +17,6 @@ type Head<P> = match type P {
 // A function with no `with` parameter: the pack of `with` parameters is the empty one.
 type Plain = (x: float) => float
 
-func main() => int sync {
+func main() sync {
     let head: Head<WithOf<Plain>> = 1.0
-    return 0
 }

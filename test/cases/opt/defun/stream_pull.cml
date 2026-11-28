@@ -3,8 +3,7 @@
 /// only known where the pull runs.
 import stream
 
-func main() => int sync {
+func main() sync {
     let s = stream::from_array([1, 2, 3])
     println('pull {}'->format<loop acc = 0 for x in s do acc + x>)
-    return 0
 }

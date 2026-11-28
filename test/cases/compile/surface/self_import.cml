@@ -1,5 +1,4 @@
 import self_import
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

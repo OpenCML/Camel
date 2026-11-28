@@ -12,6 +12,6 @@ func f(a: int, c: string) => int {
     return a * 10
 }
 
-func main() => int sync {
-    return f(a: 1, b: 2)
+func main() sync {
+    f(a: 1, b: 2)
 }

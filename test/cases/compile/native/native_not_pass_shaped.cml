@@ -12,7 +12,7 @@
 
 import { twice } from native_not_pass_shaped_lib
 
-func main() => int sync {
+func main() sync {
     let f = twice(func (x: int) => int { x * 2 })
-    return f(3)
+    f(3)
 }

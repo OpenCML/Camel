@@ -10,9 +10,8 @@ func pick(flag: int, v: int) => int {
     return if flag != 0 then v + 2 else v + 3
 }
 
-func main() => int sync {
+func main() sync {
     let a = inc(40)
     let b = pick(1, 5)
     'inline_strategy_hybrid_mix a={} b={}'->format<a, b>->println
-    return 0
 }

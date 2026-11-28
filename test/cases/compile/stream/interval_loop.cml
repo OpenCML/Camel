@@ -3,7 +3,7 @@
 // never built. Which rounds happen, when there is none, and what the end means are what the array
 // of the interval gave.
 
-func main() => int sync {
+func main() sync {
     // The rounds are a, a + 1, ..., b - 1.
     println(loop acc = 0 for i in 0 .. 5 do acc * 10 + i)
     
@@ -19,5 +19,4 @@ func main() => int sync {
     
     // Half-open: the end takes no round.
     println(loop hits = 0 for i in 1 .. 4 do if i == 4 then hits + 1 else hits)
-    return 0
 }

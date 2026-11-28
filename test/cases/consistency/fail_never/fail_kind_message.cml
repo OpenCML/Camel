@@ -29,7 +29,7 @@ func show(r: int!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(show(attempt(raise_two)('TwoArgs')))
     println(show(attempt(raise_one)('OneArg')))
     println(show(error_two('ErrorTwo')))
@@ -37,5 +37,4 @@ func main() => int sync {
     let computed = 'Comp' + 'uted'
     println(show(attempt(raise_one)(computed)))
     println(show(error_one(computed)))
-    return 0
 }

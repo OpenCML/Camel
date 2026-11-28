@@ -33,7 +33,6 @@ func ignored() => int {
     return t
 }
 
-func main() => int sync {
+func main() sync {
     println(guarded(), ignored())
-    return 0
 }

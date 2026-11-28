@@ -19,7 +19,6 @@ func constants_only() => int {
     return loop acc = 0 for x in xs do acc + x * k
 }
 
-func main() => int sync {
+func main() sync {
     println(with_runtime(20), constants_only())
-    return 0
 }

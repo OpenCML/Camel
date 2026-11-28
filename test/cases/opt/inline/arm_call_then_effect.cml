@@ -37,8 +37,7 @@ func run(n: int) => int {
     return if t > 1.0 then measure(n) else other(n)
 }
 
-func main() => int sync {
+func main() sync {
     let r = run(50000)
     'arm_call_then_effect r={}'->format<r>->println
-    return 0
 }

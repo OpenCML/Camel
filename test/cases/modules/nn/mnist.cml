@@ -61,7 +61,7 @@ func train(W: f32[?, ?]) => f32[?, ?] {
     return train_step(0, W)
 }
 
-func main() => int sync {
+func main() sync {
     let n_samples = 100
     let n_features = 32
     let lr = 0.1

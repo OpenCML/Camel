@@ -14,10 +14,9 @@ func names_of::<T>(t: T) {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(names_of({ x: 1, y: (2, 3) }))
     println(names_of((4, 5)))
     let p: Pair = { a: 1, b: (2, 3) }
     println(names_of(p))
-    return 0
 }

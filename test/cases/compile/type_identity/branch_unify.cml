@@ -40,10 +40,9 @@ func producer(c: bool) => (x: int) => int[] {
     return if c then a else b
 }
 
-func main() => int sync {
+func main() sync {
     println(pair(true), pair(false))
     println(record(true).xs, record(false).xs)
     println(maybe(true), maybe(false))
     println(producer(true)(7), producer(false)(7))
-    return 0
 }

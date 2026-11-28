@@ -6,7 +6,6 @@
 
 import ..lib
 
-func main() => int sync {
+func main() sync {
     println(lib::name())
-    return 0
 }

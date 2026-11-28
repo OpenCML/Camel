@@ -67,7 +67,7 @@ func agrees(tangent: float, difference: float) => bool {
     return size < 0.001
 }
 
-func main() => int sync {
+func main() sync {
     let g = graph_of(scale)
     let tags = declaration_tags(g)
     let read = isRule(rule_of(g, 'jvp'), graph_of(scale_jvp)) && isRule(rule_of(g, 'transpose'), graph_of(scale_t)) && isRule(rule_of(g, 'vjp'), graph_of(scale_t))
@@ -96,5 +96,4 @@ func main() => int sync {
     let dx = 2.0
     let ct = 7.0
     println('transform_rules adjoint={}'->format<mul_tangent(x, w, dx, 0.0) * ct == dx * mul_cotangent(w, ct)>)
-    return 0
 }

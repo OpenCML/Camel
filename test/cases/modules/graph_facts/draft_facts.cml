@@ -16,7 +16,7 @@ func subject(xs: f32[]) => f32[...] {
     return reshape<[2, 3]>(ys)
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     let published = graph_of(subject)
     let draft = open(subject)
     let p = nodes(published)
@@ -42,5 +42,4 @@ func main() => int spelling sync {
     println('draft shape')
     println(d->map<func (n: Node) => string { shape_text(n) ?? '-' }>)
     abort(draft)
-    return 0
 }

@@ -30,7 +30,6 @@ func both::<T>(x: T) => string when is_numeric::<T>() {
     return 'numeric'
 }
 
-func main() => int sync {
+func main() sync {
     println(both(1))
-    return 0
 }

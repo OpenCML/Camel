@@ -15,8 +15,7 @@ func stop(m: string) => never {
     return fail('Stopped', m)
 }
 
-func main() => int sync {
+func main() sync {
     let as_int: int! = double(stop('no value to double'))
     let as_string: string! = double(stop('no value to double'))
-    return 0
 }

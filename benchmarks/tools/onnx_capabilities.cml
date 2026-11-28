@@ -12,6 +12,6 @@ func show(ops: string[], i: int) => int sync {
     }
 }
 
-func main() => int sync {
-    return show(supported_operators(), 0)
+func main() sync {
+    show(supported_operators(), 0)
 }

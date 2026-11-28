@@ -24,9 +24,8 @@ func right(x: float) => float sync {
     return x + 1.0
 }
 
-func main(x: float, flag: bool) => int sync {
+func main(x: float, flag: bool) sync {
     let value = if flag then left(x) else right(x)
     let dh = grad(h)<value>()
     'data dh={}'->format<dh>->println
-    return 0
 }

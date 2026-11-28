@@ -38,7 +38,7 @@ func step(c: bool) => (x: int) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     // An argument to a parameter of function type.
     println('arg', apply(func (x) {
         x + 1
@@ -71,5 +71,4 @@ func main() => int sync {
     // The result of a function whose result type is a function type.
     let add5 = adder(5)
     println('return', add5(37), step(true)(41), step(false)(43))
-    return 0
 }

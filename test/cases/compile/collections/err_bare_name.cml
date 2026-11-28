@@ -3,7 +3,6 @@ func size(m: Map) => int {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println('never printed')
-    return 0
 }

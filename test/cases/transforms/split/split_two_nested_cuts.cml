@@ -28,10 +28,9 @@ func f(x: float) => float {
     return g(x) * 3.0
 }
 
-func main() => int sync {
+func main() sync {
     let fwd = split(jvp(f))
     let (y, lin) = fwd(2.0)
     println('f y=', y)
     println('f d=', lin(1.0))
-    return 0
 }

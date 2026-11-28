@@ -8,9 +8,8 @@
 import { pick } from op_body_lib
 import op_body_lib
 
-func main() => int sync {
+func main() sync {
     println(pick([10, 20, 30], 1))
     println(pick('text'))
     println(op_body_lib::pick('qualified'))
-    return 0
 }

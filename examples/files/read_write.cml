@@ -15,7 +15,7 @@ func load(path: string) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     // The runner's per-test scratch directory; a direct run keeps the header's fixed path.
     let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if root == '' then 'tmp/examples' else root
@@ -34,5 +34,4 @@ func main() => int sync {
     println('exists:', exists(missing))
     println(load(missing))
     println(missing->read_text !! 'default contents')
-    return 0
 }

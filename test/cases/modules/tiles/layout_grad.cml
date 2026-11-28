@@ -18,7 +18,7 @@ func negative_axes() => float {
     return float(sum(y * y))
 }
 
-func main(run_gpu: bool) => int sync {
+func main(run_gpu: bool) sync {
     let derivative = func (v: f32[...]) => f32[...] {
         grad(layout_loss)<v>()
     }
@@ -43,5 +43,4 @@ func main(run_gpu: bool) => int sync {
             exit(1)
         }
     }
-    return 0
 }

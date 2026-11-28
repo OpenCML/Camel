@@ -23,10 +23,9 @@ func loss() => float sync {
     return float(sum(r))
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[3]>([0.5, 0.25, -0.35] as f32[])
     println(loss<x>())
     println(grad(loss)<x>())
     println(with_grad(loss)<x>())
-    return 0
 }

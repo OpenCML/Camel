@@ -14,8 +14,7 @@ func pick(c: bool) => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(pick(true))
     println(pick(false))
-    return 0
 }

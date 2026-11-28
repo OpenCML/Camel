@@ -18,14 +18,14 @@ func plain(x: int) => int {
     return x + 3
 }
 
-func main() => int {
+func main() {
     #gpu
     {
         let b = on_device(1) + on_host(2)
         #cpu
         {
             let c = b + plain(3) + 20
-            return c
+            c
         }
     }
 }

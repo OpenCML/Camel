@@ -8,7 +8,6 @@ func missing() => Bytes! {
     return error('Missing', 'the file is not there')
 }
 
-func main() => int sync {
+func main() sync {
     println(missing()->len !! -1)
-    return 0
 }

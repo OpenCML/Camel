@@ -1,4 +1,3 @@
-func main() => int sync {
+func main() sync {
     let 名字 = 1
-    return 0
 }

@@ -68,7 +68,7 @@ func gather_loss() => float {
     return float(sum(m.weights[m.labels]))
 }
 
-func main() => int sync {
+func main() sync {
     let model = {
         weights: reshape<[2, 3]>([1.0, 2.0, 3.0, -4.0, 5.0, -6.0] as f32[]),
         labels: int([1, 0])
@@ -101,5 +101,4 @@ func main() => int sync {
         index_grad,
         zero
     >->println
-    return 0
 }

@@ -38,12 +38,11 @@ func kept(x: f32[3]) => f32[3] {
     return y + 3.0
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println('pair {}'->format<inspect<pair>(x)>)
     println('empty {}'->format<inspect<empty>(x)>)
     println('accumulated {}'->format<inspect<accumulated>(x)>)
     println('kept {}'->format<inspect<kept>(x)>)
     println('value {}'->format<sum(pair(x)) + sum(accumulated(x)) + sum(kept(x))>)
-    return 0
 }

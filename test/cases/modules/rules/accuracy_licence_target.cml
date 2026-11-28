@@ -22,7 +22,6 @@ func guarded(x: float) => float {
     return log(1.0 + x)
 }
 
-func main() => int sync {
+func main() sync {
     println(plain(1e-30), licensed(1e-30), guarded(1e-30))
-    return 0
 }

@@ -6,6 +6,5 @@
 
 type A = { a: A }
 
-func main() => int {
-    return 0
+func main() {
 }

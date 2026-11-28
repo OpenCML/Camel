@@ -128,7 +128,7 @@ func double_d(x: float) => float sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println(mul_zero(3))
     println(zero_mul(4))
     println(sub_self(5))
@@ -147,5 +147,4 @@ func main() => int sync {
     println(combine_d(1.5))
     println(fold_d(1.5))
     println(double_d(1.5))
-    return 0
 }

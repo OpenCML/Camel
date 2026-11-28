@@ -13,10 +13,9 @@ func columnOf(constas n: string, ...ts) => (int, int) {
     return column(n, ...ts)
 }
 
-func main() => int sync {
+func main() sync {
     let a = { w: 1, h: 2 }
     let b = { w: 3, h: 4 }
     println(columnOf('w', a, b))
     println(columnOf('h', a, b))
-    return 0
 }

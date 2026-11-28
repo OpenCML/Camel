@@ -8,7 +8,6 @@ func kind::<T>(x: T) => string when is_numeric::<T>() {
     return 'number'
 }
 
-func main() => int sync {
+func main() sync {
     println(kind(1.5))
-    return 0
 }

@@ -32,7 +32,7 @@ func r16(a17: int, a18: string) => string {
     })
 }
 
-func main() => int sync {
+func main() sync {
     let n33 = ''
     let n34 = 0
     let n35 = 0
@@ -42,5 +42,4 @@ func main() => int sync {
     let n56 = [(0, 0)]
     let n62 = { x: 0, y: 0 }
     println(r16(3, ''))
-    return 0
 }

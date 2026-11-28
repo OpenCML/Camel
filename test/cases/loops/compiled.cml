@@ -71,7 +71,7 @@ func sum_to(n: int) => int {
     return acc
 }
 
-func main() => int sync {
+func main() sync {
     println(sum_squares([1, 2, 3, 4]))
     println(countdown(4))
     println(until_above([3, 12, 7, 15], 9))
@@ -83,5 +83,4 @@ func main() => int sync {
     println(through_call([2, 3, 4]))
     println(ticks(3))
     println(sum_to(5))
-    return 0
 }

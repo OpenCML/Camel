@@ -6,7 +6,7 @@
 // comes along with the built-in rules it declares (design principles 10.2, the last layer), so the
 // type `Range` and these three functions are written here as they are.
 
-func main() => int sync {
+func main() sync {
     let r: Range = to_range(1, 5, 1)
     println(r->to_array())
     println(r->is_empty())
@@ -17,5 +17,4 @@ func main() => int sync {
 
     // A range that names no integer runs no round.
     println(loop n = 0 for i in to_range(3, 3, 1) do n + 1)
-    return 0
 }

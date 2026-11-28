@@ -76,7 +76,7 @@ func last_resort(n: int) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(area(Shape::Rect{ w: 3.0, h: 4.0 }))
     println(area(Shape::Rect{ w: 3.0, h: 0.0 }))
     println(area(Shape::Circle(2.0)))
@@ -95,5 +95,4 @@ func main() => int sync {
     println(fallible(3))
     println(last_resort(200))
     println(last_resort(7))
-    return 0
 }

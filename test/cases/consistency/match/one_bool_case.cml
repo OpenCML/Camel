@@ -8,7 +8,6 @@ func only_true(b: bool) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(only_true(true))
-    return 0
 }

@@ -21,12 +21,11 @@ func fib(idx: int) => int sync {
     return res
 }
 
-func main() => int sync {
+func main() sync {
     let idx = 10
     'Start computing fibonacci({})...'->format<idx>->println
     let start = now()
     let res = fib(idx)
     let duration = now() - start
     'Fibonacci({}) = {} (computed in {:.4f} seconds)'->format<idx, res, duration>->println
-    return 0
 }

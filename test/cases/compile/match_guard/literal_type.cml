@@ -13,10 +13,9 @@ func kind(x: f32) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(kind(3.0))
     println(kind(4.0))
     println(kind(5.0))
     println(kind(1.5))
-    return 0
 }

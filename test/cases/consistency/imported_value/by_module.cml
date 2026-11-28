@@ -7,10 +7,9 @@ func pick() => (x: int) => int {
     return lib::twice
 }
 
-func main() => int sync {
+func main() sync {
     println([1, 2, 3]->map<lib::twice>)
     let f = lib::twice
     println(f(4), apply(lib::twice, 5), pick()(6))
     println(apply(lib::area, 3), lib::area(2, 5))
-    return 0
 }

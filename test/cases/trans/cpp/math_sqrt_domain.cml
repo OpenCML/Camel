@@ -13,7 +13,7 @@ func neg(x: float) => float {
     return -x
 }
 
-func main() => int sync {
+func main() sync {
     let m1 = neg(1.0)
     let r = sqrt(m1)
     print(r)
@@ -28,5 +28,4 @@ func main() => int sync {
     let r3 = sqrt(f)
     print(r3)
     print(is_nan(r3))
-    return 0
 }

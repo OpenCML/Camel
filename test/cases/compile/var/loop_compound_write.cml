@@ -15,7 +15,7 @@
  *
  * Run: camel test/cases/compile/var/loop_compound_write.cml std::nvm
  */
-func main() => int sync {
+func main() sync {
     var total = 5
     let _ = loop i = 0 while i < 3 do sync {
         total += i
@@ -23,5 +23,4 @@ func main() => int sync {
         i + 1
     }
     println(total)
-    return 0
 }

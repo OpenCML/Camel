@@ -39,7 +39,7 @@ func total() => float {
     return float(sum(m.wide)) + float(sum(m.narrow))
 }
 
-func main() => int sync {
+func main() sync {
     // `full` takes the element type of its value: 0.1 is an f64 number and `f32(0.25)` is an f32
     // one, so each leaf is built at the element type its own type writes.
     let model: Leaves = {
@@ -97,5 +97,4 @@ func main() => int sync {
     'optim written_dtype_exact adam wide={}'->format<to_array(to_bytes(second.0.wide))>->println
     'optim written_dtype_exact adam narrow={}'->format<to_array(to_bytes(second.0.narrow))>->println
     'optim written_dtype_exact failures={}'->format<failures>->println
-    return failures
 }

@@ -1,6 +1,5 @@
 // Nothing is converted implicitly: an int is not the float the map holds.
-func main() => int sync {
+func main() sync {
     let m = [('a', 1)] as Map<string, float>
     println('never printed')
-    return 0
 }

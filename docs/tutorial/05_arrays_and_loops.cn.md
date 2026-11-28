@@ -24,7 +24,7 @@ let xs = 1..11        // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 // Arrays and the higher-order operators map, filter, reduce and foreach.
 // Run: camel docs/tutorial/examples/05_arrays.cml
 
-func main() => int sync {
+func main() sync {
     let xs: int[] = 1 .. 11    // [1, ..., 10]
     let squares = xs->map<func (x) { x * x }>
     let evens = squares->filter<func (x) { x % 2 == 0 }>
@@ -41,7 +41,6 @@ func main() => int sync {
 
     // foreach runs its function for each element, in order.
     ['a', 'b', 'c']->foreach<func (s) sync { println('item', s) }>
-    return 0
 }
 ```
 
@@ -74,7 +73,7 @@ item c
 // `loop` carries its state from one round to the next; the body's value is the next state.
 // Run: camel docs/tutorial/examples/05_loops.cml
 
-func main() => int sync {
+func main() sync {
     // One round per element of the sequence.
     let total = loop acc = 0 for x in 1..6 do acc + x * x
     println(total)
@@ -90,7 +89,6 @@ func main() => int sync {
     // Both forms: the condition is checked before each round.
     let first_big = loop hit = 0 for x in [2, 7, 9] while hit == 0 do if x > 5 then x else hit
     println(first_big)
-    return 0
 }
 ```
 
@@ -127,7 +125,7 @@ camel docs/tutorial/examples/05_loops.cml
 
 import { seed, randint, next_key } from random
 
-func main() => int sync {
+func main() sync {
     seed(42)
     // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
     let drawn = (0..8)->map<func (i) { next_key()->randint<0, 100> }>
@@ -137,7 +135,6 @@ func main() => int sync {
     // reduce runs in element order on every back end.
     let ordered = (0..8)->reduce<func (acc: int[], i: int) => int[] { concat(acc, [next_key()->randint<0, 100>]) }, [0][0..0]>
     println(ordered)
-    return 0
 }
 ```
 
@@ -161,7 +158,7 @@ camel docs/tutorial/examples/05_map_order.cml
 
 import { seed, randint, next_key } from random
 
-func main() => int sync {
+func main() sync {
     seed(42)
     // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
     let drawn = (0..8)->map<func (i) { next_key()->randint<0, 100> }>
@@ -171,7 +168,6 @@ func main() => int sync {
     // reduce runs in element order on every back end.
     let ordered = (0..8)->reduce<func (acc: int[], i: int) => int[] { concat(acc, [next_key()->randint<0, 100>]) }, [0][0..0]>
     println(ordered)
-    return 0
 }
 ```
 
@@ -213,7 +209,7 @@ func show(e: (string, int)) => string {
     return e.0 + ' ' + string(e.1)
 }
 
-func main() => int sync {
+func main() sync {
     let text = '
         The quick fox sees the lazy dog.
         The dog sees the fox, and the fox runs.
@@ -237,7 +233,6 @@ func main() => int sync {
         ->sort_by<func (e: (string, int)) => int { 0 - e.1 }>
     println('top 5:')
     println(ranked->take<5>->map<show>->join<'\n'>)
-    return 0
 }
 ```
 
@@ -277,10 +272,9 @@ and 1
 // The answer to the exercise of chapter 5: a `loop` that adds the squares of the even numbers.
 // Run: camel docs/tutorial/examples/05_exercise.cml
 
-func main() => int sync {
+func main() sync {
     let total = loop acc = 0 for x in 1..11 do if x % 2 == 0 then acc + x * x else acc
     println(total)
-    return 0
 }
 ```
 

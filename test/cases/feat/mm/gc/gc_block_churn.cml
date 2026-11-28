@@ -7,7 +7,7 @@
  * fell, that is, a collection released blocks.
  */
 
-func main(steps: int, temp: int) => int sync {
+func main(steps: int, temp: int) sync {
     let start = std::mem::blocks()
     let (iLeft, peak, low, prev, released, dropped, total) = loop i = steps, peak = 0, low = 1000000000000, prev = 0, released = 0, dropped = 0, total = 0 while i > 0 do {
         let tmp = (0 .. temp)->to_array()
@@ -17,5 +17,4 @@ func main(steps: int, temp: int) => int sync {
         (i - 1, if bytes > peak then bytes else peak, if bytes < low then bytes else low, bytes, now.frees - start.frees, if bytes < prev then dropped + 1 else dropped, total + n)
     }
     println('gc_block_churn base={} peak={} low={} dropped={} released={} total={}'->format<0, peak, low, dropped, released, total>)
-    return 0
 }

@@ -13,10 +13,9 @@ func fine(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     println('main start')
     println(fine(41))
     let v = boom(0)
     println(v)
-    return 0
 }

@@ -74,7 +74,7 @@ func value_used(c: bool) => int {
     return x
 }
 
-func main() => int sync {
+func main() sync {
     taken()
     untaken()
     one_of(true)
@@ -82,5 +82,4 @@ func main() => int sync {
     picked(2)
     nested()
     println(value_used(true), value_used(false))
-    return 0
 }

@@ -6,12 +6,11 @@ func collatz_steps(n: int, steps: int) => int {
     else if n % 2 == 0 then collatz_steps(n / 2, steps + 1) else collatz_steps(3 * n + 1, steps + 1)
 }
 
-func main() => int sync {
+func main() sync {
     let steps = (1 .. 20001)->map<func (n: int) => int {
         collatz_steps(n, 0)
     }>
     println(steps->reduce<func (acc: int, cur: int) => int {
         acc + cur
     }, 0>)
-    return 0
 }

@@ -4,8 +4,7 @@ func timed(remaining: int, ticks: int) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let result = timed(3, 0)
     println(result) // mark:returned
-    return 0
 }

@@ -73,12 +73,11 @@ func leveled(a: float) => float {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(marked(1.5, 2.0))
     println(nested(1.25))
     println(blocky(2.0))
     println(looped(4))
     println(inner_mark(1.0), outer_mark(1.0), zero(1.0))
     println(leveled(1.0))
-    return 0
 }

@@ -9,7 +9,7 @@ func through(p: A) => A {
     return p as A
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [1, 2]
     let ys = xs as int[]
     let t = (1, 'x')
@@ -37,5 +37,4 @@ func main() => int sync {
     println(w as c64)
     println(3 as int)
     println(1.5 as float)
-    return 0
 }

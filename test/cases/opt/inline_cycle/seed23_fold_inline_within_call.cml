@@ -159,7 +159,7 @@ func w51(a54: string) => string {
     return 'yz'
 }
 
-func main() => int sync {
+func main() sync {
     let n55 = int((get_env('PROGEN_I0') ?? ''))
     let n56 = (get_env('PROGEN_S1') ?? '')
     let n57 = k35(n55 * (-2))
@@ -170,7 +170,7 @@ func main() => int sync {
         let n65 = ((!false) || (o58 != null)) && q45(f17('pq', 0.25), ['m', n56, n56, 'cd']->reduce<func (p63: bool, p64: string) => bool {
             1.5 > 1.5
         }, true>)
-        return (s60 / 1, o58 ?? c61)
+        (s60 / 1, o58 ?? c61)
     }
     if (loop s70 = false, c71 = (loop s67 = n55, c68 = (n56 + n56) for q69 in [n55, n55] do (10, n56)).0 for q72 in [true, false, false, false] while (match n55 {
         case 0 => true
@@ -185,7 +185,7 @@ func main() => int sync {
         case 'k9' => 2 >= n55
         case _ => {
             let n75 = n56 + n56
-            return true || true
+            true || true
         }
     }) && q45(match n56 {
         case 'ab' => 7
@@ -222,5 +222,4 @@ func main() => int sync {
     println('L6 {}'->format<n79>)
     println('L7 {}'->format<n88>)
     println('L8 {}'->format<n97>)
-    return 0
 }

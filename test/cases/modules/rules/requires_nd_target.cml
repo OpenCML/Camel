@@ -12,7 +12,6 @@ func kept(x: float) => float {
     return x * 1.0
 }
 
-func main() => int sync {
+func main() sync {
     println(scaled(3.0), kept(4.0))
-    return 0
 }

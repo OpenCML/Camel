@@ -4,9 +4,8 @@
  * (docs/design-principles.cn.md 3.5).
  */
 
-func main() => int sync {
+func main() sync {
     let k = 0
     k = 5
     println(k)
-    return 0
 }

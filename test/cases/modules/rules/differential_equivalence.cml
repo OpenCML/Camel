@@ -532,10 +532,9 @@ func report() => string[] {
     ])
 }
 
-func main() => int sync {
+func main() sync {
     let out = report()
     out->foreach<func (line: string) => void {
         println(line)
     }>
-    return 0
 }

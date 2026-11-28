@@ -10,11 +10,10 @@ func double(x: int) => int {
     return x + x
 }
 
-func main() => int sync {
+func main() sync {
     let x = 7
     let (a, b) = pair(x)
     let arr = [x, x]
     let y = double(x)
     'duplicate_inputs a={} b={} arr0={} arr1={} y={}'->format<a, b, arr[0], arr[1], y>->println
-    return 0
 }

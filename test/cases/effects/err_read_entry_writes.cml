@@ -8,7 +8,6 @@ func grow() => int uses env sync {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     println(grow())
-    return 0
 }

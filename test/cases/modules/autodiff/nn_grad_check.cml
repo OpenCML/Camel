@@ -68,7 +68,7 @@ func xent() => float {
     return softmax_cross_entropy(z, labels())
 }
 
-func main() => int sync {
+func main() sync {
     seed(9)
     check('conv_input', conv_input, grad(conv_input), image(), (next_key()->uniform::<f32><shape: [1, 2, 4, 4]> * 2.0 - 1.0))
     check('conv_kernel', conv_kernel, grad(conv_kernel), kernel(), (next_key()->uniform::<f32><shape: [3, 2, 2, 2]> * 2.0 - 1.0))
@@ -76,5 +76,4 @@ func main() => int sync {
     check('pools', pools, grad(pools), image(), (next_key()->uniform::<f32><shape: [1, 2, 4, 4]> * 2.0 - 1.0))
     check('embedding', embed, grad(embed), (next_key()->uniform::<f32><shape: [4, 3]> * 2.0 - 1.0), (next_key()->uniform::<f32><shape: [4, 3]> * 2.0 - 1.0))
     check('cross_entropy', xent, grad(xent), (next_key()->uniform::<f32><shape: [3, 4]> * 2.0 - 1.0), (next_key()->uniform::<f32><shape: [3, 4]> * 2.0 - 1.0))
-    return 0
 }

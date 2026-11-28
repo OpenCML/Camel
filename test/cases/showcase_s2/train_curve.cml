@@ -42,7 +42,7 @@ func loss(x: float[2, 2], t: float[2, 2]) => float {
     return 0.5 * sum(e * e)
 }
 
-func main() => int sync {
+func main() sync {
     let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let t = [[0.0, 0.0], [1.0, 1.0]] as float[2, 2]
     let w0 = [[0.5, 0.25], [0.125, 1.0]] as float[2, 2]
@@ -67,5 +67,4 @@ func main() => int sync {
     `s2 curve library={}`->format<library_curve>->println
     `s2 curve engine={}`->format<engine_curve>->println
     `s2 curve_max_abs_diff={:.12e}`->format<worst>->println
-    return 0
 }

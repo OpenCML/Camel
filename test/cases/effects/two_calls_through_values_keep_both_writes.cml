@@ -20,11 +20,10 @@ func run(a: () => void, b: () => void) => int {
     return counter
 }
 
-func main() => int sync {
+func main() sync {
     println(run(func () {
         counter = counter + 1
     }, func () {
         counter = counter + 10
     }))
-    return 0
 }

@@ -5,10 +5,9 @@ func k30(a31: int) => (a0: int) => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     ['']->foreach<func (p71: string) sync {
         println('')
     }>
     let n72 = k30(5)
-    return 0
 }

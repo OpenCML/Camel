@@ -13,8 +13,7 @@ func deep(n: int) => int sync {
     return deep(n - 1) + 1
 }
 
-func main() => int sync {
+func main() sync {
     println(deep(3))
     println('not reached')
-    return 7
 }

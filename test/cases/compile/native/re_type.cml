@@ -6,7 +6,6 @@
 
 import { has_match } from re
 
-func main() => int sync {
+func main() sync {
     println(has_match<'abc'>(42))
-    return 0
 }

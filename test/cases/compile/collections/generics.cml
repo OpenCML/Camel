@@ -37,7 +37,7 @@ func count_words(words: string[]) => Map<string, int> {
     }, [] as Map<string, int>>
 }
 
-func main() => int sync {
+func main() sync {
     let m = [('a', 2), ('b', 3)] as Map<string, int>
     println(get_or_else(m, 'b', 0), get_or_else(m, 'x', 7))
     let names = [(1, 'one'), (2, 'two')] as Map<int, string>
@@ -53,5 +53,4 @@ func main() => int sync {
     println(key_set(m), key_set(names))
     println(singleton('k', 1.5), singleton((1, 2), 'pair'))
     println(count_words(['x', 'y', 'x', 'z', 'x', 'y']))
-    return 0
 }

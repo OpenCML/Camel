@@ -26,7 +26,7 @@ func warm(i: int, acc: int) => int {
     return if i == 0 then acc else warm(i - 1, acc + quot(i, 0) + depth(5))
 }
 
-func main() => int sync {
+func main() sync {
     // Make both callees hot first, so that an on-demand JIT has compiled them.
     println(warm(200, 0))
     println(kind(attempt(quot)(9, 4)))
@@ -40,5 +40,4 @@ func main() => int sync {
     })()))
     println(warm(200, 0))
     println('end')
-    return 0
 }

@@ -15,8 +15,7 @@ func zeros::<T>(x: T) => Tangent<T> {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(zeros((1.0, 7)))
     println(zeros({ a: 1.0, b: 2.0 }))
-    return 0
 }

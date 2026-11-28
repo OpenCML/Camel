@@ -12,6 +12,6 @@ func count() => int {
     return len(uris)
 }
 
-func main() => int {
-    return count()
+func main() {
+    count()
 }

@@ -17,7 +17,6 @@ func hof(n: int) => int {
     }, 0>
 }
 
-func main() => int sync {
+func main() sync {
     println(hof(1))
-    return 0
 }

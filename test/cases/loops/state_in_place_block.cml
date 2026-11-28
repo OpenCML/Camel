@@ -45,7 +45,7 @@ func grownByMatch(n: int) => (int[], int) {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let before = std::mem::blocks()
     let a = grown(200)
     let mid = std::mem::blocks()
@@ -68,5 +68,4 @@ func main() => int sync {
     println(len(e), er, e[1], e[2], e[4], afterKept.allocs - afterIf.allocs)
     println(len(f), fr, f[1], f[2], f[3], f[199], afterChain.allocs - afterKept.allocs)
     println(len(g), gr, g[1], g[2], g[3], g[199], afterMatch.allocs - afterChain.allocs)
-    return 0
 }

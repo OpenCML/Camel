@@ -14,7 +14,6 @@ func k21(a22: int) => (a0: int) => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     k21(3)
-    return 0
 }

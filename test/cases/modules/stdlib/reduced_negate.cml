@@ -49,7 +49,7 @@ func bitsOfF16(value: f16) => int[] {
     return to_array(to_bytes(one))
 }
 
-func main() => int sync {
+func main() sync {
     // ---- bf16 ----
     let x: bf16 = bf16(1.0) / bf16(3.0)
     let nx: bf16 = -x
@@ -100,5 +100,4 @@ func main() => int sync {
     let bfOne: bf16[] = [nx]
     let f16One: f16[] = [nh]
     println(len(to_bytes(bfOne)), len(to_bytes(f16One)))
-    return 0
 }

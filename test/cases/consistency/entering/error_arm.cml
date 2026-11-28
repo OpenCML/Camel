@@ -19,7 +19,7 @@ func describe(c: bool) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(pick(true) !! -1)
     println(pick(false) !! -1)
     println(describe(true))
@@ -30,5 +30,4 @@ func main() => int sync {
         case error e => e.kind + ': ' + e.message
         case v => 'no value'
     })
-    return 0
 }

@@ -80,11 +80,10 @@ func no_value(a: int) => int sync {
     return total
 }
 
-func main() => int sync {
+func main() sync {
     println(safe_div(6, 3) !! -1, safe_div(6, 0) !! -1)
     println(clamp(-5), clamp(5))
     println(name_of(1), name_of(3), name_of(9))
     println(nested(1, 1), nested(-1, 0))
     println(in_block(1), no_value(500))
-    return 0
 }

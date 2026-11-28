@@ -24,19 +24,18 @@ digraph GraphIR {
         N04 [label="2", type="DATA", shape=circle, style=solid, value_type="int", origin=<ORIGIN>, span="8:19-8:20", srcfile="<ROOT>/docs/tutorial/examples/13_graph.cml", tooltip="2\nmain::node#-2"];
         N05 [label="add", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="int", origin=<ORIGIN>, span="8:12-8:21", srcfile="<ROOT>/docs/tutorial/examples/13_graph.cml", tooltip="add\nmain::node#1"];
         N06 [label=":io/p\nrintln", type="OPER", shape=diamond, style=solid, value_type="int", origin=<ORIGIN>, span="9:4-9:11", srcfile="<ROOT>/docs/tutorial/examples/13_graph.cml", tooltip=":io/println\nmain::node#2"];
-        N07 [label="0", type="DATA", shape=circle, style=solid, value_type="int", origin=<ORIGIN>, span="10:11-10:12", srcfile="<ROOT>/docs/tutorial/examples/13_graph.cml", tooltip="0\nmain::node#-3"];
-        N08 [label="GATE", type="GATE", shape=diamond, style=dashed, value_type="int", tooltip="GATE\nmain::node#-3"];
-        N08 -> O01 [label="0", type="EXIT", style=solid];
+        N07 [label="GATE", type="GATE", shape=diamond, style=dashed, value_type="int", tooltip="GATE\nmain::node#2"];
+        N07 -> O01 [label="0", type="EXIT", style=solid];
         N03 -> N05 [label="0|0", type="NORM"];
         N04 -> N05 [label="0|1", type="NORM"];
         N05 -> N06 [label="0|0", type="NORM"];
-        N07 -> N08 [label="0|0", type="NORM"];
-        N06 -> N08 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
-        N06 -> N08 [label="SYNC", type="SYNC", style=solid, arrowhead=diamond];
+        N06 -> N07 [label="0|0", type="NORM"];
+        N06 -> N07 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
+        N06 -> N07 [label="SYNC", type="SYNC", style=solid, arrowhead=diamond];
     }
     O00 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-    N09 [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, value_type="() => int uses var console", origin=<ORIGIN>, span="7:0-11:1", srcfile="<ROOT>/docs/tutorial/examples/13_graph.cml", tooltip="Function(graph=main, tupleSlots=0)\n__root__::node#-1"];
-    N0A [label="CALL", type="CALL", shape=diamond, style=solid, value_type="int", tooltip="CALL\n__root__::node#1"];
-    N0A -> O00 [label="0", type="EXIT", style=solid];
-    N09 -> N0A [label="0|0", type="WITH", style=dashed];
+    N08 [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, value_type="() => int uses var console", origin=<ORIGIN>, span="7:0-10:1", srcfile="<ROOT>/docs/tutorial/examples/13_graph.cml", tooltip="Function(graph=main, tupleSlots=0)\n__root__::node#-1"];
+    N09 [label="CALL", type="CALL", shape=diamond, style=solid, value_type="int", tooltip="CALL\n__root__::node#1"];
+    N09 -> O00 [label="0", type="EXIT", style=solid];
+    N08 -> N09 [label="0|0", type="WITH", style=dashed];
 }

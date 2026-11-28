@@ -5,8 +5,7 @@
 
 import { count, gather } from prelude_caller
 
-func main() => int sync {
+func main() sync {
     println(gather(3))
     println(count::<float>([1.0, 2.0, 3.0]))
-    return 0
 }

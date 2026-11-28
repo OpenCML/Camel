@@ -16,7 +16,7 @@ func make() => S {
     return { a: 5, b: 1.5 }
 }
 
-func main() => int sync {
+func main() sync {
     let s: S = { a: 1, b: 2.0 }
     let rows = [{ name: 'x', size: 1 }, { name: 'y', size: 2 }]
     'annotated {} {}'->format<s.a, s.b>->println
@@ -26,5 +26,4 @@ func main() => int sync {
     'call {}'->format<make().b>->println
     'index {} {}'->format<rows[1].name, rows[0].size>->println
     'compare {}'->format<3 < 4 && 5 > 4>->println
-    return 0
 }

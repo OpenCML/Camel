@@ -11,6 +11,6 @@ func unrolled(t: { a: int, b: int, c: int }) => int {
     return ((0 + t.a) + t.b) + t.c
 }
 
-func main() => int {
-    return loopSum({ a: 1, b: 2, c: 3 }) - unrolled({ a: 1, b: 2, c: 3 })
+func main() {
+    loopSum({ a: 1, b: 2, c: 3 }) - unrolled({ a: 1, b: 2, c: 3 })
 }

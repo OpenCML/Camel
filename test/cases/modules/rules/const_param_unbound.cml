@@ -30,7 +30,6 @@ func shifted(a: int) => int {
     return a + 1
 }
 
-func main() => int sync {
+func main() sync {
     println(shifted(41))
-    return 0
 }

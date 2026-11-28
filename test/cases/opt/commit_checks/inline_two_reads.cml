@@ -27,10 +27,9 @@ func reads_two(first: string, second: string) => int {
     return numel(a) + numel(b)
 }
 
-func main() => int {
+func main() {
     println(reads_two(
         'test/cases/modules/tensor/shape_types/x3.npy',
         'test/cases/compile/entry_args/b.npy'
     ))
-    return 0
 }

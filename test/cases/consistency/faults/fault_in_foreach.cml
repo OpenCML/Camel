@@ -7,9 +7,8 @@ func show(x: int) => void sync {
     println(60 / (x - 2))
 }
 
-func main() => int sync {
+func main() sync {
     println('before')
     (0 .. 6)->foreach<show>
     println('not reached')
-    return 0
 }

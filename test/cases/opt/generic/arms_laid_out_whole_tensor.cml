@@ -21,7 +21,7 @@ func spin(i: int, n: int, acc: f32[...]) => f32[...] {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let x = load_npy::<f32>('test/cases/opt/generic/arms_laid_out_whole_v4.npy')
     let n = int(x[0] + 2.6)
     let r = if n > 2 then {
@@ -29,5 +29,4 @@ func main() => int sync {
         a
     } else x
     println('r {}'->format<sum<0, true>(r)[0]>)
-    return 0
 }

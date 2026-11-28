@@ -4,11 +4,10 @@
  * (docs/design-principles.cn.md 3.5, 10.5).
  */
 
-func main() => int sync {
+func main() sync {
     var v = [1, 2, 3]
     let a = v
     v[0] = 9
     println(a)
     println(v)
-    return 0
 }

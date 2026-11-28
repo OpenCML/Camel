@@ -29,9 +29,8 @@ func ignore(f: () => void) => int {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     let n: () => void = notice
     let f: (x: int) => int = inc
     'FAMILY a={}'->format<apply(f, 41) + ignore(n)>->println
-    return 0
 }

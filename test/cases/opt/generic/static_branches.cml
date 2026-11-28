@@ -16,19 +16,18 @@ func twice(v: int) => int {
     return v * 2
 }
 
-func main() => int sync {
+func main() sync {
     let limit = 3
     let label = if limit > 2 then sync {
         println('taken')
-        return 'big'
+        'big'
     } else sync {
         println('not taken')
-        return 'small'
+        'small'
     }
     println(label)
     let ticks = countdown(limit)
     let f = twice
     println('before call')
     'twice={} ticks={}'->format<f(ticks), ticks>->println
-    return 0
 }

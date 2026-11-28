@@ -20,9 +20,8 @@ func pick::<T>(x: T) => T {
     return x
 }
 
-func main() => int sync {
+func main() sync {
     println(square(7))
     println(wrapper())
     println(pick(5))
-    return 0
 }

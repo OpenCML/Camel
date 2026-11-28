@@ -10,8 +10,8 @@ func side() => int sync {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     let v = side() + 1
     println(v)
-    return 0
+    v
 }

@@ -21,8 +21,7 @@ func leak() => Node {
     return made
 }
 
-func main() => int sync {
+func main() sync {
     let dangling = leak()
     println(`[draft-handle] accepted: a handle to a node of a closed draft: ${dangling == dangling}`)
-    return 0
 }

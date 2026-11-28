@@ -28,7 +28,6 @@ func pick::<T>(x: T) => string when is_float::<T>() {
     return 'float'
 }
 
-func main() => int sync {
+func main() sync {
     println(pick('word'))
-    return 0
 }

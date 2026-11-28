@@ -162,7 +162,7 @@ func param_count(m: Model) => int {
     return loop n = shape(m.norm_f)[0] + shape(m.head)[0] * shape(m.head)[1] for b in m.blocks do n + count_block(b)
 }
 
-func main(bench: bool, init_dir: string, final_dir: string) => int sync {
+func main(bench: bool, init_dir: string, final_dir: string) sync {
     // One fixed seed drives the starting weights and the data.  The labels are the largest of the
     // first `vocab` features of each position, so the task is deterministic and learnable.
     seed(42)
@@ -189,7 +189,7 @@ func main(bench: bool, init_dir: string, final_dir: string) => int sync {
             `naive bench step=${i} ms=${elapsed * 1000.0:.6f}`->println
         }
         `naive step=${i} loss=${value:.9f}`->println
-        return (next.0, next.1, i + 1)
+        (next.0, next.1, i + 1)
     }
     
     let after = loss<trained>(x, labels)
@@ -197,5 +197,4 @@ func main(bench: bool, init_dir: string, final_dir: string) => int sync {
     if final_dir != '' then {
         save_params(trained, final_dir)
     }
-    return 0
 }

@@ -9,10 +9,9 @@
 
 import { one_hot, shape, sum } from tensor
 
-func main() => int sync {
+func main() sync {
     let hot: f32[2, 3] = one_hot([0, 2], 3)
     println(hot)
     println(shape(hot))
     println(sum(hot))
-    return 0
 }

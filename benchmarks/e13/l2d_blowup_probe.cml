@@ -82,18 +82,18 @@ func load() => Gru {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let m = load()
     let x = if (get_env('STEPS') ?? '') == '6' then zeros::<f32>([2, 6, 2]) else zeros::<f32>([2, 4, 2])
     let r = export_model<out: get_env('ONNX_OUT') ?? ''>(fwd, (m, x))
-    return match r {
+    match r {
         case error e => sync {
             println(e)
-            return 1
+            1
         }
         case _ => sync {
             println('exported fwd steps=' + (get_env('STEPS') ?? ''))
-            return 0
+            0
         }
     }
 }

@@ -22,8 +22,7 @@ func init_unknown() => int {
     return state.step
 }
 
-func main() => int sync {
+func main() sync {
     let steps = init_unknown()
     'optim unknown optimizer init steps={}'->format<steps>->println
-    return 0
 }

@@ -20,7 +20,7 @@ func kept(xs: int[]) => int[] {
     return big
 }
 
-func main() => int sync {
+func main() sync {
     let n = 4
     let a: f32[] = [f32(i) for i in 0 .. n]
     let b: int[] = [i * 2 for i in 0 .. n]
@@ -28,5 +28,4 @@ func main() => int sync {
     let box: Box = { values: [f32(i) for i in 0 .. n], count: n }
     println(a, b, c, box.values, total([f32(i) for i in 0 .. n]))
     println(squares(4), kept([1, 2, 3]))
-    return 0
 }

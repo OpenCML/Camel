@@ -52,7 +52,7 @@ func digest_set(s: Set<string>) => int {
     }, len(s)>
 }
 
-func main() => int sync {
+func main() sync {
     let e = [] as Map<int, int>
     // Scattered and ascending growth.
     let m1 = fill(e, 0, 700, 7, 1009)
@@ -93,5 +93,4 @@ func main() => int sync {
     let small = ['k5', 'k700', 'zz'] as Set<string>
     println(len(t1), digest_set(t1), len(t2), t2, union(u, small) == union(small, u), len(union(u, small)))
     println(intersect(u, small), intersect(small, u), difference(small, u), len(difference(u, small)), is_subset(small, u))
-    return 0
 }

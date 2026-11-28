@@ -4,10 +4,9 @@ import { download, run_preferred_resident } from tiles
 func divide(a: float, b: float) => float {
     return a / b
 }
-func main() => int sync {
+func main() sync {
     println(is_nan(download(run_preferred_resident<divide>((1.0, nan)))))
     println(is_inf(download(run_preferred_resident<divide>((inf, 2.0)))))
     println(download(run_preferred_resident<divide>((1.0, inf))))
     println(download(run_preferred_resident<divide>((5e-324, 5e-324))))
-    return 0
 }

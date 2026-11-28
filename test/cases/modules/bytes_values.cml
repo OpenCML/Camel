@@ -7,7 +7,7 @@ import { tree_map } from tree
 func count(b: Bytes) => int {
     return len(b)
 }
-func main() => int sync {
+func main() sync {
     // The runner gives every test its own scratch directory (CAMEL_TEST_TMPDIR) and the OS
     // temp is not writable on every runner; a direct run keeps the older fixed path.
     let scratch = get_env('CAMEL_TEST_TMPDIR') ?? ''
@@ -28,5 +28,4 @@ func main() => int sync {
     println(tree_map<count>({ raw: binary, more: (encode('abc'), binary) }))
     let _ = (from_array(0 .. 0))->write_bytes<path, true>
     println(path->file_size !! 0)
-    return 0
 }
