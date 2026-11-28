@@ -45,6 +45,9 @@
 | ③ `inline_cse_algebra` | `+ opt::cse + opt::algebra` | **4627 / 4627** | 18 / 18 | 14 / 14 | 6 / 6 | 0 / 0 | 1 / 1 |
 
 - **两侧逐项相同**：体积三对相同（7431/6463/4627），计数三对相同。
+- **这张表的 opers、indirect_calls 两列是本轮首次取到的量**，旧页（igure1-two-inliners.md，tip 25dcda7a2b3）没有
+  这两个字段 —— 它只有 direct_calls。所以 opers 12/10/6 与 indirect_calls 1/1 **不能与旧页混排**：它们不是
+  "旧值 → 新值"，是"本页第一次有值"。
 - **与旧页（tip `b25dcda7a2b3`）的差，逐项说清**：旧页 `7067 / 6155 / 4431`。
   **体积变了**：`+364 / +308 / +196` 字节；而 **nodes、edges 一个没变**（19→28、28→24、24→18 与 16→26、26→22、22→14）。
   ⇒ 差在**渲染**，不在图：节点与边相同、`opers` 计数相同，dot 文本变长是行内容变长（属性/字段），
@@ -91,7 +94,13 @@ PROBE {"key":"inline_cse.camel","bytes":6463,"stats":"…\"nodes\":24,\"edges\":
 PROBE {"key":"inline_cse.cpp","bytes":6463,"stats":"…\"nodes\":24,\"edges\":22,\"opers\":10,\"direct_calls\":0,\"indirect_calls\":1…"}
 PROBE {"key":"inline_cse_algebra.camel","bytes":4627,"stats":"…\"nodes\":18,\"edges\":14,\"opers\":6,\"direct_calls\":0,\"indirect_calls\":1…"}
 PROBE {"key":"inline_cse_algebra.cpp","bytes":4627,"stats":"…\"nodes\":18,\"edges\":14,\"opers\":6,\"direct_calls\":0,\"indirect_calls\":1…"}
-[SUMMARY] total: 6, pass: 0, fail: 6   （六条全部是探针，故意红：红的产物就是上面六行）
+[SUMMARY] total: 6, pass: 0, fail: 6   （六条全部是探针，故意红 —— 见下）
+
+**为什么这六条红、为什么这是合规的**：计划 runner **只在条目失败时**把 stdout 留在运行目录（PASS 条目
+"nothing was written"，-FetchFile 取不到任何 pass 产物），而本页要的正是 stdout（dot 文本 + GRAPH_STATS）。
+所以探针**故意让 verify 脚本抛错**，把量到的数字放进错误消息里 —— **红的产物就是上面六行 PROBE 原文**，
+不是缺陷、不是回归；探针只存在于一次性读数树 D:\Temp\camel-readings-435，**从未进入仓库**，跑完随树删除，
+正文里也不引用它的 PASS/FAIL 状态。读到本页的人若在别处看到"探针红"，请按本条理解。
 ```
 
 ## 3. "6/6 对图相同、四对两侧都不内联、两对两侧各展开一个普通调用（nodes +9 / edges +10 / operators +6）"
