@@ -4,8 +4,7 @@
  * run.
  */
 
-func main() => int sync {
+func main() sync {
     println(float({ a: 1 }))
     println('never printed')
-    return 0
 }

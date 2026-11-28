@@ -28,7 +28,6 @@ func drive(step: int, steps: int, acc: int) => int {
     return if step == steps then acc else drive(step + 1, steps, mix(acc, inner_sum(step) + churn(0, 20000, step)))
 }
 
-func main() => int sync {
+func main() sync {
     println(drive(0, 40, 0))
-    return 0
 }

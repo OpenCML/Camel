@@ -34,7 +34,7 @@ func twice(n: int) => int {
     return i + a + b + j + c + d
 }
 
-func main() => int sync {
+func main() sync {
     let (i, a, b) = three(4)
     println(i, a, b)
     let (x, y) = no_round(5)
@@ -45,5 +45,4 @@ func main() => int sync {
     // The third round divides by zero (i = 2).
     let (u, v) = fault(3)
     println(u, v)
-    return 0
 }

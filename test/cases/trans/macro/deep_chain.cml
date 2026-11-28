@@ -17,7 +17,6 @@ func add_five(x: int) => int {
     return add_three(add_one(add_one(x)))
 }
 
-func main() => int sync {
+func main() sync {
     println(add_five(37))
-    return 0
 }

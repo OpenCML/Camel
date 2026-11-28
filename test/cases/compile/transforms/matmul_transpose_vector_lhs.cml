@@ -65,7 +65,7 @@ func product_with_v(w: float[2, 2]) => float {
     return sum(matmul(v, w))
 }
 
-func main() => int sync {
+func main() sync {
     let v = [1.0, 2.0]
     let w = [[0.5, 0.25], [0.125, 1.0]] as float[2, 2]
     
@@ -101,5 +101,4 @@ func main() => int sync {
     let ddw11 = abs(dw_declared[1][1] - dw[1][1])
     let ddw_diff = max(max(ddw00, ddw01), max(ddw10, ddw11))
     `matmul_t vector_lhs max_abs_diff_declared_vs_unstated dv={:.12e} dw={:.12e} value={:.12e}`->format<max(ddv0, ddv1), ddw_diff, abs(declared_value - value)>->println
-    return 0
 }

@@ -111,12 +111,11 @@ func used_inside_unused(x: int) => int sync {
     return total
 }
 
-func main() => int sync {
+func main() sync {
     println(safe_div(6, 3) !! -1, safe_div(6, 0) !! -1)
     println(sign(-3), sign(0), sign(3))
     println(uses(0), uses(9))
     println(name_of(1), name_of(2), name_of(3), name_of(9))
     println(before_decl(4))
     println(lambda_in_arm(2), used_inside_unused(9))
-    return 0
 }

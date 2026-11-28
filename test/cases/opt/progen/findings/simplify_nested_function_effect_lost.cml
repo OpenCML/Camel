@@ -7,7 +7,7 @@
  * Reduced by test/tools/progen from seed 284 (generator version 1, all features).
  */
 
-func main() => int sync {
+func main() sync {
     let n24 = ''
     let n28 = [0]
     func g29(a30: string) => int sync {

@@ -10,7 +10,7 @@ func sum(ps: Point[]) => int {
     return loop acc = 0 for p in ps do acc + p.x + p.y
 }
 
-func main() => int sync {
+func main() sync {
     let p: Point = { x: 10, y: 20 }
     let anonymous_first = if p.x > 0 then { x: 1, y: 2 } else p
     let named_first = if p.x > 0 then p else { x: 1, y: 2 }
@@ -23,5 +23,4 @@ func main() => int sync {
     let pts: Point[] = [p]
     println(len(concat([anonymous_first], pts)), len(concat([named_first], pts)))
     println(len(concat([matched], pts)))
-    return 0
 }

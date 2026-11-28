@@ -43,7 +43,7 @@ func train(
     return if steps == 0 then model else train(sgd(model, grad(rating_loss)<model>(u, i, rating), 0.1), u, i, rating, steps - 1)
 }
 
-func main() => int sync {
+func main() sync {
     let model = init()
     let user_one_hot = reshape<[1, 3]>([[1.0, 0.0, 0.0]] as f32[][])
     let item_one_hot = reshape<[1, 4]>([[0.0, 1.0, 0.0, 0.0]] as f32[][])
@@ -61,5 +61,4 @@ func main() => int sync {
     'matrix_factorization item_table={}'->format<stepped.item_table>->println
     'matrix_factorization user_grad={}'->format<vg.1.user_table>->println
     'matrix_factorization item_grad={}'->format<vg.1.item_table>->println
-    return 0
 }

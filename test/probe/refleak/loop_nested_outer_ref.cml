@@ -21,6 +21,6 @@ func nested_read_only() => int sync {
     return 0
 }
 
-func main() => int sync {
-    return nested_read_only()
+func main() sync {
+    nested_read_only()
 }

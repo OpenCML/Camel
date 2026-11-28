@@ -62,7 +62,7 @@ func line(label: string, t: float[...]) {
     println('{} bytes={} d={}'->format<label, len(to_array(to_bytes(t))), t>)
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[3]>([-1.0, 0.0, 1.0] as float[])
     line('f64.gelu', grad(lossGelu)<x>())
     line('f64.erf', grad(lossErf)<x>())
@@ -77,5 +77,4 @@ func main() => int sync {
     line('f64.lnorm.dx', gn.x)
     line('f64.lnorm.dgamma', gn.g)
     line('f64.lnorm.dbeta', gn.b)
-    return 0
 }

@@ -5,7 +5,6 @@
 import { twice } from alias_gen
 import { count } from alias_models
 
-func main() => int sync {
+func main() sync {
     println(twice(count(21)))
-    return 0
 }

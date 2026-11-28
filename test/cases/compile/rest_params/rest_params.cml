@@ -21,7 +21,7 @@ func pair(...ts) => (int, int) {
     return (ts.[0], ts.[1])
 }
 
-func main() => int sync {
+func main() sync {
     println(sum(1, 2, 3))
     println(sum(...(4, 5)))
     println(twice(6, 7))
@@ -29,5 +29,4 @@ func main() => int sync {
     println(sum())
     let (a, b) = pair(9, 10)
     println(a, b)
-    return 0
 }

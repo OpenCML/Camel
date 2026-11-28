@@ -19,7 +19,7 @@ func repeat(ch: string, n: int) => string {
     return s
 }
 
-func main() => int sync {
+func main() sync {
     let atLimit = repeat('[', 10000) + '1' + repeat(']', 10000)
     println(len(string(decode(atLimit))))
     
@@ -30,5 +30,4 @@ func main() => int sync {
     }
     println(deep.kind, deep.location)
     println(deep.message)
-    return 0
 }

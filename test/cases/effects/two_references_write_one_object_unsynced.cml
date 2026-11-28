@@ -13,9 +13,8 @@ func twice(f: (x: int) => void, v: int) => int {
     return counter
 }
 
-func main() => int sync {
+func main() sync {
     println(twice(func (y: int) {
         counter = y
     }, 3))
-    return 0
 }

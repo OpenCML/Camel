@@ -15,7 +15,6 @@ func describe::<T>(x: T) => string when is_compound::<T>() {
     return 'compound'
 }
 
-func main() => int sync {
+func main() sync {
     println(describe((1, 2)))
-    return 0
 }

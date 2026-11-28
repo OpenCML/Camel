@@ -41,9 +41,8 @@ func neutral(x: int) => int {
     return x * 1 + 0
 }
 
-func main() => int sync {
+func main() sync {
     println(like_terms(5))
     println(doubling(5))
     println(neutral(7))
-    return 0
 }

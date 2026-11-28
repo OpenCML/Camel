@@ -96,7 +96,7 @@ func train_stateful(m: Mlp, x: f32[...]) => int sync {
     return if dir != '' then save_trained(trained, dir) else 0
 }
 
-func main() => int sync {
+func main() sync {
     let m = {
         fc1_w: weight('fc1_w'),
         fc1_b: weight('fc1_b'),
@@ -106,7 +106,7 @@ func main() => int sync {
         fc3_b: weight('fc3_b')
     }
     let workload = get_env('CAMEL_BENCH_WORKLOAD') ?? ''
-    return if workload == 'train_export' then export_step(m, get_env('CAMEL_BENCH_EXPORT') ?? '')
+    if workload == 'train_export' then export_step(m, get_env('CAMEL_BENCH_EXPORT') ?? '')
     else if workload == 'train' then run_training(
         func (x: f32[...]) => float {
             return train_step(m, x)

@@ -13,11 +13,10 @@ func over(x: float) => float {
     return x
 }
 
-func main() => int sync {
+func main() sync {
     let c = true
     let fs = [println, inc]
     let t = (over, 1)
     let k = if c then println else inc
     println('never printed')
-    return 0
 }

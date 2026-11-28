@@ -25,7 +25,7 @@ func use(f: (y: float) => float, z: float) => float {
     return f(z)
 }
 
-func main() => int sync {
+func main() sync {
     let cut = split(jvp(use))
     let (a, lin_a) = cut(plain, 2.0)
     let (b, lin_b) = cut(thrice, 2.0)
@@ -38,5 +38,4 @@ func main() => int sync {
     let (bf, bdz) = pull_b(1.0)
     'plain={} {} {}'->format<a, af, adz>->println
     'thrice={} {} {}'->format<b, bf, bdz>->println
-    return 0
 }

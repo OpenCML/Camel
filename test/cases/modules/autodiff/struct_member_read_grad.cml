@@ -30,7 +30,7 @@ func tupleLoss(x: f64[2, 2]) => float {
     return float(sum(p * x)) + float(sum(q))
 }
 
-func main() => int sync {
+func main() sync {
     let w = reshape<[2, 2]>([1.0, 0.0, 0.0, 1.0])
     let b = reshape<[2]>([1.0, 1.0])
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
@@ -52,5 +52,4 @@ func main() => int sync {
         sum(gp),
         sum(gq)
     >->println
-    return 0
 }

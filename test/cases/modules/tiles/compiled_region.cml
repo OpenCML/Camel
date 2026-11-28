@@ -10,7 +10,7 @@ func captured(w: f32[3]) => f32[3] {
     }
     return f(w)
 }
-func main() => int sync {
+func main() sync {
     let a = reshape<[3]>([1.0, 2.0, 3.0] as f32[]) as f32[3]
     let b = reshape<[3]>([4.0, 5.0, 6.0] as f32[]) as f32[3]
     println(chain(a))
@@ -18,5 +18,4 @@ func main() => int sync {
     println(captured(b))
     println(chain(b))
     println(chain(a))
-    return 0
 }

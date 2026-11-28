@@ -10,11 +10,10 @@ func loss(x: float) => float {
     return w * x + w * x
 }
 
-func main() => int sync {
+func main() sync {
     let g = loss->grad
     let wg = loss->with_grad
     let value_and_gradient = wg<2.0>(3.0)
     println(g<2.0>(3.0))
     println(value_and_gradient)
-    return 0
 }

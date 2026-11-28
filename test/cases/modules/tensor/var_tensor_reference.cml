@@ -21,7 +21,7 @@ func twice(var w: f32[?, ?]) => float sync {
     return float(sum(w))
 }
 
-func main() => int sync {
+func main() sync {
     var w = zeros::<f32>([2, 2])
     step(w, 0.5)
     println(sum(w))
@@ -34,5 +34,4 @@ func main() => int sync {
     w = doubled
     let r = float(sum(w))
     println('{} {}'->format<r, sum(w)>)
-    return 0
 }

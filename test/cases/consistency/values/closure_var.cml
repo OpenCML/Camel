@@ -11,7 +11,7 @@ func add(total: int, x: int) => int sync {
     return total + x + x + 1
 }
 
-func main() => int sync {
+func main() sync {
     var total = 0
     total = add(total, 1)
     println(total)
@@ -20,5 +20,4 @@ func main() => int sync {
     total = total * 2
     total = add(total, 100)
     println(total)
-    return 0
 }

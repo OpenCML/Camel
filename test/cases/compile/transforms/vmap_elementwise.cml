@@ -17,7 +17,7 @@ func g(x: float) => float {
     return -(x * 2.0 + x / 2.0 - 1.0)
 }
 
-func main() => int sync {
+func main() sync {
     let xs: float[4] = [1.0, 2.0, 3.0, 0.5]
     println(vmap(f)(xs))
     println(xs->map<func (x: float) {
@@ -28,5 +28,4 @@ func main() => int sync {
     println(ys->map<func (x: float) {
         g(x)
     }>)
-    return 0
 }

@@ -64,7 +64,7 @@ func train(
     return if steps == 0 then model else train(sgd(model, grad(model_loss)<model>(x, target), 0.5), x, target, steps - 1)
 }
 
-func main() => int sync {
+func main() sync {
     let model = init()
     let x = reshape<[2, 2]>([1.0, 0.0, 0.0, 1.0] as f32[])
     let target = reshape<[2, 1]>([1.0, 0.0] as f32[])
@@ -85,5 +85,4 @@ func main() => int sync {
     'tiny_attention wk_grad={}'->format<vg.1.wk>->println
     'tiny_attention wv_grad={}'->format<vg.1.wv>->println
     'tiny_attention wo_grad={}'->format<vg.1.wo>->println
-    return 0
 }

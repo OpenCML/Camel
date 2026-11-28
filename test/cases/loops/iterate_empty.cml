@@ -4,7 +4,7 @@
 
 import { zeros } from tensor
 
-func main() => int sync {
+func main() sync {
     let none: int[] = []
     let s = loop n = 1 for c in '' do n + 1
     let m = loop n = 2 for kv in ([] as Map<int, int>) do n + 1
@@ -12,5 +12,4 @@ func main() => int sync {
     let a = loop n = 4 for x in none do n + 1
     let c = loop n = 5 for x in [1, 2] while n < 5 do n + x
     println(s, m, t, a, c)
-    return 0
 }

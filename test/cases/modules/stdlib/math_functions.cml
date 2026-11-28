@@ -7,7 +7,7 @@
 
 import { sin, cos, tan, asin, acos, atan, atan2, sinh, cosh, tanh, log, log2, log10, log1p, exp, expm1, pow, trunc, hypot, sqrt, is_nan, is_inf, pi, e, inf, nan } from math
 
-func main() => int sync {
+func main() sync {
     // a NaN is shown through is_nan: how one prints differs between platforms
     println(pi, e, inf, -inf, is_nan(nan))
     println(sin(0.0), sin(pi / 2.0), cos(0.0), cos(pi), tan(0.0), tan(pi / 4.0))
@@ -30,5 +30,4 @@ func main() => int sync {
     // f32 in, f32 out
     let x = f32(0.5)
     println(sin(x), pow(x, x), atan2(x, x), is_nan(x), is_inf(x), trunc(x))
-    return 0
 }

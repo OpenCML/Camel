@@ -22,8 +22,7 @@ func latest() => int sync {
     return before
 }
 
-func main() => int sync {
+func main() sync {
     println(twice())
     println(latest())
-    return 0
 }

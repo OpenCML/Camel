@@ -4,7 +4,6 @@ rule id_rule(x: float) { x => func (dx: float) {
     dx
 } }
 
-func main() => int sync {
+func main() sync {
     println(1)
-    return 0
 }

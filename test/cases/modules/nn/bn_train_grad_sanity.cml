@@ -65,7 +65,7 @@ func loss() => float {
     return loss_at(p.t, p.g, p.b, p.rm, p.rv)
 }
 
-func main() => int sync {
+func main() sync {
     let g = reshape<[2]>([1.2, 0.8] as f32[])
     let b = reshape<[2]>([0.3, -0.2] as f32[])
     let rm = reshape<[2]>([0.1, -0.4] as f32[])
@@ -101,5 +101,4 @@ func main() => int sync {
     'bn_train_sanity fwd={} rm={} rv={}'->format<dY, dRm, dRv>->println
     'bn_train_sanity dx={} dg={} db={} rm_grad={} rv_grad={}'->format<dX, dG, dB, dRmGrad, dRvGrad>->println
     'bn_train_sanity fd_g0={} g0={} fd_b0={} b0={} fd_x0={} x0={}'->format<fdG0, g0, fdB0, b0, fdX0, x0>->println
-    return 0
 }

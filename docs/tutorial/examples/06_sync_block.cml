@@ -6,7 +6,6 @@ func greet() => int sync {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     println(greet())
-    return 0
 }

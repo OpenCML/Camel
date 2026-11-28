@@ -2,7 +2,6 @@
 namespace Config {
     let limit = 10
 }
-func main() => int sync {
+func main() sync {
     println(Config::limit)
-    return 0
 }

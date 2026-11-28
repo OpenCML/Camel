@@ -6,11 +6,10 @@ func fib(n: int) => int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)
 }
 
-func main() => int sync {
+func main() sync {
     let a = fib(10)
     let b = fib(18)
     println(a)
     println(b)
     println(a + b)
-    return 0
 }

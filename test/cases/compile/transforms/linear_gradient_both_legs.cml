@@ -41,7 +41,7 @@ func total_plain(x: float[2, 2], w: float[2, 2]) => float {
     return sum(linear(x, w))
 }
 
-func main() => int sync {
+func main() sync {
     let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let w = [[0.5, 0.25], [0.125, 1.0]] as float[2, 2]
     let engine_dx = grad(total_x)<[[1.0, 2.0], [3.0, 4.0]] as float[2, 2]>([[0.5, 0.25], [0.125, 1.0]] as float[2, 2])
@@ -53,5 +53,4 @@ func main() => int sync {
     let same_w = sum(abs(engine_dw - library_dw)) == 0.0
     `linear: value={} engine={} library={} same={}`->format<value, engine_dx, library_dx, same_x>->println
     `linear dw: engine={} library={} same={}`->format<engine_dw, library_dw, same_w>->println
-    return 0
 }

@@ -25,12 +25,11 @@ func run(X: f32[?, ?], y: f32[?, ?], rate: float) => (float, Linear) {
     return (before, fitted)
 }
 
-func main() => int sync {
+func main() sync {
     let X = [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [2.0, 1.0]] as f32[4, 2]
     let y = [[2.0], [-1.0], [1.0], [3.0]] as f32[4, 1]
     let (before, model) = run(X, y, 0.1)
     println(`loss before: ${before:.4f}`)
     println(`loss after:  ${loss<model, y>(X):.4f}`)
     println(model.weight)
-    return 0
 }

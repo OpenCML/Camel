@@ -13,7 +13,7 @@ func nul(n: int) => int? {
     return if n > 0 then n else null
 }
 
-func main() => int sync {
+func main() sync {
     let a = 5->func (y) {
         y + 1
     }
@@ -27,5 +27,4 @@ func main() => int sync {
         v * 2
     }) ?? -1
     println(a, q, s, none)
-    return 0
 }

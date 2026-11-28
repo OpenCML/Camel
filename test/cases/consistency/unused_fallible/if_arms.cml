@@ -23,7 +23,6 @@ func check(x: string?, n: int) => int sync {
     return n
 }
 
-func main() => int sync {
+func main() sync {
     println(check('5', 2))
-    return 0
 }

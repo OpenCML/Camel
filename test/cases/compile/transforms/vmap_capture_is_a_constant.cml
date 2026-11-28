@@ -29,9 +29,8 @@ func make2(a: float, b: float) => (x: float) => float {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let xs: float[3] = [1.0, 2.0, 3.0]
     println(vmap(make(3.0))(xs))
     'two captures={}'->format<vmap(make2(2.0, 1.0))(xs)>->println
-    return 0
 }

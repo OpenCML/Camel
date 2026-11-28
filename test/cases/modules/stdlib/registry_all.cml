@@ -70,6 +70,5 @@ import transforms
 // only the four operators of a function value: the other names of those four modules are
 // declared in `stdlib/<m>.cml`, so `inspect --ops` lists the operators their declarations name.
 
-func main() => int {
-    return 0
+func main() {
 }

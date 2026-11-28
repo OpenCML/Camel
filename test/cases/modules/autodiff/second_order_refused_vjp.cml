@@ -53,7 +53,6 @@ func vjp_value() => float {
     return value
 }
 
-func main() => int sync {
+func main() sync {
     println(grad(vjp_value)<2.0>())
-    return 0
 }

@@ -1,4 +1,4 @@
-func main() => int sync {
+func main() sync {
     var v47 = 0
     v47 /= 3
     if false then sync {
@@ -11,5 +11,4 @@ func main() => int sync {
         }, 0>).0 then false
         return 0
     }
-    return 0
 }

@@ -20,7 +20,6 @@ func nested_after() => int sync {
     return state::get(box)
 }
 
-func main() => int sync {
+func main() sync {
     println(nested_after())
-    return 0
 }

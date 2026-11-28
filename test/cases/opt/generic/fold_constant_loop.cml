@@ -14,8 +14,7 @@ func summed() => int {
     return s
 }
 
-func main() => int sync {
+func main() sync {
     println('counted', counted())
     println('summed', summed())
-    return 0
 }

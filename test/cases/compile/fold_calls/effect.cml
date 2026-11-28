@@ -8,7 +8,7 @@ func reveal(s: string) => string uses var console {
     return s
 }
 
-func main() => int {
+func main() {
     let t = { x: 1 }
-    return t.[reveal('x')]
+    t.[reveal('x')]
 }

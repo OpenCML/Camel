@@ -44,9 +44,8 @@ func work(n: int) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println(chain())
     println(shared(3))
     println(work(5))
-    return 0
 }

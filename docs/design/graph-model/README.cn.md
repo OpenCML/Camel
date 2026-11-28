@@ -1705,7 +1705,7 @@ println(inc(1))        // 错误：inc 既是 lib::Tools::inc 又是 lib2::Tools
 namespace Config {
     export let limit = 10
 }
-func main() => int sync { println(Config::limit); return 0 }
+func main() sync {}
 ```
 
 值是 root 上的一个节点，实体是 `模块::Config::limit`；与顶层的 `let` 只差名字里的路径。命名空间块不是同步块，块里的 `let` 之间没有顺序（与模块顶层一致）。顶层 `var` 是编译错误，提示用 `let`（设计 3.5）；命名空间块内同理。建议：在"导入值"那一步（第 7 节第 7 步）之后做。
@@ -1781,7 +1781,7 @@ let found = loop hit = -1 for x in xs while hit < 0 { if x > 9 then x else hit }
 ```camel
 // lib.cml                                    // main.cml
 module lib                                    import { area } from lib
-let scale = 2.0                               func main() => int sync { println(area(3.0)); return 0 }
+let scale = 2.0                               func main() sync {}
 export func area(r: float) => float {
     return 3.14159 * r * r          // (A)
     // return 3.14159 * r * r * scale   (B)

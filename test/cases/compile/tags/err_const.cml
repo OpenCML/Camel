@@ -7,6 +7,6 @@ func f(n: int) => int {
     return 0
 }
 
-func main() => int {
-    return f(1)
+func main() {
+    f(1)
 }

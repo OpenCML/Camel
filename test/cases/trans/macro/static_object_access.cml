@@ -9,8 +9,7 @@ func score() => int {
     return point.x + point.y
 }
 
-func main() => int sync {
+func main() sync {
     let value = score()
     'macro_static_object_access value={}'->format<value>->println
-    return 0
 }

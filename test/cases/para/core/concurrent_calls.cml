@@ -33,7 +33,6 @@ func both(timeout: float) => int {
     return a + b
 }
 
-func main() => int sync {
+func main() sync {
     println('calls that met a peer: {}'->format<both(3.0) - 2>)
-    return 0
 }

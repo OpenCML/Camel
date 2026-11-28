@@ -87,7 +87,6 @@ func negative_coefficient(x: float) => float {
     return x * -2.0
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     println(positive_coefficient(5.0), int_coefficient(5), negative_coefficient(5.0))
-    return 0
 }

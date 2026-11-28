@@ -21,6 +21,5 @@ func plot_literals(name: string) => void sync {
     plot([1.0, 2.0, 3.0], name)
 }
 
-func main() => int {
-    return 0
+func main() {
 }

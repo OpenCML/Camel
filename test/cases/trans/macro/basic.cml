@@ -7,8 +7,7 @@ func add_one(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     let value = add_one(41)
     println(value)
-    return 0
 }

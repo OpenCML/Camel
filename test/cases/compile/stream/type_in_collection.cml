@@ -13,7 +13,6 @@ func collect(s: Set<int..>) => int {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println(0)
-    return 0
 }

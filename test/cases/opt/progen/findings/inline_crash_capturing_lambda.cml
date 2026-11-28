@@ -26,7 +26,6 @@ func r8(a9: int, a10: string) => string {
     }, 3.0, true) else r8(0, '')
 }
 
-func main() => int sync {
+func main() sync {
     let n53 = '' + r8(8, 'x')
-    return 0
 }

@@ -11,7 +11,7 @@ import { sum, mean, min, max, argmax, argmin } from array
 import math
 import { reshape } from tensor
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
     println(x->sum<0>, x->sum<1>, x->sum<-1>)
     println(x->sum<1, true>)
@@ -38,5 +38,4 @@ func main() => int sync {
     println([0.0, -0.0]->min<0>, [-0.0, 0.0]->max<0>)
     println([-0.0, 0.0]->argmax<0>, [0.0, -0.0]->argmin<0>)
     println([5, 5, 1]->argmax<0>, [1, 1, 5]->argmin<0>)
-    return 0
 }

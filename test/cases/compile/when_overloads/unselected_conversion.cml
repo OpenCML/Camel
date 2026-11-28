@@ -9,7 +9,6 @@ func conv::<T>(x: float) => T {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(conv::<f32>(1.5), conv::<float>(2.5), conv::<int>(2.5))
-    return 0
 }

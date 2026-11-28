@@ -15,7 +15,7 @@ func product(x: f32[...], y: f32[...]) => f32[...] {
 func maximum(x: f32[...]) => f32[...] {
     return max<-1>(x)
 }
-func main() => int sync {
+func main() sync {
     seed(61)
     let x = (next_key()->uniform::<f32><shape: [1024, 1024]> * 2.0 - 1.0)
     let b = (next_key()->uniform::<f32><shape: [1, 1024]> * 2.0 - 1.0)
@@ -27,5 +27,4 @@ func main() => int sync {
     println(benchmark<product>((a, w)))
     let wide = (next_key()->uniform::<f32><shape: [128, 4097]> * 2.0 - 1.0)
     println(benchmark<maximum>(wide))
-    return 0
 }

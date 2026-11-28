@@ -34,12 +34,11 @@ func shared_product(x: Vec) => Vec sync {
     return t + t
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(merged(x))
     println(merged_explicit(x))
     println(chain(x))
     println(rounded_coefficients(x))
     println(shared_product(x))
-    return 0
 }

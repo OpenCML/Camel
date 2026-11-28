@@ -13,6 +13,6 @@ func f(x: int?) => int {
     }
 }
 
-func main() => int sync {
-    return f(null)
+func main() sync {
+    f(null)
 }

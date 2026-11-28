@@ -25,6 +25,5 @@ func fixed_signatures() => void sync {
     let _ = from_py::<float>(result)
 }
 
-func main() => int {
-    return 0
+func main() {
 }

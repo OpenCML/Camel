@@ -55,7 +55,7 @@ func make_array() => int[] {
     ]
 }
 
-func main() => int sync {
+func main() sync {
     let big = make_array()
     var v = big
     let v0 = v
@@ -64,5 +64,4 @@ func main() => int sync {
     }
     v[0] = 9
     println('big[0] =', big[0], ' v[0] =', v[0], ' f() =', f())
-    return 0
 }

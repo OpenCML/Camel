@@ -43,9 +43,8 @@ func constant() => float {
     return flat(xs, 3)
 }
 
-func main() => int sync {
+func main() sync {
     println(grad(first)<1.0>())
     println(grad(past_row)<1.0>())
     println(grad(constant)<1.0>())
-    return 0
 }

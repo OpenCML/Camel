@@ -1,5 +1,4 @@
-func main() => int sync {
+func main() sync {
     let x = loop s = 0 for v in [1.5, 2.5] do v
     println(x)
-    return 0
 }

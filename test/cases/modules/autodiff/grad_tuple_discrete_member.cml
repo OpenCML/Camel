@@ -23,7 +23,7 @@ func loss() => float {
     return float(sum(p)) * float(k)
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     let model = (x, 2)
     let (value, gradient) = with_grad(loss)<model>()
@@ -34,5 +34,4 @@ func main() => int sync {
         sum(gp),
         gk
     >->println
-    return 0
 }

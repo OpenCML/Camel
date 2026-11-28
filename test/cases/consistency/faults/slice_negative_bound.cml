@@ -7,10 +7,9 @@ func last_two(xs: int[], n: int) => int[] {
     return xs[n..len(xs)]
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [10, 20, 30]
     println(last_two(xs, 1))
     println(last_two(xs, 0 - 2))
     println('not reached')
-    return 0
 }

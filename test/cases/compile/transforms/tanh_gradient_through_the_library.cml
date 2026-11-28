@@ -28,9 +28,8 @@ func total(x: float[...]) => float {
     return sum(tanh(x))
 }
 
-func main() => int sync {
+func main() sync {
     let (value, pullback) = vjp(total)([0.5, -1.0] as float[])
     let d = pullback(1.0).0
     `tanh library value={} d={}`->format<value, d>->println
-    return 0
 }

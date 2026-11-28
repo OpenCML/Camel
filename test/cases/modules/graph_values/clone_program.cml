@@ -64,12 +64,11 @@ func targetIn::<F>(p: F) => Graph {
     return found[0]
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     let rules: Rule[] = [drop_one]
     let q = user->rewrite<rules> !! user
     let marked = remat(q)
     println(`clone: ${marked(5)} ones=${addOnes(targetIn(marked))}`)
     println(`given: ${user(5)} ones=${addOnes(targetIn(user))}`)
     println(`copy: ${name(graph_of(marked))}`)
-    return 0
 }

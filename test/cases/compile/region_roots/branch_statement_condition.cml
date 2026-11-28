@@ -35,10 +35,9 @@ func called(x: int) => int {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     compared(1)
     compared(-1)
     called(1)
     called(-1)
-    return 0
 }

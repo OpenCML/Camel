@@ -49,10 +49,9 @@ func positions(p: Pair) {
     }
 }
 
-func main() => int sync {
+func main() sync {
     names({ low: 1, high: 2 })
     println(total({ low: 1, high: 2 }))
     println(widths({ low: 1, high: 2 }))
     positions((10, 'x'))
-    return 0
 }

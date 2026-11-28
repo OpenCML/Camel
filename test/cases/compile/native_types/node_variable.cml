@@ -8,6 +8,5 @@ func same::<T>(n: Node<T>) => Node<T> {
     return n
 }
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

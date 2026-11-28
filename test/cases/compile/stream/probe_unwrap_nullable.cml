@@ -3,8 +3,7 @@
 // fault `NullValue` where it is null) -- so a value of a nullable type is unwrapped with it, and
 // `??` stays the form that gives a replacement. The reading here is the value that is there.
 
-func main() => int sync {
+func main() sync {
     let x: int? = 5
     println(x!)
-    return 0
 }

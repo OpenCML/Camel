@@ -8,8 +8,7 @@ func inc(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     let g = add2 <> inc
     println(g(3))
-    return 0
 }

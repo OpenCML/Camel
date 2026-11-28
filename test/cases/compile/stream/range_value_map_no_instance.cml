@@ -9,7 +9,6 @@ func dbl(x: int) => int {
     return x * 2
 }
 
-func main() => int sync {
+func main() sync {
     println(map<dbl>(1 .. 5))
-    return 0
 }

@@ -16,9 +16,8 @@ func nested() => string[][] {
     return [names(), concat(names(), ['delta'])]
 }
 
-func main() => int sync {
+func main() sync {
     println(table(4), names())
     println(nested())
     println(table(7)[1], len(names()))
-    return 0
 }

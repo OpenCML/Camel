@@ -12,7 +12,7 @@ func hold(x: float) => float sync {
     return x
 }
 
-func main() => int sync {
+func main() sync {
     seed(42)
     let x = rand()
     let y = grad(square)<x>()
@@ -20,5 +20,4 @@ func main() => int sync {
     println('middle')
     println(y)
     println(held)
-    return 0
 }

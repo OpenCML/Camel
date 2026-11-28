@@ -8,7 +8,7 @@ func append(var t: string, x: string) => string sync {
     return t
 }
 
-func main() => int sync {
+func main() sync {
     var s = 'a'
     s += 'b'
     println(s)
@@ -19,5 +19,4 @@ func main() => int sync {
     println(len(e))
     println(append(s, 'z'))
     println(s)
-    return 0
 }

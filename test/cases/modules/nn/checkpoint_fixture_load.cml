@@ -15,12 +15,12 @@ type Record = {
     enabled: bool
 }
 
-func main(dir: string) => int sync {
+func main(dir: string) sync {
     let loaded = dir->load_tree::<Record>
-    return match loaded {
+    match loaded {
         case error e => sync {
             println(e)
-            return 1
+            1
         }
         case r => sync {
             println(sha256(to_bytes(r.w)))
@@ -29,7 +29,7 @@ func main(dir: string) => int sync {
             println(r.note)
             println(r.cursor)
             println(r.enabled)
-            return 0
+            0
         }
     }
 }

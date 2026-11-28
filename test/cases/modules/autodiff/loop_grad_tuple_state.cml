@@ -17,8 +17,7 @@ func rounds() => int {
     return n * 100 + acc
 }
 
-func main() => int sync {
+func main() sync {
     let vg = with_grad(f)<2.0>()
     'loop_grad_tuple_state vg={} rounds={}'->format<vg, rounds()>->println
-    return 0
 }

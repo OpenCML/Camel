@@ -19,7 +19,6 @@ func shape_of(t: float[4]) => int[] {
     return extent_of::<float[4]>()
 }
 
-func main() => int sync {
+func main() sync {
     println(shape_of([1.0, 2.0, 3.0, 4.0]))
-    return 0
 }

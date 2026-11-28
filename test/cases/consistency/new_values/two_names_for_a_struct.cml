@@ -18,7 +18,7 @@
 
 type Bag = { label: string, xs: int[] }
 
-func main() => int sync {
+func main() sync {
     // A second name made at a declaration: the write through `b` stays in `b`.
     let a: Bag = { label: 'a', xs: [1, 2] }
     var b = a
@@ -39,5 +39,4 @@ func main() => int sync {
     var moved = outer
     moved.box.xs[1] = 8
     println(outer.box.xs, moved.box.xs)
-    return 0
 }

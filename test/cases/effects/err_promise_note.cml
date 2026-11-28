@@ -10,8 +10,7 @@ func bump(var c: int) => int uses var fs sync {
     return c
 }
 
-func main() => int sync {
+func main() sync {
     var c = 0
     println(bump(c))
-    return 0
 }

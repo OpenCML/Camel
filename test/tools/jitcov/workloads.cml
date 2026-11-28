@@ -91,46 +91,45 @@ func floats(n: int, acc: float) => float {
     return if n == 0 then acc else floats(n - 1, acc * 0.5 + float(n % 7))
 }
 
-func main() => int sync {
+func main() sync {
     let mode = get_env('MODE') ?? ''
     let n = int(get_env('N') ?? '')
     let xs = [3, 1, 4, 1, 5, 9, 2, 6]
     if mode == 'fib' then sync {
         println(fib(n))
-        return null
+        null
     }
     if mode == 'collatz' then sync {
         println(collatz_total(n, 0))
-        return null
+        null
     }
     if mode == 'strings' then sync {
         println(strings(n, 0))
-        return null
+        null
     }
     if mode == 'arrays' then sync {
         println(totals(build(n / 100, [0]), 100, 0))
-        return null
+        null
     }
     if mode == 'mutual' then sync {
         println(ping(n, 0))
-        return null
+        null
     }
     if mode == 'structs' then sync {
         let p = walk({ x: 0, y: 0 }, n)
         println(p.x + p.y)
-        return null
+        null
     }
     if mode == 'calls' then sync {
         println(calls(n, 0))
-        return null
+        null
     }
     if mode == 'hof' then sync {
         println(hof(xs, n / 10, 0))
-        return null
+        null
     }
     if mode == 'float' then sync {
         println(floats(n, 0.0))
-        return null
+        null
     }
-    return 0
 }

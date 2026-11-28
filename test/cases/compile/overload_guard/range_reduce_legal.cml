@@ -3,7 +3,6 @@
 // a refusal again: nothing here was narrowed.
 func push(acc: int[], i: int) => int[] { return acc->append<i> }
 
-func main() => int sync {
+func main() sync {
     println((0 .. 3)->reduce<push, [0]>)
-    return 0
 }

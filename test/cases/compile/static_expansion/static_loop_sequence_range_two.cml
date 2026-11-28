@@ -9,6 +9,6 @@ func sum() => int {
     return static loop acc = 0 for i in range(0, 3) do acc + i
 }
 
-func main() => int {
-    return sum()
+func main() {
+    sum()
 }

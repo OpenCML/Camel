@@ -13,12 +13,11 @@ func leave(x: int) => int sync {
     return x
 }
 
-func main() => int sync {
+func main() sync {
     println('before')
     let a = attempt(leave)(1) !! -1
     println(a)
     let b = attempt(leave)(3) !! -1
     println(b)
     println('not reached')
-    return 0
 }

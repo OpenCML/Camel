@@ -25,9 +25,8 @@ func g3() => float {
     return g2<a>() * a
 }
 
-func main() => int sync {
+func main() sync {
     let d = grad(g3)
     'value={}'->format<g3<2.0>()>->println
     'dgdx={}'->format<d<2.0>()>->println
-    return 0
 }

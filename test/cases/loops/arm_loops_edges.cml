@@ -77,7 +77,7 @@ func feeds_condition(flag: bool, xs: int[]) => int {
     if s > 3 then s * 2 else s
 }
 
-func main() => int sync {
+func main() sync {
     println('empty', then_for(true, []))
     println('for-while', for_while(true, [1, 2, 3, 4]), for_while(true, [1, 2]))
     println('nested', nested_arm_loop(true))
@@ -98,5 +98,4 @@ func main() => int sync {
     println('two-loops', two_loops(true, [1, 2, 3]))
     println('initial', computed_initial(true, 10), computed_initial(false, 10))
     println('feeds', feeds_condition(true, [1, 2, 3]), feeds_condition(true, [1]), feeds_condition(false, [1, 2, 3]))
-    return 0
 }

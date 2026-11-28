@@ -3,12 +3,11 @@
  * cell, no `:var/new`), and the join is where the value comes from. The write is inside a region,
  * and the value leaves that region through the branch's join (design principles 3.5).
  */
-func main() => int {
+func main() {
     var x = 7
     let c = 1
     if c > 0 then {
         x = 1
     } else {}
     let shown = println(x)
-    return 0
 }

@@ -32,23 +32,23 @@ func step(
     return (reshape<[1]>([vg.0]), vg.1.w, vg.1.b)
 }
 
-func main() => int sync {
+func main() sync {
     let mode = get_env('MODE') ?? ''
-    return if mode == 'export' then sync {
+    if mode == 'export' then sync {
         let w = reshape<[3, 3]>([0.5, -0.25, 0.75, 1.0, -0.5, 0.25, 0.125, 0.375, -0.625] as f32[])
         let b = reshape<[3]>([0.1, -0.2, 0.3] as f32[])
         let x = reshape<[3, 3]>([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9] as f32[])
         let r = export_model<out: get_env('ONNX_OUT') ?? '', dynamic_axes: [0]>(func (w: f32[...], b: f32[...], x: f32[...]) => (float[...], f32[...], f32[...]) {
             step(w, b, x)
         }, (w, b, x))
-        return match r {
+        match r {
             case error e => sync {
                 println(e)
-                return 1
+                1
             }
             case _ => sync {
                 println('exported')
-                return 0
+                0
             }
         }
     } else sync {
@@ -57,6 +57,6 @@ func main() => int sync {
         save_npy(r.1, get_env('OUT1') ?? '')
         save_npy(r.2, get_env('OUT2') ?? '')
         println('ran')
-        return 0
+        0
     }
 }

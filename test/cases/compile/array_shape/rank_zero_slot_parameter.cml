@@ -10,12 +10,11 @@ func show(v: f32[...]) {
     println(v)
 }
 
-func main() => int sync {
+func main() sync {
     let one: f32 = 1.0
     let two: f32 = 2.5
     show(1.0)
     show(2.5)
     show(one)
     show(two)
-    return 0
 }

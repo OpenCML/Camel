@@ -29,7 +29,7 @@ func choose(c: bool) => (x: int) => int {
     return if c then inc else dec
 }
 
-func main() => int sync {
+func main() sync {
     let b = 10
     let c = b > 5
     let s = 'a'

@@ -4,7 +4,6 @@ import { ones } from tensor
 func bad(x: f32[...]) => f32[n] {
     return x as f32[?]
 }
-func main() => int sync {
+func main() sync {
     println(bad(ones::<f32>([3])))
-    return 0
 }

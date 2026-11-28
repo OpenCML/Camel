@@ -58,7 +58,7 @@ func report::<F>(f: F, rules: Rule[], label: string) => int sync {
         }
     }
 }
-func main() => int! sync {
+func main() sync {
     report<true>(guard_search, [rotate], 'guard ordered')
     report<false>(guard_search, [rotate], 'guard default')
     println(match guard_search->run<[rotate], rounds: 1> {
@@ -101,5 +101,4 @@ func main() => int! sync {
         case error e => e.kind
         case r => 'unexpected success'
     })
-    return 0
 }

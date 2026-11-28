@@ -6,7 +6,7 @@
 import { get_env } from env
 import { write_text, read_text, mkdirs } from fs
 
-func main() => int sync {
+func main() sync {
     let dir = get_env('CAMEL_TEST_DIR') ?? ''
     let _ = dir->mkdirs
     let path = dir + '/' + (get_env('CAMEL_TEST_FILE') ?? '')
@@ -16,5 +16,4 @@ func main() => int sync {
     let z = 0
     println(1 / z)
     let _ = 'not reached'->write_text<path>
-    return 0
 }

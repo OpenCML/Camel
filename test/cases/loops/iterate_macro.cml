@@ -5,7 +5,6 @@ func count(s: string) => int {
     return loop n = 0 for c in s do n + 1
 }
 
-func main() => int sync {
+func main() sync {
     println(count('中a'), count('abc'))
-    return 0
 }

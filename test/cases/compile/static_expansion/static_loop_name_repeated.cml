@@ -7,6 +7,6 @@ func bad(t: { a: int }) => int {
     return static loop n = 0 for n, F in fields { a: int } do n + 1
 }
 
-func main() => int {
-    return bad({ a: 1 })
+func main() {
+    bad({ a: 1 })
 }

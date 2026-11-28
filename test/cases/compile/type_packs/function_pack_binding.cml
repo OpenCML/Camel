@@ -10,7 +10,7 @@ func again::<...P>(f: (...P) => int) => (...P) => int {
     return f
 }
 
-func main() => int sync {
+func main() sync {
     let add = func (x: int, y: int) => int {
         x + y
     }
@@ -19,5 +19,4 @@ func main() => int sync {
     }
     println(through(add)(1, 2), through(seven)())
     println(again(add)(3, 4), again(seven)())
-    return 0
 }

@@ -23,7 +23,6 @@ func scaled(x: int) => int {
     return x * 2
 }
 
-func main() => int sync {
+func main() sync {
     println(scaled(21))
-    return 0
 }

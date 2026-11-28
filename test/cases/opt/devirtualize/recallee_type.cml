@@ -16,11 +16,10 @@ func takes_text(a: string) => int {
     return len(a)
 }
 
-func main() => int sync {
+func main() sync {
     let f = takes_int
     let g = takes_text
     let a = f(2)
     let b = g('xy')
     '{} {}'->format<a, b>->println
-    return 0
 }

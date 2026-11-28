@@ -27,7 +27,7 @@ func bump(var t: int) => int sync {
     return t
 }
 
-func main() => int sync {
+func main() sync {
     let s: Stream = { id: 7 }
     consume(s)
     consume(s)
@@ -38,5 +38,4 @@ func main() => int sync {
     bump(cell)
     println(s.id)
     println(cell)
-    return 0
 }

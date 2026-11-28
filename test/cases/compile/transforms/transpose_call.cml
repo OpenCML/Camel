@@ -17,8 +17,7 @@ func f(x: float) => float {
     return g(x) + g(x)
 }
 
-func main() => int sync {
+func main() sync {
     println(f(1.0))
     println(transpose(f)(1.0))
-    return 0
 }

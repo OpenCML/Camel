@@ -10,6 +10,5 @@ fact one(v: int): int match v {
 }
 join max
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

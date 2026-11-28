@@ -10,9 +10,8 @@ func add(n: int) => int sync {
     return acc
 }
 
-func main() => int sync {
+func main() sync {
     let total = 0
     let r = add<total>(5)
     println(total)
-    return 0
 }

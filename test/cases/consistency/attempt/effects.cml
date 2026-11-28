@@ -12,7 +12,7 @@
 
 import state
 
-func main() => int sync {
+func main() sync {
     let total = state::ref(1)
     let work = func (d: int) => int sync {
         println('work begins')
@@ -41,5 +41,4 @@ func main() => int sync {
     println(c)
     println(seen->state::get)
     println('after')
-    return 0
 }

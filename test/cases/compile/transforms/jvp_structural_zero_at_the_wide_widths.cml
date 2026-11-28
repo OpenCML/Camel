@@ -27,10 +27,9 @@ func narrow(x: f32) => f32 {
     return x ^ 2.0
 }
 
-func main() => int sync {
+func main() sync {
     let (wideValue, wideTangent) = jvp(wide)(0.0 - 3.0, 1.0)
     `float value={} tangent={}`->format<wideValue, wideTangent>->println
     let (narrowValue, narrowTangent) = jvp(narrow)(0.0 - 3.0, 1.0)
     `f32 value={} tangent={}`->format<narrowValue, narrowTangent>->println
-    return 0
 }

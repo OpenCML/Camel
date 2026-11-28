@@ -35,7 +35,7 @@ func declined_loss(x: f32[...]) => float {
     return float(sum(scaled @ m.u))
 }
 
-func main(steps: int, rows: int, d: int, lr: float, fused: int) => int sync {
+func main(steps: int, rows: int, d: int, lr: float, fused: int) sync {
     let x = zeros::<f32>([rows, d]) + 0.001
     let model: Model = {
         w: zeros::<f32>([d]) + 1.5,
@@ -49,22 +49,21 @@ func main(steps: int, rows: int, d: int, lr: float, fused: int) => int sync {
     let (trained, done) = loop m = model, step = 0 while step < steps do {
         let next = if fused != 0 then {
             let (value, gradient) = grad_fused<m>(x)
-            return {
+            {
                 w: m.w - lr * gradient.w,
                 a: m.a,
                 u: m.u - lr * gradient.u
             }
         } else {
             let (value, gradient) = grad_declined<m>(x)
-            return {
+            {
                 w: m.w - lr * gradient.w,
                 a: m.a,
                 u: m.u - lr * gradient.u
             }
         }
-        return (next, step + 1)
+        (next, step + 1)
     }
     let elapsed = now() - started
     'perf fusion ms_per_step={:.3f} w={} u={}'->format<elapsed * 1000.0 / float(done), sum(trained.w), sum(trained.u)>->println
-    return 0
 }

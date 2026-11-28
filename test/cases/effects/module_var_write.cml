@@ -11,7 +11,6 @@ func bump() => int sync {
     return counter
 }
 
-func main() => int sync {
+func main() sync {
     println(bump())
-    return 0
 }

@@ -17,7 +17,6 @@ func pick(x: Ints) => int {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     println(0)
-    return 0
 }

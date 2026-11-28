@@ -20,8 +20,7 @@ func labelled(m: string) => int {
     return v
 }
 
-func main() => int sync {
+func main() sync {
     println(pick(true))
     println('end')
-    return 0
 }

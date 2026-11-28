@@ -20,6 +20,6 @@ func read_then_fault() => int sync {
     return 0
 }
 
-func main() => int sync {
-    return read_then_fault()
+func main() sync {
+    read_then_fault()
 }

@@ -6,6 +6,6 @@ func both(x: int) => int {
     return x
 }
 
-func main() => int {
-    return both(1)
+func main() {
+    both(1)
 }

@@ -37,7 +37,7 @@ func train(model: AutoEncoder, x: f32[...], steps: int) => AutoEncoder {
     return if steps == 0 then model else train(sgd(model, grad(reconstruction_loss)<model>(x, x), 0.1), x, steps - 1)
 }
 
-func main() => int sync {
+func main() sync {
     let model = init()
     let x = full([4, 2], f32(1.0))
     
@@ -54,5 +54,4 @@ func main() => int sync {
     'autoencoder enc_grad={}'->format<vg.1.enc_w>->println
     'autoencoder dec_grad={}'->format<vg.1.dec_w>->println
     'autoencoder dec_b_grad={}'->format<vg.1.dec_b>->println
-    return 0
 }

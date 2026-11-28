@@ -6,7 +6,7 @@ import { mean } from array
 import { abs, hypot, bit_and, pi } from math
 import { split, trim, to_upper, replace, index_of } from str
 
-func main() => int sync {
+func main() sync {
     // Strings: the value goes in on the left, what configures the call goes in angle brackets.
     let words = '  pear, fig ,apple, fig '->trim->split<','>->map<func (w: string) => string {
         trim(w)
@@ -29,5 +29,4 @@ func main() => int sync {
     }>)
     println(mean([1.0, 2.0, 4.0]), hypot(3.0, 4.0), bit_and(6, 3))
     println(`${pi:.4f}`)
-    return 0
 }

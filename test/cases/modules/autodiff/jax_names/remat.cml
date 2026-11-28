@@ -18,8 +18,7 @@ func square(x: float) => float {
     return x * x
 }
 
-func main() => int sync {
+func main() sync {
     let g = remat(square)
     println('jax_remat g={}'->format<g(2.0)>)
-    return 0
 }

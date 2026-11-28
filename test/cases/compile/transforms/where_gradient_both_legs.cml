@@ -42,7 +42,7 @@ func total_plain(a: float[], b: float[]) => float {
     return sum(where(a > 0.0, a, b))
 }
 
-func main() => int sync {
+func main() sync {
     let a = [-2.0, 3.0, 0.5, 1.5] as float[]
     let b = [3.0, -2.0, 2.0, 0.0] as float[]
     let engine_a = grad(total_a)<[-2.0, 3.0, 0.5, 1.5] as float[]>([3.0, -2.0, 2.0, 0.0] as float[])
@@ -54,5 +54,4 @@ func main() => int sync {
     let same_b = sum(abs(engine_b - library_b)) == 0.0
     `where: engine={} library={} same={}`->format<engine_a, library_a, same_a>->println
     `where db: engine={} library={} same={}`->format<engine_b, library_b, same_b>->println
-    return 0
 }

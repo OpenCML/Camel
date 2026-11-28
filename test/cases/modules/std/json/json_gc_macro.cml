@@ -27,9 +27,9 @@ func show(t: Json, n: int) => int sync {
     return 0
 }
 
-func main(n: int) => int sync {
+func main(n: int) sync {
     let t = table()
-    return t->(func (j: Json) => int {
+    t->(func (j: Json) => int {
         show(j, n)
     }) !! 1
 }

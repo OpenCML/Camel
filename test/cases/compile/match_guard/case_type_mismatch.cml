@@ -12,6 +12,6 @@ func f(s: string) => int {
     }
 }
 
-func main() => int sync {
-    return f('a')
+func main() sync {
+    f('a')
 }

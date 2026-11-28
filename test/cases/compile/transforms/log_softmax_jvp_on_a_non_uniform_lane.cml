@@ -42,7 +42,7 @@ func axial(x: float[...]) => float[...] {
     return log_softmax<0>(x)
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [1.0, 2.0, 3.0] as float[]
     let dxs = [1.0, 1.0, 1.0] as float[]
     let (value, tangent) = jvp(axial)(xs, dxs)
@@ -50,5 +50,4 @@ func main() => int sync {
     let zeros = total < 1e-9
     let misread = total > 0.5
     `log_softmax non-uniform zeros={} misread={} value={}`->format<zeros, misread, value>->println
-    return 0
 }

@@ -17,7 +17,6 @@ func total(x: int) => int sync {
     return acc
 }
 
-func main() => int sync {
+func main() sync {
     println(total(4))
-    return 0
 }

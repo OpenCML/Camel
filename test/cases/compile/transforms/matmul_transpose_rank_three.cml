@@ -32,11 +32,10 @@ func batched_sum_of_product(a: float[3, 2, 2], b: float[2, 2]) => float {
     return sum(matmul(a, b))
 }
 
-func main() => int sync {
+func main() sync {
     let a = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]], [[9.0, 10.0], [11.0, 12.0]]] as float[3, 2, 2]
     let b = [[0.5, 0.25], [0.125, 1.0]] as float[2, 2]
     let (value, pullback) = vjp(batched_sum_of_product)(a, b)
     let (da, db) = pullback(1.0)
     `matmul_t rank_three value={} dL/da={} dL/db={}`->format<value, da, db>->println
-    return 0
 }

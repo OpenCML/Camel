@@ -27,11 +27,10 @@ func wholeArgMin(t: f32[]) => int {
     return argmin(t)
 }
 
-func main() => int sync {
+func main() sync {
     let none: f32[0] = []
     println(attempt(wholeMax)(none))
     println(attempt(wholeMin)(none))
     println(attempt(wholeArgMax)(none))
     println(attempt(wholeArgMin)(none))
-    return 0
 }

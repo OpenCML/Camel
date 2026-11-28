@@ -9,6 +9,6 @@ func first::<T>(x: T) => T {
     return x
 }
 
-func main() => int sync {
-    return first::<int>(1)
+func main() sync {
+    first::<int>(1)
 }

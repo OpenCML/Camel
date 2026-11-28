@@ -83,9 +83,6 @@ Program
 |  |-ParentParams
 |  |  |- (
 |  |  \- )
-|  |- =>
-|  |-RefType
-|  |  \- int
 |  \-StmtBlock
 |     |- sync
 |     |- {
@@ -163,33 +160,28 @@ Program
 |     |  |        |- -
 |     |  |        \-RefData
 |     |  |           \- start
-|     |  |-LinkExpr
-|     |  |  |-Literal
-|     |  |  |  \- 'Fibonacci({}) = {} (computed in {:.4f} seconds)'
-|     |  |  |- ->
-|     |  |  |-AnnoExpr
-|     |  |  |  |-RefData
-|     |  |  |  |  \- format
-|     |  |  |  \-AngledValues
-|     |  |  |     |- <
-|     |  |  |     |-ArgumentList
-|     |  |  |     |  \-IndexValues
-|     |  |  |     |     |-RefData
-|     |  |  |     |     |  \- idx
-|     |  |  |     |     |- ,
-|     |  |  |     |     |-RefData
-|     |  |  |     |     |  \- res
-|     |  |  |     |     |- ,
-|     |  |  |     |     \-RefData
-|     |  |  |     |        \- duration
-|     |  |  |     \- >
-|     |  |  |- ->
-|     |  |  \-RefData
-|     |  |     \- println
-|     |  \-RetStmt
-|     |     |- return
-|     |     \-DataList
-|     |        \-Literal
-|     |           \- 0
+|     |  \-LinkExpr
+|     |     |-Literal
+|     |     |  \- 'Fibonacci({}) = {} (computed in {:.4f} seconds)'
+|     |     |- ->
+|     |     |-AnnoExpr
+|     |     |  |-RefData
+|     |     |  |  \- format
+|     |     |  \-AngledValues
+|     |     |     |- <
+|     |     |     |-ArgumentList
+|     |     |     |  \-IndexValues
+|     |     |     |     |-RefData
+|     |     |     |     |  \- idx
+|     |     |     |     |- ,
+|     |     |     |     |-RefData
+|     |     |     |     |  \- res
+|     |     |     |     |- ,
+|     |     |     |     \-RefData
+|     |     |     |        \- duration
+|     |     |     \- >
+|     |     |- ->
+|     |     \-RefData
+|     |        \- println
 |     \- }
 \- <EOF>

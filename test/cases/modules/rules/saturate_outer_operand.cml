@@ -19,11 +19,10 @@ func target() => int {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     let p = target
     let rules: Rule[] = [drop_one]
     let s = p->saturate<rules, rounds: 2> !! p
     let q = s->extract<sizeCost> !! s
     println(`saturated ${positiveNext(-1, true)} ${positiveNext(1, true)} ${positiveNext(5, false)}`)
-    return 0
 }

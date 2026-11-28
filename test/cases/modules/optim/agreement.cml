@@ -131,7 +131,7 @@ func mismatches(drifts: float[]) => int {
     }, 0>
 }
 
-func main(steps: int) => int sync {
+func main(steps: int) sync {
     let model = model_at()
     let tensors = tensors_at()
     let x = reshape<[6]>(f32(to_array(0 .. 6))) * 0.125 - 0.5
@@ -147,7 +147,7 @@ func main(steps: int) => int sync {
         let next = update(sgd_opt, p, g, s)
         let other = native_sgd(r, g, sgd_schedule(step + 1))
         let d = difference(next.0, other)
-        return (next.0, other, next.1, step + 1, out->append<d.0>, seen + d.1)
+        (next.0, other, next.1, step + 1, out->append<d.0>, seen + d.1)
     }
     let sgd_bad = mismatches(sgd_drifts)
     if sgd_bad != 0 || sgd_seen != steps * 4 || sgd_steps != steps then failures = failures + 1
@@ -163,7 +163,7 @@ func main(steps: int) => int sync {
         let next = update(adam_opt, p, g, s)
         let other = native_adam(r, g, ns, adam_schedule(step + 1), 0.5, 0.25, 0.0001)
         let d = difference(next.0, other.0)
-        return (next.0, other.0, next.1, other.1, step + 1, out->append<d.0>, seen + d.1)
+        (next.0, other.0, next.1, other.1, step + 1, out->append<d.0>, seen + d.1)
     }
     let adam_bad = mismatches(adam_drifts)
     if adam_bad != 0 || adam_seen != steps * 4 || adam_steps != steps then failures = failures + 1
@@ -179,7 +179,7 @@ func main(steps: int) => int sync {
         let next = update(default_opt, p, g, s)
         let other = native_adam(r, g, ns, adam_schedule(step + 1))
         let d = difference(next.0, other.0)
-        return (next.0, other.0, next.1, other.1, step + 1, out->append<d.0>, seen + d.1)
+        (next.0, other.0, next.1, other.1, step + 1, out->append<d.0>, seen + d.1)
     }
     let default_bad = mismatches(default_drifts)
     if default_bad != 0 || default_seen != steps * 4 || default_steps != steps then failures = failures + 1
@@ -195,7 +195,7 @@ func main(steps: int) => int sync {
         let a = update(zero_opt, p, g, s)
         let b = update(plain_opt, q, g, t)
         let d = difference(a.0, b.0)
-        return (a.0, b.0, a.1, b.1, step + 1, out->append<d.0>, seen + d.1)
+        (a.0, b.0, a.1, b.1, step + 1, out->append<d.0>, seen + d.1)
     }
     let zero_bad = mismatches(zero_drifts)
     if zero_bad != 0 || zero_seen != steps * 4 || zero_steps != steps then failures = failures + 1
@@ -214,7 +214,7 @@ func main(steps: int) => int sync {
         let qd = tree_map<decayed>(q)
         let b = update(decay_ref_opt, qd, g, t)
         let d = difference(a.0, b.0)
-        return (a.0, b.0, a.1, b.1, step + 1, out->append<d.0>, seen + d.1)
+        (a.0, b.0, a.1, b.1, step + 1, out->append<d.0>, seen + d.1)
     }
     let decay_bad = mismatches(decay_drifts)
     if decay_bad != 0 || decay_seen != steps * 2 || decay_steps != steps then failures = failures + 1
@@ -229,5 +229,4 @@ func main(steps: int) => int sync {
     let flat = constant(0.02)
     'optim schedule constant step1={} step7={}'->format<flat(1), flat(7)>->println
     
-    return failures
 }

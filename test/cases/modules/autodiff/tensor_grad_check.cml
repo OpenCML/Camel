@@ -151,7 +151,7 @@ func pieces() => float {
     return float(sum(c)) + float(sum(d * d)) + float(sum(s)) + float(sum(e * e))
 }
 
-func main() => int sync {
+func main() sync {
     seed(6)
     let x = (next_key()->uniform::<f32><shape: [3, 4]> * 2.0 - 1.0)
     let v = (next_key()->uniform::<f32><shape: [3, 4]> * 2.0 - 1.0)
@@ -182,5 +182,4 @@ func main() => int sync {
     check('lin_bias', lin_bias, grad(lin_bias), x5, v5)
     check('layout', layout, grad(layout), x, v)
     check('pieces', pieces, grad(pieces), x, v)
-    return 0
 }

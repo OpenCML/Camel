@@ -14,7 +14,7 @@ func counter(start: int) => () => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let a = counter(0)
     let b = counter(100)
     println(a())
@@ -22,5 +22,4 @@ func main() => int sync {
     println(b())
     println(a())
     println(b())
-    return 0
 }

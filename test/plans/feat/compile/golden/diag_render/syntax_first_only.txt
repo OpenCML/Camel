@@ -5,18 +5,11 @@ error[SyntaxDiag::KeywordAsIdentifier]: 'func' is a keyword and cannot be used a
    |         ^^^^
 help: Choose another name, for example 'func_'.
 
-error[SyntaxDiag::UnexpectedToken]: Unexpected '}'; expected '('.
-  --> <ROOT>/test/cases/compile/diag_render/syntax_first_only.cml:4:1
-   |
- 4 | }
-   | ^
-help: The token fits nothing that can stand where it is. What the parser expected instead follows the semicolon above: a list whose items have no ',' between them, a bracket that is not closed and a reserved word where a name belongs are the usual causes.
-
 error[SyntaxDiag::UnexpectedToken]: Unexpected '}'; expected an expression.
-  --> <ROOT>/test/cases/compile/diag_render/syntax_first_only.cml:8:1
+  --> <ROOT>/test/cases/compile/diag_render/syntax_first_only.cml:7:1
    |
- 8 | }
+ 7 | }
    | ^
 help: The token fits nothing that can stand where it is. What the parser expected instead follows the semicolon above: a list whose items have no ',' between them, a bracket that is not closed and a reserved word where a name belongs are the usual causes.
 
-camel: 3 errors
+camel: 2 errors

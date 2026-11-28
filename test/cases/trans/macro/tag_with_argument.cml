@@ -6,6 +6,6 @@ func bad(x: int) => int {
     return x
 }
 
-func main() => int {
-    return bad(1)
+func main() {
+    bad(1)
 }

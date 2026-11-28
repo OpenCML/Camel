@@ -3,6 +3,5 @@ type V = { x: int }
 func operator !=(a: V, b: V) => bool {
     return a.x != b.x
 }
-func main() => int {
-    return 0
+func main() {
 }

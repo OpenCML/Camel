@@ -11,8 +11,7 @@ func f(s: string) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println('never printed')
     println(f('x'))
-    return 0
 }

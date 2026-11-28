@@ -4,8 +4,7 @@
 
 type Boxed = enum { Empty, Weight(float) }
 
-func main() => int sync {
+func main() sync {
     let m = [(Boxed::Empty, 1)] as Map<Boxed, int>
     println('never printed')
-    return 0
 }

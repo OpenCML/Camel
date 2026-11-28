@@ -49,7 +49,7 @@ func train(model: TinyCnn, x: f32[...], target: f32[...], steps: int) => TinyCnn
     return if steps == 0 then model else train(sgd(model, grad(model_loss)<model>(x, target), 0.2), x, target, steps - 1)
 }
 
-func main() => int sync {
+func main() sync {
     let model = init()
     let x = reshape<[1, 1, 3, 3]>([1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0] as f32[])
     let target = reshape<[1, 1]>([1.0] as f32[])
@@ -68,5 +68,4 @@ func main() => int sync {
     'tiny_cnn kernel_grad={}'->format<vg.1.kernel>->println
     'tiny_cnn bias_grad={}'->format<vg.1.bias>->println
     'tiny_cnn head_grad={}'->format<vg.1.head>->println
-    return 0
 }

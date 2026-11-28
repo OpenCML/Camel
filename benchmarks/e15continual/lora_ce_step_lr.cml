@@ -127,7 +127,7 @@ func do_train_ce(m: LoraMlp) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     let m = load()
-    return if (get_env('CAMEL_BENCH_WORKLOAD') ?? '') == 'export_ce' then do_export_ce(m) else do_train_ce(m)
+    if (get_env('CAMEL_BENCH_WORKLOAD') ?? '') == 'export_ce' then do_export_ce(m) else do_train_ce(m)
 }

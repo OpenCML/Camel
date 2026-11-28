@@ -1,7 +1,7 @@
 import { creation_id, id, Node, nodes, graph_of } from graph
 import { NodeKind, Value } from graph
 
-func main() => int spelling sync {
+func main() spelling sync {
     let p = main
     println(graph_of(p) == graph_of(main))
     println(graph_of(p) != graph_of(main))
@@ -14,5 +14,4 @@ func main() => int spelling sync {
     println(creation_id(graph_of(p)))
     let k: NodeKind = NodeKind::Oper
     println(k)
-    return 0
 }

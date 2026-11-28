@@ -5,7 +5,7 @@
 
 import state
 
-func main() => int sync {
+func main() sync {
     let r = state::ref(1.25)
     println(state::get(r))
     state::set(r, 2.5)
@@ -13,5 +13,4 @@ func main() => int sync {
     println(state::update(r, func (x: float) {
         x * 2.0
     }))
-    return 0
 }

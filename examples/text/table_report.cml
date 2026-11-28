@@ -20,7 +20,7 @@ func line(it: Item, width: int) => string {
     return format<pad(it.name, width), it.qty, it.price, amount(it)>('{}{:>5}{:>9.2f}{:>10.2f}')
 }
 
-func main() => int sync {
+func main() sync {
     let items: Item[] = [
         { name: 'notebook', qty: 3, price: 2.5 },
         { name: 'pen', qty: 12, price: 0.8 },
@@ -44,5 +44,4 @@ func main() => int sync {
     }>->join<'\n'>)
     println(rule)
     println(format<pad('total', width), sum(items->map<amount>)>('{}{:>24.2f}'))
-    return 0
 }

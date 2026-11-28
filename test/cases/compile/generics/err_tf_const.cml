@@ -4,6 +4,5 @@ func f(p: Pair<const 3>) => int {
     return 1
 }
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

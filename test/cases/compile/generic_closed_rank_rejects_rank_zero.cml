@@ -9,7 +9,6 @@ func take_first::<T>(xs: T[]) => int {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println(take_first(6.0))
-    return 0
 }

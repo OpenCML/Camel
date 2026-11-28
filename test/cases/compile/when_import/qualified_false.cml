@@ -9,7 +9,6 @@ func describe::<T>(x: T) => string when predicates::is_compound::<T>() {
     return 'compound'
 }
 
-func main() => int sync {
+func main() sync {
     println(describe(3))
-    return 0
 }

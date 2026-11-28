@@ -20,7 +20,7 @@ func f15(
     return a18(0 % 997, if false then '' else '')
 }
 
-func main() => int sync {
+func main() sync {
     let n62 = 0
     let n72 = match n62 {
         case 10 => ''
@@ -29,5 +29,4 @@ func main() => int sync {
         })
         case _ => ''
     }
-    return 0
 }

@@ -25,7 +25,7 @@ func f(x: float) => float {
     return if x > 0.0 then x * x else 3.0 * x
 }
 
-func main() => int sync {
+func main() sync {
     let forward = split(jvp(f))
     let (up, upBackward) = forward(2.0)
     // f(2) = 4, and d/dx (x*x) = 2x = 4 there.
@@ -35,5 +35,4 @@ func main() => int sync {
     // f(-2) = -6, and d/dx (3*x) = 3 there -- the arm the condition did not take at 2.0.
     'author x=-2.0 value={}'->format<down>->println
     'author x=-2.0 dfdx={}'->format<downBackward(1.0)>->println
-    return 0
 }

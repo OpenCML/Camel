@@ -109,7 +109,6 @@ func fault_case(x: int) => int {
     return x / 0
 }
 
-func main() => int sync {
+func main() sync {
     println(integer_coefficients(7), integer_chain(7), doubled(7))
-    return 0
 }

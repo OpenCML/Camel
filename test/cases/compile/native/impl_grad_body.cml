@@ -46,7 +46,7 @@ func outer_plain(b: float) => float {
     return plain(a, b)
 }
 
-func main() => int sync {
+func main() sync {
     let kernel_ran = t(4.0, 2.0)
     let body_value = plain(4.0, 2.0)
     'impl_grad_body forward kernel={} body={}'->format<kernel_ran, body_value>->println
@@ -54,5 +54,4 @@ func main() => int sync {
     let d_plain = grad(outer_plain)<4.0>(2.0)
     let d_value = grad(tagged_value)<4.0, 2.0>()
     'impl_grad_body grad direct={} plain={} value={}'->format<d_direct, d_plain, d_value>->println
-    return 0
 }

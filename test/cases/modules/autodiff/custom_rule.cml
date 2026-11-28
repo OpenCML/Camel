@@ -57,11 +57,10 @@ func use_mix() => float {
     return mix(a, b, 3) + a
 }
 
-func main() => int sync {
+func main() sync {
     let v = cube(2.0)
     let dc = grad(use_cube)<2.0>()
     let dk = grad(use_clip)<3.0>()
     let dm = grad(use_mix)<2.0, 5.0>()
     'custom_rule value={} cube={} clip={} mix={}'->format<v, dc, dk, dm>->println
-    return 0
 }

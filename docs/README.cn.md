@@ -78,10 +78,9 @@ func loss(x: float, y: float) => float {
     return e * e
 }
 
-func main() => int sync {
+func main() sync {
     let fitted = loop w = 0.0 for i in 0..100 do w - 0.01 * grad(loss)<w>(3.0, 6.0)
     println(fitted)                  // 接近 2.0
-    return 0
 }
 ```
 
@@ -143,9 +142,8 @@ npm run build        # Release 构建，产物在 out/latest
 ### Hello, Camel
 
 ```camel
-func main() => int sync {
+func main() sync {
     println('Hello, Camel!')
-    return 0
 }
 ```
 

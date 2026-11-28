@@ -7,8 +7,7 @@ func activate(x: f32[...]) => f32[...] {
     return tanh(x)
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(sum(activate(x)))
-    return 0
 }

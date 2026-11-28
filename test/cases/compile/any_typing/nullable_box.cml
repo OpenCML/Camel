@@ -10,13 +10,13 @@ func pick(seven: Json, zero: Json) => Json {
     return a ?? zero
 }
 
-func main() => int sync {
+func main() sync {
     let pair = decode('[7, 0]')
-    return match pair {
+    match pair {
         case error e => 1
         case j => sync {
             println(pick(j->get<0> ?? j, j->get<1> ?? j))
-            return 0
+            0
         }
     }
 }

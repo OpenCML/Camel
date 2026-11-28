@@ -33,7 +33,7 @@ func init() => Linear {
     return { weight: reshape<[2, 1]>([0.0, 0.0] as f32[]) }
 }
 
-func main() => int sync {
+func main() sync {
     // Four samples of y = 2 * x1 - 1 * x2.
     let X = reshape<[4, 2]>([1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0] as f32[])
     let y = reshape<[4, 1]>([2.0, -1.0, 1.0, 3.0] as f32[])
@@ -45,5 +45,4 @@ func main() => int sync {
     let after200 = train(start, X, y, 0.1, 200)
     println(format<mse_loss<after200, y>(X)>('loss after 200 steps: {:.4f}'))
     println(after200.weight)
-    return 0
 }

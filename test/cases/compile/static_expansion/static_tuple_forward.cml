@@ -12,7 +12,6 @@ func forward(...ts) => int {
     return sum(...ts)
 }
 
-func main() => int sync {
+func main() sync {
     println(forward(1, 2, 3))
-    return 0
 }

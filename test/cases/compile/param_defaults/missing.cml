@@ -7,6 +7,6 @@ func f(a: int, b: int, c: int = 3) => int {
     return a + b + c
 }
 
-func main() => int sync {
-    return f(1, c: 5)
+func main() sync {
+    f(1, c: 5)
 }

@@ -45,7 +45,6 @@ func repeat(n: int, left: int, total: int) => int {
     return if left == 0 then total else repeat(n, left - 1, total + total_of(sums(n, left)) + total_of(shifted(n, left)))
 }
 
-func main(reps: int) => int sync {
+func main(reps: int) sync {
     println('gc_nested_reduce total={}'->format<repeat(128, reps, 0)>)
-    return 0
 }

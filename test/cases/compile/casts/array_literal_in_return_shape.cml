@@ -18,8 +18,7 @@ func four() => float[2, 2] sync {
     return [[1.5, 2.5], [3.5, 4.5]]
 }
 
-func main() => int sync {
+func main() sync {
     take3(three())
     take22(four())
-    return 0
 }

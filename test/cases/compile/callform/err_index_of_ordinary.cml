@@ -1,6 +1,5 @@
 import { index_of } from str
 
-func main() => int sync {
+func main() sync {
     println(index_of('hello', 'l'))
-    return 0
 }

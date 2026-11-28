@@ -75,7 +75,7 @@ func minimum_total_plain(x: float[4]) => float {
     return sum(minimum(x, [0.0, 1.0, 4.0, 2.0] as float[4]))
 }
 
-func main() => int sync {
+func main() sync {
     let mixed = [-1.0, 5.0, 2.0, 2.0] as float[4]
 
     // abs: the boundary element is the one that separates `>=` from `>`.
@@ -110,5 +110,4 @@ func main() => int sync {
 
     let all_same = abs_same && log_same && max_same && min_same
     `elementwise all_same={}`->format<all_same>->println
-    return 0
 }

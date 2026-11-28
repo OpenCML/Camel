@@ -19,7 +19,6 @@ func mul(x: float, w: float) => float {
     return x * w
 }
 
-func main() => int sync {
+func main() sync {
     println(mul(2.0, 3.0))
-    return 0
 }

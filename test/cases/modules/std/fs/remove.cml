@@ -36,14 +36,14 @@ func line(r: void!) => int sync {
     return 0
 }
 
-func main(mode: int, path: string) => int sync {
-    return if mode == 1 then sync {
+func main(mode: int, path: string) sync {
+    if mode == 1 then sync {
         // The permission case is set up by the node verifier (remove_permissions.mjs).
         let _ = line(remove(path))
-        return 0
+        0
     } else if mode == 2 then sync {
         let _ = line(remove_dir(path))
-        return 0
+        0
     } else sync {
         let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
         let dir = if root == '' then 'test/tmp/fs_remove' else root + '/fs_remove'
@@ -74,6 +74,6 @@ func main(mode: int, path: string) => int sync {
         let _ = line(remove(dir + '/other.txt'))
         let _ = line(remove_dir(dir))
         println('exists after remove_dir =', exists(dir))
-        return 0
+        0
     }
 }

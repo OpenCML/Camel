@@ -55,11 +55,10 @@ func touch(var xs: int[]) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     let big = make_array()
     var v = big
     let kept = v
     touch(v)
     println('kept[0] =', kept[0], ' v[0] =', v[0])
-    return 0
 }

@@ -9,6 +9,6 @@ func field(t: { a: int, b: int }) => int {
     return t.[k]
 }
 
-func main() => int {
-    return field({ a: 1, b: 2 })
+func main() {
+    field({ a: 1, b: 2 })
 }

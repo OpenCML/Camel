@@ -5,7 +5,6 @@
 import a.one as one_a
 import b.one as one_b
 
-func main() => int sync {
+func main() sync {
     println(one_a::n(), one_b::n())
-    return 0
 }

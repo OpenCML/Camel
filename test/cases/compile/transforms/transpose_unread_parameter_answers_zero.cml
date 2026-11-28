@@ -9,8 +9,7 @@ func f(x: float, y: float) => float {
     return x * 2.0
 }
 
-func main() => int sync {
+func main() sync {
     let back = transpose(f)
     println(back(1.0))
-    return 0
 }

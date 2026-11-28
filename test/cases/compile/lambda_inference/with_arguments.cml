@@ -8,7 +8,7 @@
  * type of the array it maps over.
  */
 
-func main() => int sync {
+func main() sync {
     println([1, 2, 3]->reduce<func (a, b) {
         a + b
     }, 0>)
@@ -18,5 +18,4 @@ func main() => int sync {
     println([(1, 10), (2, 20)]->map<func ((a, b)) {
         a + b
     }>)
-    return 0
 }

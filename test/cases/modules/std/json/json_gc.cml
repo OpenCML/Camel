@@ -36,9 +36,9 @@ func run(d: Json, n: int) => int sync {
     return 0
 }
 
-func main(n: int) => int sync {
+func main(n: int) sync {
     let d = decode('{"names": ["alpha", "beta", "gamma"], "nested": {"deep": ["x-' + string(n) + '"]}}')
-    return d->(func (j: Json) => int {
+    d->(func (j: Json) => int {
         run(j, n)
     }) !! 1
 }

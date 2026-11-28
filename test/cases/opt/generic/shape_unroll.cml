@@ -17,7 +17,6 @@ func forward(x: f32[...]) => f32[...] {
     return run(0, shape(x)[1], x, zeros::<f32>([shape(x)[0], shape(x)[2]]))
 }
 
-func main() => int sync {
+func main() sync {
     println(forward(ones::<f32>([2, 3, 4])))
-    return 0
 }

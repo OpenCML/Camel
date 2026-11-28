@@ -26,8 +26,7 @@ func train(base: int, epochs: int, k: int) => int sync {
     return step(0, w0)
 }
 
-func main() => int sync {
+func main() sync {
     println(train(3, 1000, 5))
     println(train(4, 7, 1))
-    return 0
 }

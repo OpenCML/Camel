@@ -13,9 +13,8 @@ func bump(var p: P) => int {
     return p.x
 }
 
-func main() => int sync {
+func main() sync {
     var s = { x: 1, y: 2 }
     println(bump(s))
     println(s.x)
-    return 0
 }

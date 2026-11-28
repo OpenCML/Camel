@@ -10,10 +10,9 @@ func tag::<T>(x: T) => string {
     return string(n) + ':' + string(x)
 }
 
-func main() => int sync {
+func main() sync {
     println(tag::<int>(7))
     println(tag::<string>('a'))
     println(tag::<float>(2.5))
     println(tag::<int><9>(7))
-    return 0
 }

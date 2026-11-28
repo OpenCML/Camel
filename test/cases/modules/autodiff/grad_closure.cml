@@ -61,12 +61,11 @@ func loss5() => float {
     return float(sum(g(p)))
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[3]>([0.5, 0.25, -0.35] as f32[])
     println(grad(loss1)<x>())
     println(grad(loss2)<x>())
     println(grad(loss3)<x>())
     println(grad(loss4)<x>())
     println(grad(loss5)<x>())
-    return 0
 }

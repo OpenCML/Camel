@@ -71,7 +71,7 @@ func i64_distribute(a: i64[...], b: i64[...], c: i64[...]) => i64[...] {
     return a * (b + c)
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(combine(x))
     println(combine_mixed(x))
@@ -87,5 +87,5 @@ func main() => int sync {
     let b = reshape<[3]>([1, 2, 3])
     let c = reshape<[3]>([5, 6, 7])
     println(i64_distribute(a, b, c))
-    return 0
+    0
 }

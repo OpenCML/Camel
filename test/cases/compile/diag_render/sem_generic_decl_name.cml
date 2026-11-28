@@ -3,7 +3,6 @@ func never_called::<T>(x: T) => T {
     return n
 }
 
-func main() => int sync {
+func main() sync {
     println('ok')
-    return 0
 }

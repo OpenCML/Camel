@@ -16,8 +16,7 @@ func peek() => int sync {
     return cnt
 }
 
-func main() => int sync {
+func main() sync {
     println(bump(), bump(), bump())
     println(peek())
-    return 0
 }

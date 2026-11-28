@@ -70,11 +70,11 @@ func subject() => int spelling {
     return f(1) + g(1)
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     let p = subject
     let before = operOf(p, 'f')
     let outcome = p->run<[zero_to_one], explain: true>
-    return match outcome {
+    match outcome {
         case error e => sync {
             println(e)
             1

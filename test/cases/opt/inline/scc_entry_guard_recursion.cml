@@ -10,8 +10,7 @@ func pong(n: int) => int {
     return if n <= 0 then 0 else ping(n - 1)
 }
 
-func main() => int sync {
+func main() sync {
     let out = ping(6)
     'inline_scc_entry_guard_recursion out={}'->format<out>->println
-    return 0
 }

@@ -6,7 +6,7 @@
 
 import state
 
-func main() => int sync {
+func main() sync {
     let r = state::ref(func (x: int) => int {
         x + 1
     })
@@ -17,5 +17,4 @@ func main() => int sync {
     })
     let twice = state::get(r)
     println(twice(21))
-    return 0
 }

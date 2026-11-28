@@ -18,6 +18,6 @@ func read_only() => int sync {
     return 0
 }
 
-func main() => int sync {
-    return read_only()
+func main() sync {
+    read_only()
 }

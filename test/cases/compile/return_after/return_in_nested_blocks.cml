@@ -31,10 +31,9 @@ func only_block() => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(after_sync_block())
     println(after_block())
     println(only_sync_block())
     println(only_block())
-    return 0
 }

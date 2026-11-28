@@ -31,10 +31,9 @@ func g(s: float[]) => float {
     return y[0]
 }
 
-func main() => int sync {
+func main() sync {
     let (value, pullback) = vjp(g)([1.0, 2.0])
     println('value=', value)
     let cotangent = pullback(1.0)
     println('grad=', cotangent.0)
-    return 0
 }

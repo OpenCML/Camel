@@ -4,7 +4,7 @@
  * and `|=` used to fail when run ("assignment operator not fully implemented", progen F29).
  */
 
-func main() => int sync {
+func main() sync {
     var a = 17
     a += 5
     println(a)
@@ -69,5 +69,4 @@ func main() => int sync {
     println(f)
     f ^= f32(2.0)
     println(f)
-    return 0
 }

@@ -9,10 +9,9 @@ func pick(t: i64[...], i: int) => i64[...] {
     return take(t, int([i]))
 }
 
-func main() => int sync {
+func main() sync {
     let t = reshape<[4, 3]>(to_array(0 .. 12))
     let ok = pick(t, 1)
     'take runtime ok={}'->format<ok>->println
     let bad = pick(t, -1)
-    return 0
 }

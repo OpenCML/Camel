@@ -5,7 +5,7 @@
 
 import { reshape } from tensor
 
-func main() => int sync {
+func main() sync {
     let xs: float[] = [1.0, 2.0, 3.0]
     println(reshape<[3]>(xs))
     println(reshape<[3]>([4.0, 5.0, 6.0]))
@@ -14,5 +14,4 @@ func main() => int sync {
     // A target of one dimension that changes it: the fault, before anything is read.
     let short: float[] = [1.0, 2.0, 3.0]
     println(reshape<[2]>(short))
-    return 0
 }

@@ -11,7 +11,7 @@
 
 import lib
 
-func main() => int sync {
+func main() sync {
     // the decorated `bump`: twice its body
     println(lib::bump(3))
     // the plain `bump`: the overload the argument's type chooses
@@ -19,5 +19,4 @@ func main() => int sync {
     // the name, bound to a local name: its calls choose as the calls above do
     let f = lib::bump
     println(f(4), f(5))
-    return 0
 }

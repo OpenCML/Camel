@@ -40,7 +40,7 @@ func render(snake: Point[]) => void sync {
 }
 
 // Provide a snake with both valid and invalid points.
-func main() => int sync {
+func main() sync {
     let snake = [
         { x: 5, y: 5 },
         { x: 5, y: 6 },
@@ -50,5 +50,4 @@ func main() => int sync {
     ]
     
     render(snake)
-    return 0
 }

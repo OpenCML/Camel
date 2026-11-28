@@ -18,7 +18,6 @@ func read(t: f32[...]) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     let _ = read(zeros::<f32>([2, 3]))
-    return 0
 }

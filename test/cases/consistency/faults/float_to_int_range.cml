@@ -9,7 +9,7 @@ func mul(a: float, b: float) => float {
     return a * b
 }
 
-func main() => int sync {
+func main() sync {
     let inf = mul(1.0e308, 10.0)
     println('before')
     println(conv(9.0e18))
@@ -18,5 +18,4 @@ func main() => int sync {
     println(conv(inf))
     println(conv(inf - inf))
     println('not reached')
-    return 0
 }

@@ -1,4 +1,3 @@
-func main() => int sync {
+func main() sync {
     println(i32(5000000000))
-    return 0
 }

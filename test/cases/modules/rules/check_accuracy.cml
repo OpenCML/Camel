@@ -26,7 +26,7 @@ rule softmax_matrix(x: f32[2, 3], const axis: int) { log(softmax<axis>(x)) => lo
 #requires(refine_accuracy)
 rule softmax_axis2(x: f32[2, 2, 2], const axis: int) { log(softmax<axis>(x)) => log_softmax<axis>(x) }
 
-func main() => int sync {
+func main() sync {
     println(check_text([
         accurate_log1p,
         worse_log1p,
@@ -34,5 +34,4 @@ func main() => int sync {
         softmax_matrix,
         softmax_axis2
     ]->check<100, 7>))
-    return 0
 }

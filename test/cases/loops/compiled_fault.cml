@@ -5,7 +5,6 @@ func divide(xs: int[]) => int {
     return acc
 }
 
-func main() => int sync {
+func main() sync {
     println(divide([2, 5, 0, 4]))
-    return 0
 }

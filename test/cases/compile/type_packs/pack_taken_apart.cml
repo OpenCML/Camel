@@ -45,7 +45,7 @@ type RestOf<P> = match type P {
 type FirstWithOf<F> = <...WithOf<F>>(...ParamsOf<F>) => Head<WithOf<F>>
 type LossShape = <w: f32[2], k: int>(x: float) => f32[2]
 
-func main() => int sync {
+func main() sync {
     println(is_same::<Head<WithOf<Loss>>, f32[2]>())
     println(is_same::<Head<ParamsOf<Loss>>, float>())
     println(is_same::<Second<WithOf<Loss>>, int>())
@@ -53,5 +53,4 @@ func main() => int sync {
     println(is_same::<FirstWithOf<Loss>, LossShape>())
     println(is_same::<(...RestOf<WithOf<Loss>>), (int,)>())
     println(is_same::<(...RestOf<ParamsOf<Loss>>), ()>())
-    return 0
 }

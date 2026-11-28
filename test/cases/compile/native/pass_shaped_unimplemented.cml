@@ -12,6 +12,5 @@
 #op('nowhere:reshape')
 export func reshape::<F>(f: F) => F! when is_function::<F>()
 
-func main() => int {
-    return 0
+func main() {
 }

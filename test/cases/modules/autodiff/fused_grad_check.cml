@@ -68,7 +68,7 @@ func mlp_b() => float {
     return float(sum(relu(x23() @ w34() + b) * out24()))
 }
 
-func main() => int sync {
+func main() sync {
     let vx = [[0.2, -0.4, 0.9], [-0.3, 0.8, 0.1]] as f32[2, 3]
     let vw = [[0.5, 0.1, -0.2, 0.3], [-0.6, 0.4, 0.2, -0.1], [0.3, -0.5, 0.7, 0.2]] as f32[3, 4]
     let vb = [0.3, -0.7, 0.2, 0.5] as f32[]
@@ -78,5 +78,4 @@ func main() => int sync {
     check('linear_relu.x', mlp_x, grad(mlp_x), x23(), vx)
     check('linear_relu.w', mlp_w, grad(mlp_w), w34(), vw)
     check('linear_relu.b', mlp_b, grad(mlp_b), b4(), vb)
-    return 0
 }

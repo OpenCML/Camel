@@ -53,11 +53,10 @@ func scalarToStruct() => float {
     return q.a
 }
 
-func main() => int sync {
+func main() sync {
     let vg = with_grad(structToStruct)<1.0>()
     let gRead = grad(readsState)<1.0>()
     let gIn = grad(scalarIn)<1.0>()
     let gOut = grad(scalarToStruct)<1.0>()
     'loop_grad_closure_in_body vg={} reads={} scalarIn={} scalarOut={}'->format<vg, gRead, gIn, gOut>->println
-    return 0
 }

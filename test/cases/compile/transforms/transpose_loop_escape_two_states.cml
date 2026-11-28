@@ -38,7 +38,7 @@ func carried(x: float) => float {
     return (loop s = x, p = x for i in 0 .. 3 do (s + p, p + q)).0
 }
 
-func main() => int sync {
+func main() sync {
     // The algebra first, forward and un-transposed: 10 through `s`, 7 through `p`.
     println(carried(1.0))
     let (a, b) = loop s = 1.0, p = 1.0 for i in 0 .. 3 do (s + p, p + 2.0)
@@ -49,5 +49,4 @@ func main() => int sync {
     // Twice the cotangent, 20: a number no forward line above prints, so the plan's claim about the
     // transform cannot be met by the forward algebra alone.
     println(back(2.0))
-    return 0
 }

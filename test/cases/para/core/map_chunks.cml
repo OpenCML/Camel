@@ -21,7 +21,7 @@ func checksum(xs: int[]) => int {
     }, 0>
 }
 
-func main() => int sync {
+func main() sync {
     let n = 60000
     let light = (0 .. n)->map<func (x: int) => int {
         x * 3 % 1009 + x % 5
@@ -57,5 +57,4 @@ func main() => int sync {
         let _ = x
     }>(0 .. 5000)
     println('done')
-    return 0
 }

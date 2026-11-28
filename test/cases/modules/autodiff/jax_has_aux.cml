@@ -24,7 +24,7 @@ func report() => (float, int) {
     return (x * x, 7)
 }
 
-func main() => int sync {
+func main() sync {
     let gradient = grad(loss, has_aux: true)<2.0>()
     let step = with_grad(loss, has_aux: true)<2.0>()
     let counted = grad(report, has_aux: true)<2.0>()
@@ -32,5 +32,4 @@ func main() => int sync {
     println(gradient)
     println(step)
     println(counted)
-    return 0
 }

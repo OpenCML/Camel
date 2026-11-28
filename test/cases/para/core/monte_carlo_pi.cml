@@ -5,7 +5,7 @@
 import { pi_hits } from sim
 import { now } from time
 
-func main() => int sync {
+func main() sync {
     let repeat = 50
     let samples_per_worker = 100000000
     let total_samples = repeat * samples_per_worker
@@ -27,5 +27,4 @@ func main() => int sync {
     'Estimated pi = {:.8f}'->format<pi>->println
     'Monte Carlo completed in {:.2f} seconds'->format<duration>->println
     
-    return 0
 }

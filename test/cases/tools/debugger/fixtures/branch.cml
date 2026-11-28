@@ -7,7 +7,6 @@ func pick(n: int) => string {
     else shout('small') // mark:else
 }
 
-func main() => int sync {
+func main() sync {
     println(pick(3)) // mark:call
-    return 0
 }

@@ -49,7 +49,7 @@ func column_mean(x: float[2, 3]) => float[...] {
     return mean<0, false>(x)
 }
 
-func main() => int sync {
+func main() sync {
     let batch: float[3, 2, 3] = [
         [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
         [[10.0, 20.0, 30.0], [40.0, 50.0, 60.0]],
@@ -65,5 +65,4 @@ func main() => int sync {
     println(row_vmap(row_min)(batch))
     println(vmap(column_mean)(batch))
     println(row_vmap(column_mean)(batch))
-    return 0
 }

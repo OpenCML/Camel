@@ -17,10 +17,9 @@ func g(n: int) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(f('a'))
     println(f('b'))
     println(g(0))
     println(g(5))
-    return 0
 }

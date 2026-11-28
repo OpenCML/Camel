@@ -1,5 +1,4 @@
-func main() => int {
+func main() {
     let a = 1 // one
     let b = a + 1 // two
-    return b
 }

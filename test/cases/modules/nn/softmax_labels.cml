@@ -6,7 +6,7 @@
 import { softmax_cross_entropy, softmax_cross_entropy_grad } from nn
 import { reshape, one_hot, sum, abs } from tensor
 
-func main() => int sync {
+func main() sync {
     let logits = reshape<[2, 3]>([1.0, 2.0, 3.0, 0.5, -1.0, 0.0])
     let labels = [1, 0]
     let hot = one_hot(labels, 3)
@@ -20,5 +20,4 @@ func main() => int sync {
     let tensor_grad = softmax_cross_entropy_grad(logits, int(labels), 0.5)
     
     'softmax_labels loss={} {} {} {} grad_diff={}'->format<onehot_loss, array_loss, tensor_loss, int32_loss, sum(abs(array_grad - onehot_grad)) + sum(abs(tensor_grad - onehot_grad))>->println
-    return 0
 }

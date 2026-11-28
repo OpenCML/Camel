@@ -20,8 +20,7 @@ func f_total(x: float[3]) => float {
     return float(sum(x))
 }
 
-func main() => int sync {
+func main() sync {
     let cotangent = transpose(f_total)(1.0)
     `total ct=1.0 {}  right=[1.0, 1.0, 1.0]`->format<cotangent>->println
-    return 0
 }

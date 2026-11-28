@@ -60,12 +60,11 @@ func named_and_typed(b: Box) => int {
     return static loop acc = 0 for n, F in fields Box do acc + b.[n]
 }
 
-func main() => int sync {
+func main() sync {
     println(width_of({ low: 1, high: 2 }))
     println(tag_count({ low: 1, high: 2 }))
     println(leaf_is_empty({ marked: 5 }))
     println(width_key({ low: 1, high: 2 }))
     println(named({ low: 1, high: 2 }))
     println(named_and_typed({ low: 1, high: 2 }))
-    return 0
 }

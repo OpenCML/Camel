@@ -12,7 +12,7 @@ func cmp(a: string, b: string) => string {
     return '{} {} {} {}'->format<lt, le, gt, ge>
 }
 
-func main() => int sync {
+func main() sync {
     println(cmp('a', 'b'))
     println(cmp('b', 'a'))
     println(cmp('a', 'a'))
@@ -27,5 +27,4 @@ func main() => int sync {
     println('b' > 'a')
     println('a' <= 'a')
     println('a' >= 'a')
-    return 0
 }

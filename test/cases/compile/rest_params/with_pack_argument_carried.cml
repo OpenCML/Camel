@@ -6,7 +6,6 @@ func g(x: float) => float {
     return x
 }
 
-func main() => int sync {
+func main() sync {
     println(g<1>(2.5))
-    return 0
 }

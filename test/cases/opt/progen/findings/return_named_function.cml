@@ -14,8 +14,7 @@ func f4() => (a0: int) => bool {
     return f1
 }
 
-func main() => int sync {
+func main() sync {
     let g = f4()
     println(g(1))
-    return 0
 }

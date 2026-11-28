@@ -15,7 +15,6 @@ func reduced() => float {
     }, w>() * 2.0
 }
 
-func main() => int sync {
+func main() sync {
     println(grad(reduced)<5.0>())
-    return 0
 }

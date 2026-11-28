@@ -9,8 +9,7 @@
  * what `:op/cast` declares.
  */
 
-func main() => int sync {
+func main() sync {
     let written = 5 as int?
     println(written ?? 0)
-    return 0
 }

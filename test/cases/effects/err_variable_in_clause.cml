@@ -9,8 +9,7 @@ func bump(var acc: int) => int uses var acc sync {
     return acc
 }
 
-func main() => int sync {
+func main() sync {
     var acc = 0
     println(bump(acc))
-    return 0
 }

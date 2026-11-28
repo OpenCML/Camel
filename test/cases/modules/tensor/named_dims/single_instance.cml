@@ -5,8 +5,7 @@ import { ones } from tensor
 func dense(x: f32[n, 3], w: f32[3, k]) => f32[n, k] {
     return x @ w
 }
-func main() => int sync {
+func main() sync {
     println(dense(ones::<f32>([2, 3]), ones::<f32>([3, 4])))
     println(dense(ones::<f32>([5, 3]), ones::<f32>([3, 2])))
-    return 0
 }

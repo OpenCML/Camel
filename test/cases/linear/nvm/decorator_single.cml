@@ -14,7 +14,7 @@ func base(x: int) => int {
     return x
 }
 
-func main() => int sync {
+func main() sync {
     let v = base(40)
-    return if v == 42 then 0 else 1
+    if v == 42 then 0 else 1
 }

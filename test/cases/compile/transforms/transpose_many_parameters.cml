@@ -34,11 +34,10 @@ func mt(x: float, w: float, dx: float, dw: float) => float {
     return mul_tangent(x, w, dx, dw)
 }
 
-func main() => int sync {
+func main() sync {
     // The refused shape: two values named by the body, two tangents the closure cannot hold.
     let lin = func (dx: float, dw: float) {
         mt(3.0, 2.0, dx, dw)
     }
     println(transpose(lin)(1.0))
-    return 0
 }

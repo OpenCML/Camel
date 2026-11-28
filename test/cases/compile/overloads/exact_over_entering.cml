@@ -21,8 +21,7 @@ func scale(x: float) => string {
     return 'float'
 }
 
-func main() => int sync {
+func main() sync {
     println(pick([1.0]))
     println(scale(2.0))
-    return 0
 }

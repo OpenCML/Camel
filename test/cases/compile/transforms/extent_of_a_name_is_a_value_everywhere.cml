@@ -27,7 +27,7 @@ func gives_one() => () => int[] {
     return extent_of::<f32[3]>
 }
 
-func main() => int sync {
+func main() sync {
     let no_expected_type = extent_of::<f32[2, 3]>
     println(no_expected_type())
     println(gives_one()())
@@ -36,5 +36,4 @@ func main() => int sync {
     println(answers[1]())
     println(takes_it(extent_of::<f32[2]>))
     println(from_param::<f32[2, 3]>())
-    return 0
 }

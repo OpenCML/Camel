@@ -21,7 +21,7 @@ func show(name: string, t: f32[...]) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     // NaN (0/0 at index 11), infinities (3e38 * 10 at 6 and 7), signed zeros, subnormals.
     let base = reshape<[12]>([1.5, -2.25, 0.0, -0.0, 1.0e-40, -1.0e-40, 3.0e38, -3.0e38, 88.7, -103.9, 0.5, 7.0] as f32[])
     let k = reshape<[12]>([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 10.0, 10.0, 1.0, 1.0, 1.0, 1.0] as f32[])
@@ -62,5 +62,4 @@ func main() => int sync {
     println(mean(large))
     println(mean(specials))
     println(mean(reshape<[3, 4]>(base)))
-    return 0
 }

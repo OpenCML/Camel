@@ -4,7 +4,7 @@ func seven() => int {
 
 let k = seven()
 
-func main() => int sync {
+func main() sync {
     println(k)
-    return 0
+    0
 }

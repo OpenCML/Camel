@@ -16,8 +16,7 @@ func add(x: int) => int sync {
     return acc
 }
 
-func main() => int sync {
+func main() sync {
     let g = add<total>
     println(g(1), total)
-    return 0
 }

@@ -11,7 +11,7 @@ func show(r: int!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(parse_int('42') !! 0)
     println(parse_int('-7') !! 0)
     println(parse_int('4x2') !! 0)
@@ -22,5 +22,4 @@ func main() => int sync {
     let missing = 'tagged_no_such_file.txt'->read_text
     println(missing)
     println(missing !! '<no file>')
-    return 0
 }

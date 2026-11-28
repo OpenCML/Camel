@@ -32,7 +32,7 @@ func total_plain(x: float[], w: float[]) => float {
     return sum(minimum(x, w))
 }
 
-func main() => int sync {
+func main() sync {
     let xa = [-2.0, 0.0, 3.0, -0.5] as float[]
     let wa = [1.0, 0.0, 1.0, 2.0] as float[]
     let engine_dx = grad(total_x)<[-2.0, 0.0, 3.0, -0.5] as float[]>([1.0, 0.0, 1.0, 2.0] as float[])
@@ -44,5 +44,4 @@ func main() => int sync {
     let same_w = sum(abs(engine_dw - library_dw)) == 0.0
     `minimum: engine={} library={} same={}`->format<engine_dx, library_dx, same_x>->println
     `minimum dw: engine={} library={} same={}`->format<engine_dw, library_dw, same_w>->println
-    return 0
 }

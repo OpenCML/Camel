@@ -16,9 +16,8 @@ func bell32() => f32 {
     return erf(x)
 }
 
-func main() => int sync {
+func main() sync {
     println('erf={}'->format<round(grad(bell)<0.5>() * 1000000.0) / 1000000.0>)
     println('erfc={}'->format<round(grad(tail)<0.5>() * 1000000.0) / 1000000.0>)
     println('erf32={}'->format<round(float(grad(bell32)<f32(0.5)>()) * 1000.0) / 1000.0>)
-    return 0
 }

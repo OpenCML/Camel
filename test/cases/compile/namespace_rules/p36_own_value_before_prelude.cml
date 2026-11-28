@@ -6,7 +6,6 @@ func join(xs: string[]) => string {
     return "own"
 }
 
-func main() => int sync {
+func main() sync {
     println(join(["a", "b"]))
-    return 0
 }

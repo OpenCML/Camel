@@ -29,8 +29,7 @@ func loss(x: float) => (float, float) {
     return (x * x, x + 10.0)
 }
 
-func main() => int sync {
+func main() sync {
     let g = vjp(loss, has_aux: true)<3.0>()
     let _ = g
-    return 0
 }

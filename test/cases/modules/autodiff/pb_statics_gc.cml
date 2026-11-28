@@ -32,7 +32,7 @@ func loss(x: f32[...]) => float {
     return float(mean(y * y))
 }
 
-func main() => int sync {
+func main() sync {
     let m = {
         q_w: reshape<[4, 4]>([0.2, -0.5, 0.9, 0.1, -0.7, 0.4, 0.6, -0.2, 0.8, 0.3, -0.6, 0.5, -0.1, 0.7, -0.4, 0.2] as f32[]),
         k_w: reshape<[4, 4]>([0.5, 0.3, -0.8, 0.6, 0.1, -0.9, 0.4, -0.3, 0.7, -0.2, 0.8, -0.5, 0.2, 0.6, -0.1, 0.9] as f32[])
@@ -47,5 +47,4 @@ func main() => int sync {
     let x2 = x + f32(sum(junk2) * 0.0)
     let vg2 = with_grad(loss)<m>(x2)
     'loss2={} gqw2={} gkw2={}'->format<vg2.0, sum(vg2.1.q_w), sum(vg2.1.k_w)>->println
-    return 0
 }

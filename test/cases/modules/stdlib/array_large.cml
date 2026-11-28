@@ -19,7 +19,7 @@ func add(a: int, b: int) => int {
     return a + b
 }
 
-func main() => int sync {
+func main() sync {
     let xs = (1 .. 2001)->to_array()
     let lengths = xs->map<steps>
     println(len(lengths), sum(lengths), max(lengths), min(lengths))
@@ -47,5 +47,4 @@ func main() => int sync {
     println(len(pairs), sum(pairs), pairs->take<6>)
     println(len(unique(lengths)), unique(lengths)->take<10>)
     println(sum(zip_with<add>(xs, reverse(xs))), len(flatten([xs, lengths, xs])), enumerate(lengths)->drop<1998>)
-    return 0
 }

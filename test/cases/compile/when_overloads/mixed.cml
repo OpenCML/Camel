@@ -18,9 +18,8 @@ func fl::<T>(xs: T[...]) => T[] when !is_arr::<T>() {
     return xs[0..1] as T[]
 }
 
-func main() => int sync {
+func main() sync {
     println(is_arr::<int[]>(), is_arr::<int>())
     println(fl([[1, 2], [3]]))
     println(fl([1, 2, 3]))
-    return 0
 }

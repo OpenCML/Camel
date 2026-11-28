@@ -22,11 +22,10 @@ func odd(n: int) => int {
     return if n == 0 then base_odd() else keep(base_even())
 }
 
-func main() => int sync {
+func main() sync {
     let a = even(3)
     let b = odd(3)
     let c = even(0)
     let d = odd(0)
     'mutual_tail_check a={} b={} c={} d={}'->format<a, b, c, d>->println
-    return 0
 }

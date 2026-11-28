@@ -12,10 +12,9 @@ func as_lit::<T>(x: T) => T {
     return 1 as T
 }
 
-func main() => int sync {
+func main() sync {
     println(zero_of(5))
     println(none_of('s'))
     println(len(none_of(1)))
     println(as_lit(7))
-    return 0
 }

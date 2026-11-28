@@ -10,7 +10,7 @@ import { unordered_foreach } from para
 import { sleep } from process
 import { now } from time
 
-func main() => int sync {
+func main() sync {
     let jobs = (0 .. 8)->to_array()
     let delay_ms = 200
     
@@ -21,5 +21,5 @@ func main() => int sync {
     let duration = now() - start
     
     'unordered_foreach duration = {:.3f}s'->format<duration>->println
-    return if duration < 1.4 then 0 else 1
+    if duration < 1.4 then 0 else 1
 }

@@ -9,7 +9,6 @@ namespace A {
         }
     }
 }
-func main() => int sync {
+func main() sync {
     println(A::B::f())
-    return 0
 }

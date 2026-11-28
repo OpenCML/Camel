@@ -5,8 +5,7 @@
 
 import { zeros } from tensor
 
-func main() => int sync {
+func main() sync {
     let r = zeros::<f32>([2, 3]) < zeros::<f32>([3, 2])
     println('unreachable')
-    return 0
 }

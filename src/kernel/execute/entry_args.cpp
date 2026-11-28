@@ -596,8 +596,12 @@ void writeEntryResultTo(
             std::string why;
             try {
                 // The value of `main` is the value of an ordinary function, not a result of the
-                // program (design principles 9.8): the driver writes it out only when asked (the
-                // file `-o` names), which is the output effect this handler adds after the graph.
+                // program (design principles 9.8): a declared return type is the declaration
+                // asking for it to be written out, and that is the output effect this handler
+                // adds after the graph. The type says nothing else -- an `int` is written as the
+                // number it is, exactly as any other value, and gives no exit code (only
+                // `process::exit(code)` does).
+                //
                 // A body whose return type is not declared ends with a value too (the last
                 // statement's, `println('a')` giving 'a'); it is the function's value as well and
                 // is neither printed nor written. An error value such a body ends with is not
@@ -618,15 +622,11 @@ void writeEntryResultTo(
                     resultType = fallible->payloadType();
                 }
                 const bool none = !resultType || resultType->code() == TypeCode::Void;
-                // Status-like values do not join the program's output: the driver writes them
-                // only to the file `-o` names, so a program whose `main` returns its status reads
-                // as it did.
-                const bool statusLike = !none && (resultType->code() == TypeCode::Int32 ||
-                                                  resultType->code() == TypeCode::Int64 ||
-                                                  resultType->code() == TypeCode::Bool);
                 if (path.empty()) {
-                    if (!none && !statusLike) {
+                    if (!none) {
                         // One piece, like a println: the program's own output is complete by now.
+                        // Every declared type is written the same way -- a number, a bool and a
+                        // byte are printed as `println` prints them, not held back as a status.
                         std::ostringstream text;
                         rtdata::printSlot(text, value, resultType);
                         text << '\n';

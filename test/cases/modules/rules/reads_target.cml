@@ -9,7 +9,6 @@ func f(x: int) => int {
     return x
 }
 
-func main() => int {
+func main() {
     println(f(1))
-    return 0
 }

@@ -6,8 +6,7 @@ func tiny(v: int) => int {
     return v + 1
 }
 
-func main() => int sync {
+func main() sync {
     let out = tiny(41)
     'inline_strategy_small_non_arm out={}'->format<out>->println
-    return 0
 }

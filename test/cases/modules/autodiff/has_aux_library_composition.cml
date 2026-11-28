@@ -40,7 +40,7 @@ func frozen_engine() => (float, float) {
     return (1.0, w * w)
 }
 
-func main() => int sync {
+func main() sync {
     let engine = with_grad(loss_engine, has_aux: true)<3.0>()
     let engine_pair = engine.0
     let engine_value = engine_pair.0
@@ -70,5 +70,4 @@ func main() => int sync {
     let same_held_aux = held_engine_pair.1 == held_library_pair.1
     println('held value={} aux={} grad={}'->format<held_library_pair.0, held_library_pair.1, held_library.1>)
     println('held_same value={} aux={} grad={}'->format<same_held_value, same_held_aux, same_held_grad>)
-    return 0
 }

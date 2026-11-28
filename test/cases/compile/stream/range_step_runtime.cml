@@ -7,9 +7,8 @@ func counted(k: int) => int[] {
     return range(0, 10, k)
 }
 
-func main() => int sync {
+func main() sync {
     println(counted(3))
     println(counted(-3))
     println(counted(0))
-    return 0
 }

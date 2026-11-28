@@ -50,9 +50,8 @@ Camel 是图原生的通用编程语言：程序只表达计算意图——要�
 
 ```cml
 
-func main() => int sync {
+func main() sync {
     println('Hello, Camel!')
-    return 0
 }
 ```
 
@@ -77,7 +76,7 @@ Hello, Camel!
 
 type Point = { x: int, y: int }
 
-func main() => int sync {
+func main() sync {
     let n = 42                      // int (64-bit)
     let ratio = 0.75                // float (64-bit)
     let ok = true                   // bool
@@ -100,7 +99,6 @@ func main() => int sync {
     count = count + 1
     count += 10
     println(count)
-    return 0
 }
 ```
 
@@ -148,13 +146,12 @@ func scale(x: int) => int {
     return x * factor
 }
 
-func main() => int sync {
+func main() sync {
     println(square(7))
     println(fib(20))
     println(sum_to(100000, 0))
     println(scale<3>(5))
     println(5->square->scale<2>)     // the same as scale<2>(square(5))
-    return 0
 }
 ```
 
@@ -199,11 +196,10 @@ func grade(score: int) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(sign(5), sign(-2), sign(0))
     println(kind('e'), kind(' '), kind('x'))
     println(grade(95), grade(81), grade(42))
-    return 0
 }
 ```
 
@@ -233,10 +229,9 @@ func right(x: int) => string {
     return if x < 0 then { return 'negative' } else { return 'not negative' }
 }
 
-func main() => int sync {
+func main() sync {
     println(wrong(-1))
     println(right(-1))
-    return 0
 }
 ```
 
@@ -264,7 +259,7 @@ Camel 里没有“提前返回”。让分支成为函数体的最后一个表�
 
 ```cml
 
-func main() => int sync {
+func main() sync {
     let xs: int[] = 1 .. 11    // [1, ..., 10]
     let squares = xs->map<func (x) { x * x }>
     let evens = squares->filter<func (x) { x % 2 == 0 }>
@@ -281,7 +276,6 @@ func main() => int sync {
 
     // foreach runs its function for each element, in order.
     ['a', 'b', 'c']->foreach<func (s) sync { println('item', s) }>
-    return 0
 }
 ```
 
@@ -308,7 +302,7 @@ item c
 
 import { seed, randint, next_key } from random
 
-func main() => int sync {
+func main() sync {
     seed(42)
     // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
     let drawn = (0..8)->map<func (i) { next_key()->randint<0, 100> }>
@@ -318,7 +312,6 @@ func main() => int sync {
     // reduce runs in element order on every back end.
     let ordered = (0..8)->reduce<func (acc: int[], i: int) => int[] { concat(acc, [next_key()->randint<0, 100>]) }, [0][0..0]>
     println(ordered)
-    return 0
 }
 ```
 
@@ -355,9 +348,8 @@ func greet() => int {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     println(greet())
-    return 0
 }
 ```
 
@@ -416,11 +408,10 @@ func log(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     let a = log(1)
     let b = log(a)
     println(b)          // 打印 3
-    return 0
 }
 ```
 
@@ -448,9 +439,8 @@ func g() => int sync {
     return 2
 }
 
-func main() => int sync {
+func main() sync {
     println(f() + g())
-    return 0
 }
 ```
 
@@ -494,9 +484,8 @@ func twice() => int sync {
     return c
 }
 
-func main() => int sync {
+func main() sync {
     println(twice())
-    return 0
 }
 ```
 
@@ -529,7 +518,7 @@ func adder(n: int) => (x: int) => int {
     return func (x: int) => int { x + n }
 }
 
-func main() => int sync {
+func main() sync {
     let g = inc                              // a function name is a value
     println(g(1), apply_twice(dbl, 3))
 
@@ -542,7 +531,6 @@ func main() => int sync {
     let total = state::ref(0)                // shared state: a handle a closure may capture
     [1, 2, 3]->foreach<func (x) sync { state::set(total, state::get(total) + x) }>
     println(state::get(total))
-    return 0
 }
 ```
 
@@ -577,12 +565,11 @@ func my_map::<T, U>(xs: T[], f: (x: T) => U) => U[] {
     return xs->map<f>
 }
 
-func main() => int sync {
+func main() sync {
     println(first([1, 2, 3]))
     println(first(['a', 'b']))
     println(swap((1, 2)), swap(('x', 'y')))
     println(my_map([1, 2, 3], func (x: int) => string { string(x) + '!' }))
-    return 0
 }
 ```
 
@@ -613,9 +600,8 @@ func double_it::<T>(x: T) => T when is_numeric::<T>() {
     return x + x
 }
 
-func main() => int sync {
+func main() sync {
     println(double_it(21), double_it(1.5))
-    return 0
 }
 ```
 
@@ -642,14 +628,13 @@ func describe(r: int!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(safe_div(9, 3) !! -1)            // 3
     println(safe_div(9, 0) !! -1)            // -1: the substitute
     println(describe(safe_div(8, 2) -> inc))
     println(describe(safe_div(8, 0) -> inc))
     println(parse_int('12') !! 0, parse_int('twelve') !! 0)
     println(safe_div(1, 0))
-    return 0
 }
 ```
 
@@ -700,14 +685,13 @@ func show(x: int?) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [10, 20, 30]
     println(find(xs, 20, 0) ?? -1)
     println(find(xs, 99, 0) ?? -1)
     println(show(find(xs, 30, 0)), show(find(xs, 31, 0)))
     let maybe: int? = null
     println(maybe)
-    return 0
 }
 ```
 
@@ -727,7 +711,7 @@ null
 
 ```cml
 
-func main() => int sync {
+func main() sync {
     let ages = [('bob', 31), ('alice', 28)] as Map<string, int>
     println(ages)                              // printed in key order
     println(ages['alice'] ?? 0, ages['carol'] ?? 0)
@@ -740,7 +724,6 @@ func main() => int sync {
     let seen = [3, 1, 2, 3, 1] as Set<int>
     println(seen, seen->contains<2>, seen->contains<9>)
     println(union(seen, [9] as Set<int>), intersect(seen, [1, 9] as Set<int>))
-    return 0
 }
 ```
 
@@ -785,12 +768,11 @@ import { sqrt } from math
 import { hypot, Vec } from shapes
 import shapes
 
-func main() => int sync {
+func main() sync {
     println(sqrt(2.0))
     let v: Vec = { x: 3.0, y: 4.0 }
     println(hypot(v))
     println(shapes::area(2.0, 5.0))
-    return 0
 }
 ```
 
@@ -814,7 +796,7 @@ import { sort_by, take, sum, reverse, unique } from array
 import { abs, hypot, bit_and, pi } from math
 import { mean } from array
 
-func main() => int sync {
+func main() sync {
     // Strings: the value goes in on the left, what configures the call goes in angle brackets.
     let words = '  pear, fig ,apple, fig '->trim->split<','>->map<func (w) { trim(w) }>
     println(words)
@@ -831,7 +813,6 @@ func main() => int sync {
     println(sum(xs), reverse(xs), xs->map<func (x) { abs(x) }>)
     println(mean([1.0, 2.0, 4.0]), hypot(3.0, 4.0), bit_and(6, 3))
     println('{:.4f}'->format<pi>)
-    return 0
 }
 ```
 
@@ -875,10 +856,9 @@ func add(a: int, b: int) => int {
     return a + b
 }
 
-func main() => int sync {
+func main() sync {
     let x = add(1, 2)
     println(x)
-    return 0
 }
 ```
 
@@ -951,9 +931,8 @@ func sum_squares(n: int, acc: int) => int {
     return if n == 0 then acc else sum_squares(n - 1, acc + square(n))
 }
 
-func main() => int sync {
+func main() sync {
     println(sum_squares(1000, 0))
-    return 0
 }
 ```
 
@@ -1005,7 +984,7 @@ camel docs/tutorial/examples/14_passes.cml --dump-after-each-pass snap std::cxx:
 
 import { Tensor, ones, zeros, shape, sum, transpose } from tensor
 
-func main() => int sync {
+func main() sync {
     let a = ones::<f32>([2, 3])
     let b = ones::<f32>([3, 1])
     let c = a @ b                    // matrix product: 2x3 @ 3x1
@@ -1013,7 +992,6 @@ func main() => int sync {
     println(c)
     println(sum(a * 2.0 + 1.0))
     println(shape(transpose(a)))
-    return 0
 }
 ```
 
@@ -1075,11 +1053,10 @@ func f(y: float) => float {
     return x * x * y + y
 }
 
-func main() => int sync {
+func main() sync {
     println(f<3.0>(2.0))
     println(grad(f)<3.0>(2.0))                 // df/dx = 2xy = 12
     println(with_grad(f)<3.0>(2.0))            // (值, 梯度) = (20, 12)
-    return 0
 }
 ```
 

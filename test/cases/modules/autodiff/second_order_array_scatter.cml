@@ -26,10 +26,9 @@ func df() => float {
     return grad(f)<v>()
 }
 
-func main() => int sync {
+func main() sync {
     let value = f<2.0>()
     let g = grad(f)<2.0>()
     let h = grad(df)<2.0>()
     'second_order_array_scatter value={:.1f} d={:.1f} d2={:.1f}'->format<value, g, h>->println
-    return 0
 }

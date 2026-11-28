@@ -11,7 +11,7 @@ func pair(viaInterpolation: string, viaFormat: string) sync {
     println('format: ' + viaFormat)
 }
 
-func main() => int sync {
+func main() sync {
     let fs: float[] = [0.7692, 0.7808]
     pair(`${fs:.6f}`, '{:.6f}'->format<fs>)
     pair(`${fs:.2f}`, '{:.2f}'->format<fs>)
@@ -32,5 +32,4 @@ func main() => int sync {
     
     let s = 'a scalar text'
     pair(`${s}`, '{}'->format<s>)
-    return 0
 }

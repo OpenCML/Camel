@@ -9,6 +9,6 @@ func sum(xs: int[]) => int {
     return static loop acc = 0 for x in xs do acc + x
 }
 
-func main() => int {
-    return sum([1, 2, 3])
+func main() {
+    sum([1, 2, 3])
 }

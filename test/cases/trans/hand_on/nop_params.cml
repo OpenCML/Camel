@@ -6,7 +6,6 @@
 // that executes. `std::nop` is not one of those -- it ends the pipeline without a run -- so a
 // pipeline that ends in it must not ask for `x`. The plan beside this file pins both directions:
 // `std::nop` alone is quiet, `std::nvm` reports the missing argument.
-func main(x: int) => int sync {
+func main(x: int) sync {
     println(x)
-    return x
 }

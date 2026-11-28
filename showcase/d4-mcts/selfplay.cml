@@ -94,7 +94,7 @@ func selfplay(k: Key) => (int[], float) {
     return (board, result)
 }
 
-func main() => int sync {
+func main() sync {
     let games = 16
     let steps = 10
     let k = key(42)
@@ -109,7 +109,7 @@ func main() => int sync {
     // takes the two arrays has no use for it (and a name too few is a diagnostic now).
     let (boards, results, _) = loop bs = [] as int[][], rs = [] as float[], g = 0 while g < games do {
         let (b, r) = selfplay(fold(k, g + 1))
-        return (concat(bs, [b]), concat(rs, [r]), g + 1)
+        (concat(bs, [b]), concat(rs, [r]), g + 1)
     }
     let step_of = with_grad(batch_loss)
     // Ten steps, each one over the whole batch. The loop carries the model, the optimizer's state
@@ -118,7 +118,7 @@ func main() => int sync {
     let (trained, trained_opt, losses, done) = loop m = model, opt = adam_state(model), ls = [] as float[], s = 0 while s < steps do {
         let (loss, gradient) = step_of<m>(boards, results)
         let (next, next_opt) = adam(m, gradient, opt, 0.01)
-        return (next, next_opt, concat(ls, [loss]), s + 1)
+        (next, next_opt, concat(ls, [loss]), s + 1)
     }
     let _ = trained
     let _ = trained_opt
@@ -127,5 +127,4 @@ func main() => int sync {
     let scores = '{:.1f}'->format<results>
     `mcts selfplay games=${games} steps=${steps} squares=9 results=${scores}`->println
     `mcts selfplay losses=${curve}`->println
-    return 0
 }

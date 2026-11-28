@@ -14,11 +14,10 @@ func convolve(x: f64[...], kernel: f64[...], bias: f64[...]) => f64[...] {
     return conv2d<1, 0>(x, kernel, bias)
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[1, 1, 2, 2]>([1.0, 2.0, 3.0, 4.0])
     let kernel = reshape<[1, 2, 2, 2]>([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
     let bias = reshape<[1]>([0.0])
     let y = convolve(x, kernel, bias)
     'conv2d_shape_error sum={}'->format<sum(y)>->println
-    return 0
 }

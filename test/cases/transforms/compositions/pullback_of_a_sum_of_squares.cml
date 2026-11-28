@@ -23,7 +23,7 @@ func gd(v: float[4]) => float {
     return v[0] * v[0] + v[1] * v[1] + v[2] * v[2] + v[3] * v[3]
 }
 
-func main() => int sync {
+func main() sync {
     let vsf: f32[4] = [1.0, 2.0, 3.0, 4.0]
     let vsd: float[4] = [1.0, 2.0, 3.0, 4.0]
     let pf = vjp(gf)(vsf).1(1.0).0
@@ -36,5 +36,4 @@ func main() => int sync {
     let hd = vjp(gd)(vsd).1(0.5).0
     'pullback f32  ct=0.5 sum -> {}'->format<sum(hf)>->println
     'pullback float ct=0.5 sum -> {}'->format<sum(hd)>->println
-    return 0
 }

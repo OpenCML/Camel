@@ -31,7 +31,7 @@ func denoise(p: Inputs) => f32[4, 16] {
     return hidden @ p.w2 + p.b2
 }
 
-func main() => int sync {
+func main() sync {
     seed(7)
     let p = {
         x: next_key()->uniform::<f32><shape: [4, 16]> as f32[4, 16],
@@ -46,5 +46,4 @@ func main() => int sync {
     let name: string = device() !! 'no device'
     println('i2gpu device={}'->format<name>)
     println('i2gpu gap={}'->format<sum(gap * gap)>)
-    return 0
 }

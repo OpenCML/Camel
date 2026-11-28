@@ -21,12 +21,11 @@ func say(text: string) => void sync {
     let _ = [wrap(text)]->call<print>
 }
 
-func main() => int sync {
+func main() sync {
     println('camel 1')
     say('python 1')
     let held = eval('[1, 2, 3]') !! wrap(0)
     println('camel 2')
     say('python 2')
     println('camel 3')
-    return 0
 }

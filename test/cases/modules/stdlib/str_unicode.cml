@@ -12,7 +12,7 @@ func show(label: string, s: string) => void sync {
     println(label + ' [' + s + '] ' + string(len(s)))
 }
 
-func main() => int sync {
+func main() sync {
     // split
     println('a,b,c'->split<','>)
     println('a,,c,'->split<','>)
@@ -90,5 +90,4 @@ func main() => int sync {
     println(s[0], s[4], len(s[1]))
     println('中'[0] == '中', '中文'[1], len('中文'), len('😀'), to_array(encode('é'[0])))
     println('h€😀é'[2], len('h€😀é'))
-    return 0
 }

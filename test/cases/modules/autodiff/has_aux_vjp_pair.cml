@@ -22,7 +22,7 @@ func loss(x: float) => (float, float) {
     return (x * x, x + 10.0)
 }
 
-func main() => int sync {
+func main() sync {
     let (y, pullback) = vjp(loss)(3.0)
     let value = y.0
     let aux = y.1
@@ -32,5 +32,4 @@ func main() => int sync {
     println('value={} aux={}'->format<value, aux>)
     println('seed_value grad={}'->format<first.0>)
     println('seed_aux grad={}'->format<second.0>)
-    return 0
 }

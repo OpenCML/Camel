@@ -35,10 +35,9 @@ func blocky(x: float) => float {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(fused(1.5, 2.0, 0.25, 4.0))
     println(nested(1.25))
     println(blocky(2.0))
     println(plain(2.0, 2.5))
-    return 0
 }

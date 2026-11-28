@@ -58,7 +58,7 @@ func loss_plain(w: float[3, 2], b: float[2]) => float {
     return sum(sum<1, false>(dy * dy))
 }
 
-func main() => int sync {
+func main() sync {
     let x = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
     let w = [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]] as float[3, 2]
     let b = [0.0, 0.0] as float[2]
@@ -77,5 +77,4 @@ func main() => int sync {
     `step library dL/dw[2][0]={}`->format<t20>->println
     let (_l3, tb0) = jvp(loss_plain)(w, b, zero_w, [1.0, 0.0] as float[2])
     `step library dL/db[0]={}`->format<tb0>->println
-    return 0
 }

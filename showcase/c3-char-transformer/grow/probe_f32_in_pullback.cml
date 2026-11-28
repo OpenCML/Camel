@@ -30,7 +30,7 @@ func both(x: float[...]) => float {
     return sum(layer_norm(x, m.g, m.b) @ m.wq)
 }
 
-func main() => int sync {
+func main() sync {
     let x = [[1.0, 0.5], [0.5, 1.0]] as float[2, 2]
     let m = {
         g: [1.0, 1.0] as float[],
@@ -45,5 +45,4 @@ func main() => int sync {
     `probe attended value=${v2:.12f} dq=${sum(g2.wq):.12f}`->println
     let (v3, g3) = with_grad(both)<m>(x)
     `probe both value=${v3:.12f} dq=${sum(g3.wq):.12f}`->println
-    return 0
 }

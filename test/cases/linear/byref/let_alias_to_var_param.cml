@@ -8,10 +8,9 @@ func bump(var x: int) {
     x += 1
 }
 
-func main() => int sync {
+func main() sync {
     var c = 0
     let a = c
     bump(a)
     println(c)
-    return 0
 }

@@ -1,8 +1,7 @@
 import { variance } from statistics
 
-func main() => int sync {
+func main() sync {
     println('before')
     println(variance([5.0]))
     println('not reached')
-    return 0
 }

@@ -44,6 +44,6 @@ func report(j: Json) => int sync {
     return 0
 }
 
-func main() => int sync {
-    return decode('{"server": {"host": "example.org", "port": 9000}, "tags": ["a", "b", 3], "ratio": 2, "on": true, "none": null}')->report !! 1
+func main() sync {
+    decode('{"server": {"host": "example.org", "port": 9000}, "tags": ["a", "b", 3], "ratio": 2, "on": true, "none": null}')->report !! 1
 }

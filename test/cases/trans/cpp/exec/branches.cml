@@ -28,10 +28,9 @@ func digit(n: int) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(twice(true))
     println(ordered(false))
     println(grade(95), grade(85), grade(75), grade(5))
     println(digit(0), digit(1), digit(7))
-    return 0
 }

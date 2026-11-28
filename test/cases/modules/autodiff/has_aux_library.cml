@@ -33,7 +33,7 @@ func aux_of(x: float) => float {
     return x + 10.0
 }
 
-func main() => int sync {
+func main() sync {
     let stepped = with_grad(loss, has_aux: true)<3.0>()
     let inner = stepped.0
     let engine_value = inner.0
@@ -50,5 +50,4 @@ func main() => int sync {
     let same_aux = engine_aux == library_aux
     let same_grad = engine_grad == library_grad
     println('same_value={} same_aux={} same_grad={}'->format<same_value, same_aux, same_grad>)
-    return 0
 }

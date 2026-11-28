@@ -16,12 +16,11 @@ func spread() => float {
     })
 }
 
-func main() => int sync {
+func main() sync {
     let sum = spread()
     if sum != 3.0 then {
         println('spread = {sum}, wanted 3.0')
-        return 1
+        1
     }
     println('prints 1 x 3.0')
-    return 0
 }

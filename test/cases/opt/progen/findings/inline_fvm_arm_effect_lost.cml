@@ -18,7 +18,7 @@ func k17(a18: int) => (a0: int) => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let n26 = [('', false)]
     let n42 = if false then sync {
         if f1([(1.0, false)]) then sync {
@@ -29,10 +29,9 @@ func main() => int sync {
             null
         }
         let n36 = k17(0)
-        return [{ x: 0, y: 0 }]
+        [{ x: 0, y: 0 }]
     } else sync {
         println('')
-        return [{ x: 0, y: 0 }]
+        [{ x: 0, y: 0 }]
     }
-    return 0
 }

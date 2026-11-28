@@ -6,6 +6,6 @@
 func probe(a: int) => int {
     return (9 / a) * 0
 }
-func main() => int {
-    return println(probe(0))
+func main() {
+    println(probe(0))
 }

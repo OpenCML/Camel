@@ -9,10 +9,9 @@ func mul(a: float, b: float) => float {
     return a * b
 }
 
-func main() => int sync {
+func main() sync {
     let inf = mul(1.0e308, 10.0)
     println(conv(2.5))
     println(conv(inf - inf))
     println('not reached')
-    return 0
 }

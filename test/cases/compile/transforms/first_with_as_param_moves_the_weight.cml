@@ -43,7 +43,7 @@ func squared(y: float) => float {
     return x * y * y
 }
 
-func main() => int sync {
+func main() sync {
     // d/dx = y + 1 = 3.0 and d/dy = x = 3.0: the coincidence the next line breaks.
     let (value, pullback) = vjp(first_with_as_param(weighted))(3.0, 2.0)
     let (dw, dy) = pullback(1.0)
@@ -61,5 +61,4 @@ func main() => int sync {
     // took it from.
     let squaredGradient = grad(squared)<3.0>(2.0)
     'squared grad={}'->format<squaredGradient>->println
-    return 0
 }

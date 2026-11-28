@@ -21,7 +21,6 @@ func sum(n: int) => int sync {
     return total
 }
 
-func main() => int sync {
+func main() sync {
     println(sum(3))
-    return 0
 }

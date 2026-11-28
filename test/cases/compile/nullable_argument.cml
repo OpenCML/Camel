@@ -36,7 +36,7 @@ func two() => string sync {
     return 'w'
 }
 
-func main() => int sync {
+func main() sync {
     // The `var` read stands before an argument that is a call, a branch and an operator.
     var s = 'v'
     takes_str(s, two())
@@ -51,5 +51,4 @@ func main() => int sync {
     // A variable whose declared type already is `T?` passes as it is.
     var t: string? = 'q'
     takes_str(t, 'lit')
-    return 0
 }

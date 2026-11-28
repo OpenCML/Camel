@@ -38,7 +38,7 @@ func muls(g: Graph) => int spelling {
     return len(nodes(g)->filter<func (n: Node) => bool opText(n) == ':op/mul_l'>)
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     let g = graph_of(subject)
     let d = open(subject)
     let anchor = exitOf(d)
@@ -55,5 +55,4 @@ func main() => int spelling sync {
     println(`[committed] muls=${muls(h)}`)
     println('[run] the edited function:')
     println(edited())
-    return 0
 }

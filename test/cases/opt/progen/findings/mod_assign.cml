@@ -6,9 +6,8 @@
  * Expected output: 2
  */
 
-func main() => int sync {
+func main() sync {
     var v = 17
     v %= 5
     println(v)
-    return 0
 }

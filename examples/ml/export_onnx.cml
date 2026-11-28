@@ -23,7 +23,7 @@ func weights() => Weights {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let w = weights()
     let x = reshape<[2, 2]>([1.0, 2.0, 0.5, -1.0] as f32[]) // two samples with two features
     println(forward(x, w))
@@ -42,5 +42,4 @@ func main() => int sync {
         case error e => println('export refused:', e)
         case _ => println('model file written:', (path->file_size !! 0) > 0)
     }
-    return 0
 }

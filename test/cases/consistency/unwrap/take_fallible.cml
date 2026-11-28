@@ -8,10 +8,9 @@ func parse(n: int) => int! {
     return if n == 12 then n else error('NotANumber', 'the number is not 12')
 }
 
-func main() => int sync {
+func main() sync {
     let good = parse(12)!
     println(format<good>('take={}'))
     let bad = parse(7)!
     println('not reached')
-    return 0
 }

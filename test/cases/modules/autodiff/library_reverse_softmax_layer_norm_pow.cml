@@ -73,7 +73,7 @@ func cube_total_plain(x: float) => float {
     return x ^ 3.0
 }
 
-func main() => int sync {
+func main() sync {
     // ^: a constant exponent, the only shape the engine's rule accepts, and the one of the three
     // whose library leg runs today.
     let cube_engine = grad(cube_total)<2.0>()
@@ -96,5 +96,4 @@ func main() => int sync {
 
     let all_same = cube_same
     `softmax_layer_norm_pow all_same={}`->format<all_same>->println
-    return 0
 }

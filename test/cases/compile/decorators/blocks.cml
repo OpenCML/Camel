@@ -122,7 +122,7 @@ func by_program(x: int) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(value_of(1), value_of_d(1))
     println(middle(7), middle_d(7))
     unused('plain')
@@ -133,5 +133,4 @@ func main() => int sync {
     println(writes(5), writes_d(5))
     println(scoped(3))
     println(by_program(4))
-    return 0
 }

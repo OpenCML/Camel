@@ -29,7 +29,7 @@ func swap::<A, B>(p: Pair<A, B>) => Pair<B, A> {
     return (p.1, p.0)
 }
 
-func main() => int sync {
+func main() sync {
     println(last([1, 2, 3]), last(['a', 'b']), last([1.5, 2.5]))
     println(rotate([1, 2, 3, 4], 1), rotate(['x', 'y', 'z'], 2))
     println(share([1, 2, 3, 4, 5], func (x: int) => bool {
@@ -42,5 +42,4 @@ func main() => int sync {
     let no_ints: int[] = []
     println(first_or(no_ints, -1), first_or(['only'], 'none'))
     println(swap((1, 'one')), swap((true, 2.5)))
-    return 0
 }

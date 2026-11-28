@@ -24,7 +24,6 @@ func body_returns(f: (x: int) => int) => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println('answer=', body_returns(inc))
-    return 0
 }

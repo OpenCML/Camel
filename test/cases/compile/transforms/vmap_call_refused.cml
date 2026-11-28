@@ -26,9 +26,8 @@ func g(x: float) => float {
     return f(x) + 1.0
 }
 
-func main() => int sync {
+func main() sync {
     let xs: float[3] = [1.0, 2.0, 3.0]
     println(row_vmap(g)(xs))
     println(vmap(g)(xs))
-    return 0
 }

@@ -28,11 +28,10 @@ func add::<T>(a: T, b: T) => T {
     return a - (0 - b)
 }
 
-func main() => int sync {
+func main() sync {
     let x: i32 = 19
     let y: i32 = 23
     let armed = add(x, y)
     let body = add(19, 23)
     'armed={} body={}'->format<armed, body>->println
-    return 0
 }

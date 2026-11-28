@@ -14,7 +14,7 @@ func twice() => float {
     return w * k
 }
 
-func main() => int sync {
+func main() sync {
     let g: PairOf<<w: float, k: float>() => float> = func <w, ...rest>() {
         let second = func () {
             rest.[0]
@@ -23,5 +23,4 @@ func main() => int sync {
     }
     let (read, constant) = g<2.0, 3.0>()
     println('read={} constant={}'->format<read, constant>)
-    return 0
 }

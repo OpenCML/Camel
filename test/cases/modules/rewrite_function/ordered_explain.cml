@@ -20,10 +20,9 @@ func check() => string {
         }
     }
 }
-func main() => int! sync {
+func main() sync {
     println('concrete ordered', check<nested, true>()->contains<'where the pattern writes a constant'>)
     println('generic ordered', check<generic_nested, true>()->contains<'where the pattern writes a constant'>)
     println('concrete default', check<nested, false>()->contains<'the left side matches and the condition holds'>)
     println('generic default', check<generic_nested, false>()->contains<'the left side matches and the condition holds'>)
-    return 0
 }

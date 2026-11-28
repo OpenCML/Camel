@@ -4,7 +4,6 @@ func id::<A>(x: A) => A {
 func keep::<T>(p: (x: T) => bool, x: T) => bool {
     return p(x)
 }
-func main() => int sync {
+func main() sync {
     println(keep(id, 3))
-    return 0
 }

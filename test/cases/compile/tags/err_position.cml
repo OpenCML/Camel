@@ -2,6 +2,5 @@
 export tag shape on type
 
 #shape
-func main() => int {
-    return 0
+func main() {
 }

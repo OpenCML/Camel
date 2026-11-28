@@ -17,12 +17,11 @@ func f1(a2: bool) => bool {
     }) < int(-1.5)
 }
 
-func main() => int sync {
+func main() sync {
     let n63 = if (if false then true else f1(false)) then sync {
-        return ''
+        ''
     } else sync {
         println('')
-        return ''
+        ''
     }
-    return 0
 }

@@ -3,7 +3,7 @@ func q(a: int) => bool sync {
     return false
 }
 
-func main() => int sync {
+func main() sync {
     let k = 0
     var v = 0
     if 0 <= 12 then sync {
@@ -12,10 +12,9 @@ func main() => int sync {
             case 3 => 0
             case _ => sync {
                 q(5)
-                return 0
+                0
             }
         }
         null
     }
-    return 0
 }

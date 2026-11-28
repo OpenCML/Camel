@@ -20,7 +20,7 @@ func show(c: Config) => string {
     return format<c.host, c.port, c.verbose>('{}:{} verbose={}')
 }
 
-func main() => int sync {
+func main() sync {
     let defaults: Config = { host: 'localhost', port: 8080, verbose: false }
     // The test runner gives every test its own scratch directory (CAMEL_TEST_TMPDIR), so the
     // four back ends (and two runs) do not share these files. A direct run keeps the path the
@@ -39,5 +39,4 @@ func main() => int sync {
     println('wrong shape:  ', show(load(broken, defaults)))
     
     println('missing file: ', show(load(dir + '/absent.json', defaults)))
-    return 0
 }

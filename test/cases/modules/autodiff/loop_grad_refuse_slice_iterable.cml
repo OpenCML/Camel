@@ -23,9 +23,8 @@ func total() => float {
     return loop acc = 0.0 for row in rows do acc + float(sum(row))
 }
 
-func main() => int sync {
+func main() sync {
     let rows = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]] as f32[][]
     let d = grad(total)<rows>()
     'loop_grad_refuse_slice_iterable d={}'->format<d>->println
-    return 0
 }

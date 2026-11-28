@@ -9,8 +9,7 @@ func read_as::<T>(p: string) => T[...] {
     return load_npy::<T>(p)
 }
 
-func main() => int sync {
+func main() sync {
     let t = read_as::<f32>('test/cases/modules/nn/fixtures/checkpoint-v1/odd.npy')
     println(t)
-    return 0
 }

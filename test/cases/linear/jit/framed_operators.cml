@@ -89,7 +89,7 @@ func totals(xs: int[], k: int, acc: int) => int {
     return if k == 0 then acc else totals(xs, k - 1, acc + scaled_total(xs, k))
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [3, 1, 4, 1, 5, 9, 2, 6]
     'collatz {} {}'->format<collatz(27, 0), collatz(97, 0)>->println
     'repeat {}'->format<repeat('ab', 5, '>')>->println
@@ -105,5 +105,4 @@ func main() => int sync {
         x * 3 + 1
     }, 1, 50)>->println
     'totals {}'->format<totals(xs, 30, 0)>->println
-    return 0
 }

@@ -55,7 +55,7 @@ func spin(m: Mlp, i: int, steps: int, nb: int) => Mlp {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let m = {
         fc1_w: weight('fc1_w'),
         fc1_b: weight('fc1_b'),
@@ -67,5 +67,4 @@ func main() => int sync {
     let steps = int(get_env('CAMEL_FT_STEPS') ?? '')
     let nb = int(get_env('CAMEL_FT_NBATCHES') ?? '')
     let final = spin(m, 0, steps, nb)
-    return 0
 }

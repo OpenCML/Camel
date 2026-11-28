@@ -15,6 +15,5 @@ func apply(p: () => int, tile: int) => (() => int)! {
     return p->rewrite<[add_tile<tile>]>
 }
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

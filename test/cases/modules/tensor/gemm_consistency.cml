@@ -6,7 +6,7 @@
 import { next_key, seed, uniform } from random
 import { unsqueeze, sum, abs, gemm_backend } from tensor
 
-func main() => int sync {
+func main() sync {
     seed(11)
     let a = (next_key()->uniform::<f32><shape: [70, 300]> * 2.0 - 1.0)
     let b = (next_key()->uniform::<f32><shape: [300, 37]> * 2.0 - 1.0)
@@ -15,5 +15,4 @@ func main() => int sync {
     let err = sum(abs(fast - slow))
     let backend = gemm_backend()
     'gemm_consistency total_abs_err={} backend_known={}'->format<err, backend != ''>->println
-    return 0
 }

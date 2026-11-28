@@ -13,12 +13,11 @@ func shift(p: V, by: float) => V sync {
     return acc
 }
 
-func main() => int sync {
+func main() sync {
     let xs: int[] = [3, 1, 2]->map<func (v: int) => int {
         v * 2
     }>
     let m: int? = xs[0]
     println(shift({ x: 1.0, y: 2.0 }, 0.5))
     println(xs, m ?? 0)
-    return 0
 }

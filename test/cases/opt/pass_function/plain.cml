@@ -4,7 +4,6 @@
  * that ran before it from the lines they printed above the marker.
  */
 
-func main() => int sync {
+func main() sync {
     println('camel-ran-marker')
-    return 0
 }

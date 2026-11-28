@@ -3,8 +3,7 @@
  * the array type and `string`.
  */
 
-func main() => int sync {
+func main() sync {
     let x: string = [1, 2]
     println(x)
-    return 0
 }

@@ -7,10 +7,9 @@ func normalize(x: f32[...]) => f32[...] {
     return e / sum<1, true>(e)
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[2, 3]>([1.0, 2.0, 3.0, -1.0, 0.0, 1.0] as f32[])
     let y = download(run_preferred_resident<normalize>(x))
     println(y)
     println(sum<1, true>(y))
-    return 0
 }

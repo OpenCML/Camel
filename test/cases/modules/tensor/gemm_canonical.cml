@@ -10,7 +10,7 @@
 import { next_key, seed, uniform } from random
 import { sum, abs, relu, linear } from tensor
 
-func main() => int sync {
+func main() sync {
     seed(5)
     let a = (next_key()->uniform::<f32><shape: [33, 600]> * 2.0 - 1.0)
     let b = (next_key()->uniform::<f32><shape: [600, 29]> * 2.0 - 1.0)
@@ -19,5 +19,4 @@ func main() => int sync {
     'gemm product_sum={}'->format<sum(p)>->println
     'gemm affine_sum={} relu_sum={}'->format<sum(a @ b + bias), sum(relu(a @ b + bias))>->println
     'gemm linear_diff={}'->format<sum(abs(linear(a, b, bias) - (p + bias)))>->println
-    return 0
 }

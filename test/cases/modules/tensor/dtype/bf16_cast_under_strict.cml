@@ -18,9 +18,8 @@ func shrink(x: f32[...]) => bf16[...] {
     return bf16(x)
 }
 
-func main() => int sync {
+func main() sync {
     let values: f32[] = [0.1]
     let narrowed = shrink(values)
     println(to_array(to_bytes(narrowed)))
-    return 0
 }

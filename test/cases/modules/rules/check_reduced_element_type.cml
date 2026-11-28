@@ -38,9 +38,8 @@ import { float_add_neg_zero, mul_one, float_combine, float_fold, float_double } 
 
 /// The report of the five laws, printed as its fixed rendering (the acceptance surface) and as
 /// the columns of its rows, so the text and the table are read here as they are everywhere else.
-func main() => int sync {
+func main() sync {
     let report = [float_add_neg_zero, mul_one, float_combine, float_fold, float_double]->check<200, 7>
     print(check_text(report))
     println('rows', len(report.rows))
-    return 0
 }

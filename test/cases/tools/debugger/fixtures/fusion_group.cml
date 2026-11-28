@@ -12,11 +12,10 @@ func loss(x: f32[...]) => float {
     return float(sum(x / m.w))
 }
 
-func main() => int sync {
+func main() sync {
     let x = zeros::<f32>([8]) + 0.5
     let model: Model = { w: zeros::<f32>([8]) + 2.0 }
     let grad = with_grad(loss)
     let (value, gradient) = grad<{ w: model.w }>(x)
     'value={} gradient={}'->format<value, sum(gradient.w)>->println
-    return 0
 }

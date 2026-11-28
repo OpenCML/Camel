@@ -11,8 +11,7 @@ func g::<U>(y: U) => string {
     return 'second'
 }
 
-func main() => int sync {
+func main() sync {
     println(g(1))
     println('never printed')
-    return 0
 }

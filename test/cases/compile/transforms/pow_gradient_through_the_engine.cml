@@ -30,9 +30,8 @@ func square() => float {
     return w ^ 2.0
 }
 
-func main() => int sync {
+func main() sync {
     let slope = grad(square)
     let d = slope<3.0>()
     `pow engine value=9.0 dL/dw={}`->format<d>->println
-    return 0
 }

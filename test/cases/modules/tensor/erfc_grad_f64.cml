@@ -40,7 +40,7 @@ func loss32() => float {
     return float(sum(erfc(x)))
 }
 
-func main() => int sync {
+func main() sync {
     let x = [-1.0, 0.0, 1.0] as f64[]
     let dc = grad(lossErfc)<x>()
     println('erfc_grad_f64 forward={}'->format<erfc(x)>)
@@ -48,5 +48,4 @@ func main() => int sync {
     println('erfc_grad_f64 neg_erf={}'->format<dc + grad(lossErf)<x>()>)
     let y = [-1.0, 0.0, 1.0] as f32[]
     println('erfc_grad_f32 grad={}'->format<grad(loss32)<y>()>)
-    return 0
 }

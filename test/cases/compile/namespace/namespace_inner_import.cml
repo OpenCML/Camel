@@ -10,8 +10,7 @@ namespace Local {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let value = Local::call()
     'namespace_inner_import value={}'->format<value>->println
-    return 0
 }

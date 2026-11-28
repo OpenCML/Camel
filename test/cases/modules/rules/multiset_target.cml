@@ -81,10 +81,9 @@ func zero(a: int) => int {
     return a * 0
 }
 
-func main() => int sync {
+func main() sync {
     println(zero_left(1, 2), zero_right(1, 2), fold_left(4), fold_right(4), fold_three(4))
     println(split_products(2, 7), split_products_nested(2, 7), split_float(2.0, 7.0))
     println(merged_sum(3, 4), grouped_sum(1, 2, 3), grouped_float(1.0, 2.0, 3.0))
     println(float_left(1.0, 2.0), float_right(1.0, 2.0), dropped(5), zero(5))
-    return 0
 }

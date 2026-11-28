@@ -3,9 +3,8 @@
  * surrounding position wants (design principles 4.2), so the value has to be opened with `??`.
  */
 
-func main() => int sync {
+func main() sync {
     let o: bool? = true
     let p = o || false
     println(p)
-    return 0
 }

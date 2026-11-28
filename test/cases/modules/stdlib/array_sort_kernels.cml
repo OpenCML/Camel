@@ -16,7 +16,7 @@
 import { sort, argsort } from array
 import { nan } from math
 
-func main() => int sync {
+func main() sync {
     let s_i: i32[] = [3, 1, 2]
     let s_l: int[] = [30, 10, 20]
     let s_f: f32[] = [3.5, 1.5, 2.5]
@@ -45,5 +45,4 @@ func main() => int sync {
     println('floats', sort(z), z[argsort(z)])
     let w: f32[] = [f32(1.0), f32(0.0), f32(-0.0), f32(-1.0)]
     println('f32', sort(w), w[argsort(w)])
-    return 0
 }

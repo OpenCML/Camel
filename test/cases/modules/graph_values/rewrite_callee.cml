@@ -72,12 +72,11 @@ func graphNamed::<F>(p: F, label: string) => Graph spelling {
     return found[0]
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     let rules: Rule[] = [drop_one]
     let q = user->rewrite<rules> !! user
     println(`one: ${addOnes(graphNamed(q, 'target'))} ${q(5)}`)
     let r = chain->rewrite<rules> !! chain
     println(`two: ${addOnes(graphNamed(r, 'deep'))} ${r(5)}`)
     println(`given: ${addOnes(graphNamed(user, 'target'))} ${user(5)}`)
-    return 0
 }

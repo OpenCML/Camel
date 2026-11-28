@@ -42,7 +42,7 @@ func dbound() => float {
     return grad(bound_only)<v>()
 }
 
-func main() => int sync {
+func main() sync {
     let g = grad(f)<2.0>()
     let h = grad(df)<2.0>()
     let b = grad(bound_only)<2.0>()
@@ -53,5 +53,4 @@ func main() => int sync {
         b,
         b2
     >->println
-    return 0
 }

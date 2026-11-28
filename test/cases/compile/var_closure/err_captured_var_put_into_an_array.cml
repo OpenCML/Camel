@@ -27,7 +27,6 @@ func probe() => int {
     return many[1]()
 }
 
-func main() => int sync {
+func main() sync {
     println(probe())
-    return 0
 }

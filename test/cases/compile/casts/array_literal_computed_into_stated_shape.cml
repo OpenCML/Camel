@@ -5,10 +5,9 @@ func take3(x: float[3]) => void {
     println(x)
 }
 
-func main() => int sync {
+func main() sync {
     let a = 1.5
     let b = 2.5
     let c = 3.5
     take3([a, b, c])
-    return 0
 }

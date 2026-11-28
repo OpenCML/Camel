@@ -34,7 +34,6 @@ func run() => int sync {
     return a * 1000 + b
 }
 
-func main() => int sync {
+func main() sync {
     println(run())
-    return 0
 }

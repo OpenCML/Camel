@@ -11,10 +11,9 @@ func affine(
 ) => float {
     return float(sum(a)) + float(sum(b)) + float(sum(c)) + float(sum(d)) + float(sum(e))
 }
-func main() => int sync {
+func main() sync {
     // n = 2, m = 3: n + 1 = 3, 2 * n = 4, n + m = 5.
     println(affine(ones::<f32>([2]), ones::<f32>([3]), ones::<f32>([4]), ones::<f32>([5]), ones::<f32>([3])))
     // Another call, other extents: one function, no new instance.
     println(affine(ones::<f32>([4]), ones::<f32>([5]), ones::<f32>([8]), ones::<f32>([7]), ones::<f32>([3])))
-    return 0
 }

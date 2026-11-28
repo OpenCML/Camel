@@ -16,7 +16,7 @@
 import { kind, nodes, constant, graph_of } from graph
 import { Node, NodeKind } from graph
 
-func main() => int sync {
+func main() sync {
     let ns = nodes(graph_of(main))->filter<func (n: Node) => bool {
         kind(n) == NodeKind::Oper
     }>
@@ -26,5 +26,4 @@ func main() => int sync {
     println(constant::<float>(ns[0]) == null)
     println(constant::<bool>(ns[0]) == null)
     println(constant::<string>(ns[0]) == null)
-    return 0
 }

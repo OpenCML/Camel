@@ -10,7 +10,6 @@
 
 import { get_env } from env
 
-func main() => int {
+func main() {
     let x = get_env('CAMEL_CONFORMANCE_NO_SUCH_VARIABLE')
-    return 0
 }

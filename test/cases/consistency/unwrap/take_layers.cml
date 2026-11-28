@@ -8,10 +8,9 @@ func maybe(n: int) => int?! {
     return if n > 0 then (if n > 5 then null else n) else error('Bad', 'the number must be positive')
 }
 
-func main() => int sync {
+func main() sync {
     let three = maybe(3)!
     println(three ?? -1)
     let none = maybe(7)!
     println(none ?? -1)
-    return 0
 }

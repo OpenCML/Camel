@@ -321,7 +321,7 @@ func initial(seed: int = 7) => Transformer {
 // same weights from the same seed.  Only the transform is gone.
 //
 //   camel showcase/c3-char-transformer/forward.cml --arg corpus=showcase/c3-char-transformer/corpus.txt
-func main(corpus: string, seed: int = 7) => int sync {
+func main(corpus: string, seed: int = 7) sync {
     let text = corpus->read_text !! ''
     let data = tokens(text)
     let model = initial(seed)
@@ -330,5 +330,4 @@ func main(corpus: string, seed: int = 7) => int sync {
     let start = window_loss(model, first, first_targets)
     `c3 forward config chars=${len(data)} context=${context()} width=${width()} heads=${heads()} classes=${classes()} seed=${seed}`->println
     `c3 forward init loss=${start:.6f}`->println
-    return 0
 }

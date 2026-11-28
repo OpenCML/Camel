@@ -30,7 +30,7 @@ func verdict(r: void!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if root == '' then 'test/tmp/fs_declaration' else root + '/fs_declaration'
     let path = dir + '/notes.txt'
@@ -52,5 +52,4 @@ func main() => int sync {
     println(verdict(remove(binary)))
     println(verdict(remove_dir(dir)))
     println(exists(dir))
-    return 0
 }

@@ -4,7 +4,7 @@
 // `int(·)` already has. Summed in f64, 2^53 + 1 + 1 would lose both ones.
 import { reshape, sum, mean } from tensor
 
-func main() => int sync {
+func main() sync {
     let big = reshape<[3]>([9007199254740993, 1, 1])
     let wrap = reshape<[2, 2]>([9223372036854775807, 1, 5, -5])
     println(sum(big))
@@ -13,5 +13,4 @@ func main() => int sync {
     println(sum<0>(wrap))
     println(sum(wrap))
     println(mean<0>(wrap))
-    return 0
 }

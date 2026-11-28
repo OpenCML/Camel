@@ -1,7 +1,6 @@
 /** `typeof nothing()` is `void`: there is no value whose type could be taken. */
 func nothing() => void {}
 
-func main() => int sync {
+func main() sync {
     static for j, C in fields typeof (nothing()) do println(j)
-    return 0
 }

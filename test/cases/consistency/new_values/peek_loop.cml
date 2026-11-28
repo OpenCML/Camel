@@ -28,7 +28,6 @@ func build(n: int) => int sync {
     return total
 }
 
-func main() => int sync {
+func main() sync {
     println(build(20000))
-    return 0
 }

@@ -17,11 +17,11 @@ func inc(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     let r = state::ref(1)
     let xs = [1, 2, 3]
     let ys = xs->map<inc>
-    return state::update(r, func (x: int) {
+    state::update(r, func (x: int) {
         x + ys[0]
     }) - 2
 }

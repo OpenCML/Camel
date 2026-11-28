@@ -10,8 +10,7 @@ func scale_typed(x: float) => float {
     return x * ws.[0]
 }
 
-func main() => int sync {
+func main() sync {
     println(scale<2.5>(4.0))
     println(scale_typed<3.0>(4.0))
-    return 0
 }

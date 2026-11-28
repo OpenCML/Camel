@@ -7,9 +7,8 @@
 
 import { count, bump } from counter_lib
 
-func main() => int sync {
+func main() sync {
     println(bump(), bump(), count)
     count = 10
     println(bump(), count)
-    return 0
 }

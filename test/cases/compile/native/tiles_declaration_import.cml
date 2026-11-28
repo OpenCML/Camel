@@ -13,9 +13,8 @@ func description() => string {
     return text
 }
 
-func main() => int sync {
+func main() sync {
     let possible: bool = available()
     println(possible)
     println(description())
-    return 0
 }

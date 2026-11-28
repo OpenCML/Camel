@@ -15,9 +15,8 @@ func drain() => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     // The value is printed, and the exit code stays zero: a program's exit code here is what it
     // returns, which the first reading of these probes mistook for a failure (3 and 2).
     println(drain())
-    return 0
 }

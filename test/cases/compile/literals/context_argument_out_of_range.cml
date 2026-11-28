@@ -6,7 +6,6 @@ func take(x: i32) => i32 {
     return x
 }
 
-func main() => int sync {
+func main() sync {
     println(take(3000000000))
-    return 0
 }

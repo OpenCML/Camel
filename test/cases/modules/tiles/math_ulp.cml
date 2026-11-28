@@ -8,7 +8,7 @@ func exponential(x: f32[...]) => f32[...] {
 func logarithm(x: f32[...]) => f32[...] {
     return log(x)
 }
-func main() => int sync {
+func main() sync {
     let folder = get_env('TILES_TEST_OUT') ?? ''
     let x = load_npy::<f32>(folder + '/exp.npy') as f32[...]
     let y = load_npy::<f32>(folder + '/log.npy') as f32[...]
@@ -16,5 +16,4 @@ func main() => int sync {
     save_npy(download(run_preferred_resident<logarithm>(y)), folder + '/log_result.npy')
     println(inspect<exponential>(x))
     println(inspect<logarithm>(y))
-    return 0
 }

@@ -5,8 +5,7 @@ func r6(a7: int, a8: int) => int {
     }) % 97)
 }
 
-func main() => int sync {
+func main() sync {
     var v65 = (0, 0).0
     var v67 = r6(8, v65)
-    return 0
 }

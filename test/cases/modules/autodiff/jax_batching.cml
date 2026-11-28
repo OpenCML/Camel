@@ -14,7 +14,7 @@
 
 type Point = { w: float }
 
-func main() => int sync {
+func main() sync {
     let squares = [0.0, 1.0, 2.0]->map<func (x: float) => float {
         x * x
     }>
@@ -28,5 +28,4 @@ func main() => int sync {
     }>
     println('jax_batching struct')
     println(doubled)
-    return 0
 }

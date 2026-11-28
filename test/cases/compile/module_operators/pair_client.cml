@@ -5,8 +5,7 @@
 import { twice } from pair_gen
 import { pair } from pair_models
 
-func main() => int sync {
+func main() sync {
     let p = twice(pair(1, 2))
     println(p.a, p.b)
-    return 0
 }

@@ -32,13 +32,12 @@ func (x: int) => int { x + 1 }   // lambda, see 6.9
 In a backquoted string `` `...` ``, `${expression}` interpolates, optionally with a format specification, `${expression:spec}` (the lexical rules are in [2.5.4.1](02_lexical.md#2541-formatted-strings)). It is **the same tree** as `'...'->format<...>`: each `${...}` becomes a placeholder of `format` (`{}` or `{:spec}`), a `{` or `}` of the literal text is written `{{` or `}}`, and `format` is called with the interpolated expressions as its with-arguments and that text as its ordinary argument.
 
 ```cml
-func main() => int sync {
+func main() sync {
     let name = 'Camel'
     let n = 42
     println(`hello, ${name}!`)          // 'hello, {}!'->format<name>
     println(`n = ${n}, twice = ${n * 2}`)
     println(`pi = ${3.14159:.2f}`)      // 'pi = {:.2f}'->format<3.14159>
-    return 0
 }
 ```
 
@@ -77,10 +76,9 @@ func main() => int sync {
 with <factor: int>
 func scale(x: int) => int { return x * factor }
 
-func main() => int sync {
+func main() sync {
     println(scale<3>(5))        // with arguments go in angle brackets
     println(5->scale<3>)        // pipe: the value on the left becomes an argument
-    return 0
 }
 ```
 
@@ -107,13 +105,12 @@ func main() => int sync {
 `a->f` makes `a` an argument of `f`: `a->f` is `f(a)`, and `a->f<w>` is `f<w>(a)`. It is left-associative and suits writing a data flow as one chain:
 
 ```cml
-func main() => int sync {
+func main() sync {
     let total = (1..6)
         ->map<func (x) { x * x }>
         ->filter<func (x) { x % 2 == 1 }>
         ->reduce<func (acc: int, x: int) => int { acc + x }, 0>
     println(`total = ${total}`)
-    return 0
 }
 ```
 
@@ -140,11 +137,10 @@ func half(x: int) => int! {
     return if x % 2 == 0 then x / 2 else { return error('Odd', 'not even') }
 }
 
-func main() => int sync {
+func main() sync {
     println(parse_int('12') !! 0, parse_int('twelve') !! 0)
     println(parse_int('12') -> half -> half !! -1)
     println(parse_int('10') -> half -> half !! -1)
-    return 0
 }
 ```
 
@@ -161,10 +157,9 @@ func main() => int sync {
 - **`x!` says "here it must succeed"**: when `x` is a `T!`, a value is handed out as it is, and an error becomes a fault unchanged -- the kind and the message are the error's own, the report stands at the `!`, and it says beside it where the error was made; when `x` is a `T?`, null becomes the fault `NullValue`. So a place where a failure leaves no other road -- reading training data, parsing a configuration -- needs no invented kind and message and no `!! fail`:
 
 ```cml
-func main() => int sync {
+func main() sync {
     let n = parse_int('40')!
     println(n + 2)
-    return 0
 }
 ```
 
@@ -210,10 +205,9 @@ func noisy(tag: string, v: bool) => bool sync {
     return v
 }
 
-func main() => int sync {
+func main() sync {
     println(noisy('l1', false) && noisy('r1', true))
     println(noisy('l2', false) & noisy('r2', true))
-    return 0
 }
 ```
 
@@ -312,10 +306,9 @@ func right(x: int) => string {
     return if x < 0 then { return 'negative' } else { return 'not negative' }
 }
 
-func main() => int sync {
+func main() sync {
     println(wrong(-1))
     println(right(-1))
-    return 0
 }
 ```
 
@@ -361,9 +354,8 @@ func kind(c: string) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(kind('e'), kind(' '), kind('x'))
-    return 0
 }
 ```
 
@@ -391,10 +383,9 @@ func report(r: int!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(show(5), show(null))
     println(report(parse_int('7')), report(parse_int('x')))
-    return 0
 }
 ```
 
@@ -660,10 +651,9 @@ A function type is written `(x: T) => R`, and the parameters must be named: `(x:
 - The lambda after `->`: the parameter is the receiver, so its type is the receiver's, or the value taken out of a `T?` or a `T!` (the pipeline of 3.9):
 
   ```cml
-  func main() => int sync {
+  func main() sync {
       let a = 5 -> func (y) { y + 1 }                  // y: int
       println(a)
-      return 0
   }
   ```
 
@@ -683,12 +673,11 @@ func adder(n: int) => (x: int) => int {
     return func (x: int) => int { x + n }          // captures n
 }
 
-func main() => int sync {
+func main() sync {
     let g = inc
     let add5 = adder(5)
     println(g(1), apply_twice(dbl, 3), add5(10))
     println([inc, dbl]->map<func (f: (x: int) => int) => int { f(10) }>)
-    return 0
 }
 ```
 
@@ -715,13 +704,12 @@ func main() => int sync {
 | `xs->foreach<f>` | None; calls `f` for each element | In element order |
 
 ```cml
-func main() => int sync {
+func main() sync {
     let xs = 1..6
     println(xs->map<func (x) { x * x }>)
     println(xs->filter<func (x) { x % 2 == 0 }>)
     println(xs->reduce<func (acc: int, x: int) => int { acc + x }, 0>)
     xs->filter<func (x) { x > 3 }>->foreach<func (x) sync { println('item', x) }>
-    return 0
 }
 ```
 
@@ -742,7 +730,7 @@ Errors and faults are two different things: only an operation declared to return
 ```cml
 func risky(d: int) => int { return 100 / d }
 
-func main() => int sync {
+func main() sync {
     println(attempt(risky)(4) !! -1)
     println(attempt(risky)(0) !! -1)
     println(attempt(func () { [1, 0, 4]->map<risky> })() !! [-1])
@@ -751,7 +739,6 @@ func main() => int sync {
         case error e => e.kind + ' at ' + e.location
         case v => 'no fault'
     })
-    return 0
 }
 ```
 

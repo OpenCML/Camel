@@ -20,11 +20,10 @@ func scale(x: int) => int {
     return x * factor
 }
 
-func main() => int sync {
+func main() sync {
     println(square(7))
     println(fib(20))
     println(sum_to(100000, 0))
     println(scale<3>(5))
     println(5->square->scale<2>) // the same as scale<2>(square(5))
-    return 0
 }

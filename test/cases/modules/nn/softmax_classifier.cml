@@ -51,7 +51,7 @@ func train(
     return if steps == 0 then model else train(sgd(model, grad(model_loss)<model>(x, target), 0.5), x, target, steps - 1)
 }
 
-func main() => int sync {
+func main() sync {
     let model = init()
     let x = reshape<[2, 2]>([1.0, 0.0, 0.0, 1.0] as f32[])
     let target = reshape<[2, 2]>([1.0, 0.0, 0.0, 1.0] as f32[])
@@ -68,5 +68,4 @@ func main() => int sync {
     'softmax_classifier bias={}'->format<stepped.head.bias>->println
     'softmax_classifier weight_grad={}'->format<vg.1.head.weight>->println
     'softmax_classifier bias_grad={}'->format<vg.1.head.bias>->println
-    return 0
 }

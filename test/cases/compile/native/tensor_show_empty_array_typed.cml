@@ -8,9 +8,8 @@
 
 import { show } from tensor
 
-func main() => int sync {
+func main() sync {
     show::<f32>([])
     let e: f32[] = []
     show(e)
-    return 0
 }

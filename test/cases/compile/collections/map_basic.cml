@@ -1,7 +1,7 @@
 // Map<K, V>: construction from an array literal with `as`, lookup (`m[k]` is a `V?`), and
 // the operations, each of which returns a new value and leaves its argument as it was.
 
-func main() => int sync {
+func main() sync {
     let m = [('b', 2), ('a', 1)] as Map<string, int>
     println(m)
     println(m['a'] ?? 0)
@@ -25,5 +25,4 @@ func main() => int sync {
         k + '!'
     }>
     println(ks)
-    return 0
 }

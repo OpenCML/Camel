@@ -5,9 +5,8 @@
  * Expected output: ab
  */
 
-func main() => int sync {
+func main() sync {
     var s = 'a'
     s += 'b'
     println(s)
-    return 0
 }

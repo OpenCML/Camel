@@ -6,10 +6,9 @@ func rem(a: int, b: int) => int {
     return a % b
 }
 
-func main() => int sync {
+func main() sync {
     println(rem(17, 5))
     let z = 0
     println(rem(17, z))
     println('not reached')
-    return 0
 }

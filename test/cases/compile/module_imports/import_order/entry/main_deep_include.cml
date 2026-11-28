@@ -5,7 +5,6 @@
 
 import deep.helper
 
-func main() => int sync {
+func main() sync {
     println(helper::name())
-    return 0
 }

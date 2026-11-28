@@ -39,9 +39,8 @@ func f(x: float) => float {
     return h(mk(x), 2.0)
 }
 
-func main() => int sync {
+func main() sync {
     println(f(3.0))
     // The paper answer: (12.0,). No forward line prints 12, so the claim is about the transpose.
     println(transpose(f)(1.0))
-    return 0
 }

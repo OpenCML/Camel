@@ -4,7 +4,6 @@
 
 import order
 
-func main() => int sync {
+func main() sync {
     println(order::value())
-    return 0
 }

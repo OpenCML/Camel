@@ -64,7 +64,7 @@ func total(xs: (int?)[]) => int {
     }, 0>
 }
 
-func main() => int sync {
+func main() sync {
     // arguments
     println(or_else(7, 0), or_else(null, 0), show(3), deep(4), deep(null))
     let opt: int? = 9
@@ -94,5 +94,4 @@ func main() => int sync {
     println(n ?? 'small')
     // return
     println(deep(lift(2)))
-    return 0
 }

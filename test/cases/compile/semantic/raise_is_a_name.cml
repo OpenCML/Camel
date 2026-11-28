@@ -7,8 +7,7 @@ func raise(amount: int) => int {
     return amount + 1
 }
 
-func main() => int sync {
+func main() sync {
     let raised = raise(41)
     println(raised)
-    return 0
 }

@@ -10,7 +10,6 @@ func take(xs: int[]) => int.. sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(loop acc = 0 for v in take([1, 2, 3]) do acc * 10 + v)
-    return 0
 }

@@ -27,7 +27,7 @@ func of_param(f: <x: float>() => float, x: float) => float {
     return grad(f)<x>()
 }
 
-func main() => int sync {
+func main() sync {
     println('before grad')
     let a = grad(leaky)<3.0>()
     let b = grad(power)<2.0>(5)
@@ -35,5 +35,4 @@ func main() => int sync {
     // The same functions called directly are still inlined and still agree.
     let d = leaky<3.0>() + power<2.0>(5) + cube<2.0>()
     'grad_unexpanded_inline a={} b={} c={} d={}'->format<a, b, c, d>->println
-    return 0
 }

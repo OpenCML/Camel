@@ -17,21 +17,21 @@ func gate(t: f32[4]) => f32[4] {
     return if t[0] > 0.5 then relu(t) * 2.0 else t * (t[1] * 2.0) - 1.0
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[4]>([1.0, -2.0, 3.0, 0.5] as f32[])
     let y = gate(x)
     'camel gate={} {} {} {}'->format<y[0], y[1], y[2], y[3]>->println
     let r = export_model<out: get_env('ONNX_OUT') ?? ''>(func (t: f32[...]) => f32[...] {
         gate(t as f32[4])
     }, x)
-    return match r {
+    match r {
         case error e => sync {
             println(e)
-            return 1
+            1
         }
         case _ => sync {
             println('exported')
-            return 0
+            0
         }
     }
 }

@@ -1,6 +1,5 @@
 import lib_plain
 
-func main() => int sync {
+func main() sync {
     println(lib_plain::bump(2.0))
-    return 0
 }

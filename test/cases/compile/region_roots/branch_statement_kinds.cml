@@ -37,7 +37,6 @@ func kinds() => int {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     kinds()
-    return 0
 }

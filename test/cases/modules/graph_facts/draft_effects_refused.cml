@@ -21,11 +21,10 @@ func loud(x: int) => int sync {
     return x
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     println('published effects external')
     println(effects(graph_of(loud)).external)
     let draft = open(loud)
     println('draft effects external')
     println(effects(draft).external)
-    return 0
 }

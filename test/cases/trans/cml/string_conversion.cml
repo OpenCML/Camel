@@ -19,10 +19,9 @@ func describe(count: int) => string sync {
     return label
 }
 
-func main() => int sync {
+func main() sync {
     let n = 7
     println(string(n))
     println(string(scale))
     println(describe(n))
-    return 0
 }

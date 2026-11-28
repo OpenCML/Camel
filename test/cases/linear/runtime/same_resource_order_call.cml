@@ -5,9 +5,9 @@ func write(x: int) => int {
     return println(x)
 }
 
-func main() => int {
+func main() {
     let a = println(1)
     let b = write(2)
     let c = println(3)
-    return a * 100 + b * 10 + c
+    a * 100 + b * 10 + c
 }

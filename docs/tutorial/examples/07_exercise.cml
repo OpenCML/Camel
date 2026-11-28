@@ -9,7 +9,6 @@ func sum_ints(words: string[]) => int {
     }, 0>
 }
 
-func main() => int sync {
+func main() sync {
     println(sum_ints(['12', 'x', '7']))
-    return 0
 }

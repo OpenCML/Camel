@@ -9,7 +9,7 @@ func rem(a: int, b: int) => int {
     return a % b
 }
 
-func main() => int sync {
+func main() sync {
     let half = 4611686018427387904
     let min = 0 - half - half
     println('before')
@@ -17,5 +17,4 @@ func main() => int sync {
     println(rem(min, -1))
     println(div(min, -1))
     println('after')
-    return 0
 }

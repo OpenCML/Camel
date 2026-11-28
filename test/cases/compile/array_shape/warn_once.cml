@@ -3,7 +3,6 @@ func first(x: f32[n]) => f32 {
     return x[0]
 }
 
-func main() => int sync {
+func main() sync {
     println(first([1.0, 2.0]))
-    return 0
 }

@@ -3,7 +3,7 @@ import { to_array, from_array } from bytes
 import { get_env } from env
 import { write_bytes, read_bytes, read_chunk, file_size } from fs
 
-func main() => int sync {
+func main() sync {
     // The scratch directory the runner gives every test; see bytes_values.cml.
     let scratch = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if scratch == '' then (get_env('TEMP') ?? '') else scratch
@@ -13,5 +13,5 @@ func main() => int sync {
     let whole = (path->read_bytes->to_array !! [])
     let middle = (path->read_chunk<1, 6>->to_array !! [])
     println('binary size={} whole={} middle={}'->format<(path->file_size !! 0), whole, middle>)
-    return if (path->file_size !! 0) == 8 && len(whole) == 8 && len(middle) == 6 then 0 else 1
+    if (path->file_size !! 0) == 8 && len(whole) == 8 && len(middle) == 6 then 0 else 1
 }

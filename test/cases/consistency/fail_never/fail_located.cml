@@ -9,9 +9,8 @@ func limit(q: float) => float {
     return if q > 0.0 then q else fail('BadLimit', 'the limit must be positive')
 }
 
-func main() => int sync {
+func main() sync {
     println('before')
     println(limit(-1.0))
     println('not reached')
-    return 0
 }

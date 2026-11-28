@@ -30,7 +30,7 @@ func by_declaration(label: string, xs: f32[][]) => string sync {
     return `${label} ${xs}`
 }
 
-func main() => int sync {
+func main() sync {
     // A value the declaration does not type: an array parameter whose element type is unstated.
     let rows = reshape<[2, 3]>([2.0, 0.0, 0.0, 2.0, 0.0, 0.0])
     let a = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
@@ -57,5 +57,4 @@ func main() => int sync {
     println(by_declaration('F3', f32rows))
     let deep: float[][][] = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]]
     println(`F4 deep ${deep}`)
-    return 0
 }

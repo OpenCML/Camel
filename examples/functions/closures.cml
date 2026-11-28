@@ -54,7 +54,7 @@ func tick(count: int) => int {
     return count + 1
 }
 
-func main() => int sync {
+func main() sync {
     let add3 = adder(3)
     let double = func (x: int) => int {
         x * 2
@@ -74,5 +74,4 @@ func main() => int sync {
     let thrice = tick(twice)
     let other = tick(0)
     println(once, twice, thrice, other)
-    return 0
 }

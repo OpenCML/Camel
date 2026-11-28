@@ -6,9 +6,8 @@
  * the program sees is the array with that element changed.
  */
 
-func main() => int sync {
+func main() sync {
     var arr = [1, 2, 3]
     arr[0] = 9
     println(arr)
-    return 0
 }

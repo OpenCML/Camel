@@ -8,6 +8,5 @@ import nn
 import onnx
 import tensor
 
-func main() => int {
-    return 0
+func main() {
 }

@@ -23,7 +23,7 @@ func loss(w: f32[...], x: f32[...]) => float {
     return loop s = 0.0 for v in x do s + float(sum(v * w + 0.5))
 }
 
-func main() => int sync {
+func main() sync {
     let w = [0.5, 1.5, 2.5, 3.5] as f32[]
     let x = [1.0, 2.0, 3.0, 4.0] as f32[]
     let a: f32 = 2.0
@@ -38,5 +38,4 @@ func main() => int sync {
     'tensor tensor={}'->format<sum(x * w)>->println
     'tensor literal={}'->format<sum(x * 0.5)>->println
     'literal tensor={}'->format<sum(0.5 * x)>->println
-    return 0
 }

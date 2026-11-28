@@ -5,7 +5,6 @@ namespace Config {
         return limit * 2
     }
 }
-func main() => int sync {
+func main() sync {
     println(Config::twice())
-    return 0
 }

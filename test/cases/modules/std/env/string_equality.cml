@@ -19,12 +19,11 @@ func pick(value: string) => int {
     return if value == '' then unsetArm() else setArm()
 }
 
-func main() => int sync {
+func main() sync {
     let unset = get_env('CAMEL_TEST_SURELY_UNSET_VARIABLE') ?? ''
     let set = get_env('CAMEL_TEST_STRING_EQ') ?? ''
     'eq_empty={} ne_empty={} eq_value={}'->format<unset == '', unset != '', set == 'abc'>->println
     let a = pick(unset)
     let b = pick(set)
     'picked={}{}'->format<a, b>->println
-    return 0
 }

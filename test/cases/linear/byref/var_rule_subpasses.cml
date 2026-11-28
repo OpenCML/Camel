@@ -73,7 +73,7 @@ func branch_case(var c: int, flag: bool) => int sync {
     return a * 10000 + b * 100 + r
 }
 
-func main() => int sync {
+func main() sync {
     println('fold {}'->format<fold_case()>)
     var c1 = 1
     let x1 = cse_case(c1)
@@ -91,5 +91,4 @@ func main() => int sync {
     let x5 = branch_case(c5, true)
     let x6 = branch_case(c5, false)
     println('branch {} {} {}'->format<x5, x6, c5>)
-    return 0
 }

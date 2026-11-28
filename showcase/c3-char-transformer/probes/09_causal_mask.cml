@@ -12,10 +12,9 @@ func masked(x: float[...]) => float {
     return sum(hidden * hidden)
 }
 
-func main() => int sync {
+func main() sync {
     let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let (value, tangent) = jvp(masked)(x, ones::<float>([2, 2]))
     println(`value = ${value:.6f}`)
     println(`tangent = ${tangent:.6f}`)
-    return 0
 }

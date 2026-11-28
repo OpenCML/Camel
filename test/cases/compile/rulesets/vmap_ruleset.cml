@@ -18,7 +18,7 @@ func g(x: f32) => f32 {
     return -f(x)
 }
 
-func main() => int sync {
+func main() sync {
     let xs: f32[4] = [1.0, 2.0, 3.0, 0.5]
     println(vmap(f)(xs))
     println(xs->map<func (x: f32) {
@@ -30,5 +30,4 @@ func main() => int sync {
         g(x)
     }>)
     println(lift(f32(3.0)))
-    return 0
 }

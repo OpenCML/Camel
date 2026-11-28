@@ -11,10 +11,9 @@ func operator +(a: A, b: A) => B {
     return { v: a.v + b.v }
 }
 
-func main() => int sync {
+func main() sync {
     var a: A = { v: 1 }
     let b: A = { v: 2 }
     a += b
     println(a.v)
-    return 0
 }

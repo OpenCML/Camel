@@ -12,7 +12,6 @@ func spin(i: int, n: int, acc: float) => float {
     return if i == n then acc else spin(i + 1, n, acc + norm(float(i % 1000), 3.0))
 }
 
-func main() => int sync {
+func main() sync {
     println(spin(0, 1000000, 0.0))
-    return 0
 }

@@ -19,7 +19,7 @@ func make::<T>() => T[] {
     return xs
 }
 
-func main() => int sync {
+func main() sync {
     // One variable, written in the result and in the parameter: the position solves it and the
     // array literal takes it.
     let xs: f32[] = keep([1.0000000596046447753906251, 2.0], 2)
@@ -31,5 +31,4 @@ func main() => int sync {
     // A variable the result alone determines: this was the only shape that worked before.
     let ys: f32[] = make()
     println(len(ys))
-    return 0
 }

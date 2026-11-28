@@ -27,7 +27,7 @@ func checksum(arr: int[]) => int {
     }, 0>
 }
 
-func main() => int sync {
+func main() sync {
     seed(7)
     let data = to_array(0 .. 96)->shuffle<next_key()>
     let sums = (0 .. 12)->map<func (k: int) => int {
@@ -39,5 +39,4 @@ func main() => int sync {
         s > 100000
     }>->println
     mergesort(data)->println
-    return 0
 }

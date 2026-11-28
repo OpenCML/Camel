@@ -1,6 +1,5 @@
-func main() => int sync {
+func main() sync {
     let a = 1 + 2
     let b = a + 4
     println(b)
-    return 0
 }

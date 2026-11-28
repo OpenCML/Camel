@@ -7,7 +7,7 @@
  */
 import { reshape, shape, sum } from tensor
 
-func main() => int sync {
+func main() sync {
     println('ran')
     let m = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
     println(shape(m[0..1]))
@@ -15,5 +15,4 @@ func main() => int sync {
     println(shape(m[1..2]))
     println(shape(m[0..0]))
     println(sum(m[0..2]))
-    return 0
 }

@@ -4,7 +4,7 @@
 import { jvp } from transforms
 import rulesets.jvp
 
-func main() => int sync {
+func main() sync {
     let m = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let f = func (x: float[2, 2]) => float {
         let col = x[.., 0]
@@ -12,5 +12,4 @@ func main() => int sync {
     }
     let (v, d) = jvp(f)(m, [[1.0, 0.0], [0.0, 0.0]] as float[2, 2])
     `v={} d00={}`->format<v, d>->println
-    return 0
 }

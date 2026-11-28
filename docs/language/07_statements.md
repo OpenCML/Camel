@@ -17,11 +17,11 @@
 ```cml
 func save(path: string) => int! sync { ... }
 
-func main() => int sync {
+func main() sync {
     save('a.txt')              // 警告：这个 int! 没有被使用
     let r = save('b.txt')      // 警告：r 从未被使用
     let _ = save('c.txt')      // 有意丢弃：不警告
-    return save('d.txt') !! -1 // 被使用
+    save('d.txt') !! -1 // 被使用
 }
 ```
 
@@ -71,10 +71,9 @@ func check_age(age: int) => int! {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(check_age(30) !! 0, check_age(-1) !! 0)
     println(check_age(-1))
-    return 0
 }
 ```
 
@@ -132,12 +131,11 @@ func scale(x: int, by: int = 2, rounds: int = 1) => int {
     return x * by * rounds
 }
 
-func main() => int sync {
+func main() sync {
     println(scale(3))                    // 两个都用默认值：6
     println(scale(3, 4))                 // 按位置给 by：12
     println(scale(3, rounds: 5))         // 跳过 by，按名字给 rounds：10
     println(scale(3, by: 4, rounds: 5))  // 都按名字给：60
-    return 0
 }
 ```
 
@@ -156,10 +154,9 @@ func clamp(x: int) => int {
     return if x < lo then lo else if x > hi then hi else x
 }
 
-func main() => int sync {
+func main() sync {
     println(clamp<0, 10>(42))
     println([-5, 3, 99]->map<func (x) { x->clamp<0, 10> }>)
-    return 0
 }
 ```
 
@@ -178,12 +175,11 @@ func repeat(x: int) => int {
     return if strict then x * rounds else x + rounds
 }
 
-func main() => int sync {
+func main() sync {
     println(repeat(10))                 // 两个都用默认值：18
     println(repeat<2, true>(10))        // 都按位置给出：20
     println(repeat<strict: true>(10))   // 跳过 rounds，按名字给 strict：80
     println(repeat<16>(10))             // rounds 按位置给：26
-    return 0
 }
 ```
 
@@ -200,9 +196,8 @@ func main() => int sync {
 func show(x: int) => string { return 'int ' + string(x) }
 func show(x: string) => string { return 'string ' + x }
 
-func main() => int sync {
+func main() sync {
     println(show(1), show('a'))
-    return 0
 }
 ```
 
@@ -242,13 +237,12 @@ func operator *(k: float, v: Vec) => Vec { return { x: k * v.x, y: k * v.y } }
 func operator [](v: Vec, i: int) => float { return if i == 0 then v.x else v.y }
 func operator &(a: Mask, b: Mask) => Mask { return { bits: a.bits * b.bits } }
 
-func main() => int sync {
+func main() sync {
     let v: Vec = { x: 1.0, y: 2.0 }
     var acc: Vec = { x: 0.0, y: 0.0 }
     acc += v                         // acc = acc + v
     let w = 2.0 * (v + acc)
     println(w.x, w[1], (-v).x, 1 + 2)
-    return 0
 }
 ```
 
@@ -285,11 +279,10 @@ func my_map::<T, U>(xs: T[], f: (x: T) => U) => U[] {
     return xs->map<f>
 }
 
-func main() => int sync {
+func main() sync {
     println(first([1, 2, 3]), first(['a', 'b']))
     println(pick(false, 1.5, 2.5))
     println(my_map([1, 2, 3], func (x: int) => string { string(x) + '!' }))
-    return 0
 }
 ```
 
@@ -317,9 +310,8 @@ func my_fold::<T, U>(xs: T[]) => U {
     return xs->reduce<f, init>
 }
 
-func main() => int sync {
+func main() sync {
     println(['a', 'bb']->my_fold<func (acc: int, s: string) { acc + len(s) }, 0>)
-    return 0
 }
 ```
 
@@ -334,12 +326,11 @@ func apply::<T, U>(f: (x: T) => U, x: T) => U { return f(x) }
 func id::<A>(x: A) => A { return x }
 func pair::<A>(x: A) => (A, A) { return (x, x) }
 
-func main() => int sync {
+func main() sync {
     println(apply(id, 3), apply(pair, 'a'))   // T 来自 3：id 实例化为 id<int>，于是 U = int
     println([[1, 2], [3, 4]]->map<pair>)      // 交给内建的高阶算子
     let f: (x: int) => int = id               // 写出的类型决定实例
     println(f(4))
-    return 0
 }
 ```
 
@@ -360,10 +351,9 @@ func sum(...ts) => int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
-func main() => int sync {
+func main() sync {
     println(sum(1, 2, 3))
     println(sum(...(4, 5)))
-    return 0
 }
 ```
 
@@ -387,10 +377,9 @@ func total(constas n: int, x: float[n]) => float {
     return loop acc = 0.0 for v in x do acc + v
 }
 
-func main() => int sync {
+func main() sync {
     println(total(3, [1.0, 2.0, 3.0]))
     println(total(5, [1.0, 2.0, 3.0, 4.0, 5.0]))
-    return 0
 }
 ```
 
@@ -433,9 +422,8 @@ func times(f: (x: int) => int) => (x: int) => int {
 @times<3>
 func inc(x: int) => int { return x + 1 }
 
-func main() => int sync {
+func main() sync {
     println(inc(1))        // (1 + 1) * 3
-    return 0
 }
 ```
 
@@ -459,9 +447,8 @@ func next_doubled(x: int) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(next_doubled(4))    // (4 + 1) * 2
-    return 0
 }
 ```
 
@@ -553,12 +540,11 @@ type Packed = {
     b: int,
 }
 
-func main() => int {
+func main() {
     #fast
     {
         // 块里的节点带着 fast
     }
-    return 0
 }
 ```
 
@@ -669,10 +655,9 @@ func key_of::<K, V>(e: Entry<K, V>) => K {
     return e.key
 }
 
-func main() => int sync {
+func main() sync {
     println(sum_pair((1, 2)), swap(('x', 'y')))
     println(key_of({ key: 'id', value: 7 }))
-    return 0
 }
 ```
 

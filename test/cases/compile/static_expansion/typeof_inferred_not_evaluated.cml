@@ -10,9 +10,8 @@ func mark(tag: string) => int sync {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     let a: typeof (mark('inferred')) = 7
     let b = 3 as typeof (mark('cast'))
     println(a + b)
-    return 0
 }

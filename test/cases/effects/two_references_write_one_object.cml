@@ -19,9 +19,8 @@ func twice(f: (x: int) => void, v: int) => int sync {
     return counter // Whichever write the read takes.
 }
 
-func main() => int sync {
+func main() sync {
     println(twice(func (y: int) {
         counter = y
     }, 3))
-    return 0
 }

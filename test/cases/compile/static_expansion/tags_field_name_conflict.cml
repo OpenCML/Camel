@@ -15,7 +15,6 @@ func read(b: Box) => int {
     return static loop acc = 0 for n, F, tags in fields Box do acc + 1
 }
 
-func main() => int sync {
+func main() sync {
     println(read({ marked: 3 }))
-    return 0
 }

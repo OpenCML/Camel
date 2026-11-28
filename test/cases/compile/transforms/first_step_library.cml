@@ -39,7 +39,7 @@ func loss_with(x: float, t: float) => float {
     return 0.5 * err * err
 }
 
-func main() => int sync {
+func main() sync {
     // The library's leg.
     let (library_value, pullback) = vjp(loss_plain)(0.5, 0.75)
     let (library_w, library_b) = pullback(1.0)
@@ -60,5 +60,4 @@ func main() => int sync {
     `first_step scalar engine w={} b={}`->format<engine_w, engine_b>->println
     `first_step scalar diff_library_vs_engine w={} b={} value={:.12e}`->format<dw, db, dv>->println
     `first_step scalar max_abs_diff_library_vs_engine {:.12e}`->format<max(max(dw, db), dv)>->println
-    return 0
 }

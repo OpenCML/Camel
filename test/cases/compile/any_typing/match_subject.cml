@@ -13,6 +13,6 @@ func check(v: Json) => int sync {
     return 0
 }
 
-func main() => int sync {
-    return decode('"ab"')->check !! 1
+func main() sync {
+    decode('"ab"')->check !! 1
 }

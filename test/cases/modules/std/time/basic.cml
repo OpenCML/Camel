@@ -5,7 +5,7 @@
 // time 模块基础测试
 import { now, strftime } from time
 
-func main() => int sync {
+func main() sync {
     println('=== Time Module Basic Tests ===')
     
     println('\n[1] now()')
@@ -17,5 +17,4 @@ func main() => int sync {
     println('  fmt =', fmt)
     
     println('\n=== Time tests completed ===')
-    return 0
 }

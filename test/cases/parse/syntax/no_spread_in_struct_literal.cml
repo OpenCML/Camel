@@ -4,10 +4,9 @@
  * `ConstructNotSupported` while the form was still in the grammar.
  */
 
-func main() => int sync {
+func main() sync {
     let s = { x: 1 }
     let t = { ...s, y: 2 }
     println('never printed')
     println(t)
-    return 0
 }

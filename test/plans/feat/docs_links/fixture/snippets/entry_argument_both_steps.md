@@ -6,9 +6,8 @@ has to reach that step too -- a compile command built without it fails before th
 
 ```cml
 // greet.cml
-func main(name: string) => int sync {
+func main(name: string) sync {
     println('hello ' + name)
-    return 0
 }
 ```
 

@@ -22,9 +22,8 @@ func doubled(x: int) => int {
     return x * 2 + x * 2
 }
 
-func main() => int sync {
+func main() sync {
     // `check` draws random instances and compares the two sides of every rule it is given.
     println(check_text([negate]->check<100, 1>))
     println(negated(7), combined(7), doubled(7))
-    return 0
 }

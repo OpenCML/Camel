@@ -43,8 +43,7 @@ func scaled_scalar(x: float) => float {
     return x * 3.0
 }
 
-func main() => int sync {
+func main() sync {
     println(sum(scaled(reshape<[3]>([1.0, 2.0, 3.0] as f32[]))))
     println(scaled_scalar(5.0))
-    return 0
 }

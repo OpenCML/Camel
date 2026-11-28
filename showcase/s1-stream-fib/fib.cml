@@ -20,11 +20,10 @@ func fib(limit: int) => int.. sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     loop n = 0 for v in fib(50) do sync {
         println(v)
         n + 1
     }
     println(loop total = 0 for v in fib(50) do total + v)
-    return 0
 }

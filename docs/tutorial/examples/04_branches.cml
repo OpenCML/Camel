@@ -24,9 +24,8 @@ func grade(score: int) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(sign(5), sign(-2), sign(0))
     println(kind('e'), kind(' '), kind('x'))
     println(grade(95), grade(81), grade(42))
-    return 0
 }

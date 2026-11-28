@@ -13,12 +13,11 @@ func pick(x: float, y: float) => int {
     return lt * 100000 + le * 10000 + gt * 1000 + ge * 100 + eq * 10 + ne
 }
 
-func main() => int sync {
+func main() sync {
     let a = pick(1.5, 2.5)
     let b = pick(2.5, 1.5)
     let c = pick(2.5, 2.5)
     let big = 4294967296
     let wide = if big == 0 then 1 else 0
     'float_compare_branch a={} b={} c={} wide={}'->format<a, b, c, wide>->println
-    return 0
 }

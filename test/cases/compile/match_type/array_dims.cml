@@ -22,7 +22,7 @@ type DimsProbe<T> = match type T {
     case _ => bool
 }
 
-func main() => int sync {
+func main() sync {
     // ① a stated rank: the number of dimensions, not the first extent and not a default.
     println(is_same::<ShapeOf<float[2, 3]>, int[2]>(), is_same::<ShapeOf<float[3, 4]>, int[2]>())
     println(is_same::<ShapeOf<float[3]>, int[1]>(), is_same::<ShapeOf<float[2, 3, 4]>, int[3]>())
@@ -39,5 +39,4 @@ func main() => int sync {
     println(is_same::<RowsProbe<float[...]>, float[?, ...]>(), is_same::<RowsProbe<int>, int[]>())
     println(is_same::<DimsProbe<float[2, 3]>, int[2]>(), is_same::<DimsProbe<int>, bool>())
     println(is_same::<DimsProbe<float[...]>, bool>())
-    return 0
 }

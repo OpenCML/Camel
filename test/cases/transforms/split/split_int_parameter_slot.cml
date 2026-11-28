@@ -25,7 +25,7 @@ func g(x: float) => float {
     return widen(2, x) + 1.0
 }
 
-func main() => int sync {
+func main() sync {
     let lifted = jvp(g)
     let (v, t) = lifted(2.0, 1.0)
     println('lift value=', v, ' tangent=', t)
@@ -33,5 +33,4 @@ func main() => int sync {
     let (y, lin) = fwd(2.0)
     println('g y=', y)
     println('g d=', lin(1.0))
-    return 0
 }

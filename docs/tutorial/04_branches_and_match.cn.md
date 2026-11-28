@@ -36,11 +36,10 @@ func grade(score: int) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(sign(5), sign(-2), sign(0))
     println(kind('e'), kind(' '), kind('x'))
     println(grade(95), grade(81), grade(42))
-    return 0
 }
 ```
 
@@ -87,9 +86,8 @@ func label(n: int) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(label(1), label(2), label(0))
-    return 0
 }
 ```
 
@@ -147,10 +145,9 @@ func right(x: int) => string {
     return if x < 0 then { return 'negative' } else { return 'not negative' }
 }
 
-func main() => int sync {
+func main() sync {
     println(wrong(-1))
     println(right(-1))
-    return 0
 }
 ```
 
@@ -204,9 +201,8 @@ func describe(n: int) => string {
         }
 }
 
-func main() => int sync {
+func main() sync {
     println(describe(0), describe(-3), describe(7), describe(8))
-    return 0
 }
 ```
 

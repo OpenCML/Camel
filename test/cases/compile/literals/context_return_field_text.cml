@@ -9,7 +9,6 @@ func make() => Point {
     return { x: '1.5', y: 2.0 }
 }
 
-func main() => int sync {
+func main() sync {
     println(make().x)
-    return 0
 }

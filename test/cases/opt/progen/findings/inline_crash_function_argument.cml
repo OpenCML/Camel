@@ -28,18 +28,17 @@ func r23(a24: int, a25: int) => int {
     }, string(0), (0, 0, false)) else 0 - 1
 }
 
-func main() => int sync {
+func main() sync {
     let n44 = 0
     let n45 = ''
     let n46 = 0
     let n61 = if false then sync {
         let n54 = { n: 0, tag: '', w: 1.0 }
-        return 0
+        0
     } else sync {
-        return r23(7, -1)
+        r23(7, -1)
     }
     let n66 = [false]->reduce<func (p63: int, p64: bool) => int {
         -1
     }, 0>
-    return 0
 }

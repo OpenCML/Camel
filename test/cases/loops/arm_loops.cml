@@ -52,7 +52,7 @@ func collecting(flag: bool, n: int) => int[] {
     if flag then loop xs = [0] while len(xs) < n do xs->append<7> else [9]
 }
 
-func main() => int sync {
+func main() sync {
     println('then', then_for(true, [1, 2, 3]))
     println('then.false', then_for(false, [1, 2, 3]))
     println('else', else_for(false, [1, 2, 3]))
@@ -71,5 +71,5 @@ func main() => int sync {
     } else {
         println('root', -1)
     }
-    return 0
+    0
 }

@@ -18,11 +18,10 @@ func g(qq: Point) => Point {
     return qq
 }
 
-func main() => int sync {
+func main() sync {
     let p = { a: 2.0, b: 3.0 }
     let fwd = split(jvp(g))
     let (value, lin) = fwd(p)
     println('forward y=', value)
     println('lin dp=', lin({ a: 1.0, b: 0.0 }))
-    return 0
 }

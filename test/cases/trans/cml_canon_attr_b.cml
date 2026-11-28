@@ -9,7 +9,6 @@ func quad(x: float) => float {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(quad(3.0))
-    return 0
 }

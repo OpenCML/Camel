@@ -4,7 +4,7 @@
 
 import { unique } from array
 
-func main() => int sync {
+func main() sync {
     let readings = [7, 3, 7, 9, 3, 1, 9, 7]
     println('first occurrences:', unique(readings)) // in the order of the array
     println('as a set:', readings as Set<int>) // a set prints in element order
@@ -16,5 +16,4 @@ func main() => int sync {
     println('monday only:', difference(monday, tuesday))
     println('eve came on monday:', monday->contains<'eve'>)
     println('people seen:', len(union(monday, tuesday)))
-    return 0
 }

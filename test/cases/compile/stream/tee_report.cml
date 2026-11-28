@@ -22,7 +22,7 @@ func total(s: int..) => int {
     return loop acc = 0 for x in s do acc + x
 }
 
-func main() => int sync {
+func main() sync {
     // A hint of 2, and one side reads all 20 elements before the other reads any: the buffer holds
     // 20, which is what the report shows as the peak.
     let (wide, lazy) = stream::tee<2>(count(20))
@@ -36,5 +36,4 @@ func main() => int sync {
     let (defaulted, tail) = stream::tee(count(3))
     println(total(defaulted))
     println(total(tail))
-    return 0
 }

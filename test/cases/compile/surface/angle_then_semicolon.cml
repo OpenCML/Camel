@@ -1,4 +1,4 @@
-func main() => int sync {
+func main() sync {
     let total = [1, 2]->reduce<func (acc: int, x: int) => int {
         acc + x
     }, 0>
@@ -7,5 +7,4 @@ func main() => int sync {
         x > 2
     }>
     println(big)
-    return 0
 }

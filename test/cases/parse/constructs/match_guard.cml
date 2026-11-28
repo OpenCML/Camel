@@ -45,7 +45,7 @@ func fallible(x: int!) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(literal(1))
     println(literal(200))
     println(literal(7))
@@ -58,5 +58,4 @@ func main() => int sync {
     println(nullable(20))
     println(nullable(1))
     println(fallible(9))
-    return 0
 }

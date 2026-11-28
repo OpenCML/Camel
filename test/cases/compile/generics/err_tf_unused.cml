@@ -4,6 +4,5 @@ func f::<T>(p: Tag<T>) => int {
     return 1
 }
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

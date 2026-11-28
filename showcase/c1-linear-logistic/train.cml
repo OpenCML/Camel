@@ -80,7 +80,7 @@ func main(
     lr: float,
     log_every: int,
     threads: int
-) => int sync {
+) sync {
     set_num_threads(threads)
     let kind = if model == 'linear' then 0 else 1
     
@@ -109,12 +109,11 @@ func main(
         if step % log_every == 0 then {
             `c1 step=${step} loss=${value:.9f}`->println
         }
-        return (sgd(m, gradient, lr), step + 1)
+        (sgd(m, gradient, lr), step + 1)
     }
     let elapsed = now() - started
     
     // == evaluate ==
     let after = evaluate(trained, val_x, val_y, kind)
     `c1 trained steps=${steps} seconds=${elapsed:.6f} loss=${after.0:.9f} metric=${after.1:.9f}`->println
-    return 0
 }

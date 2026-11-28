@@ -1,4 +1,3 @@
-func main() => int sync {
+func main() sync {
     println(-9223372036854775809)
-    return 0
 }

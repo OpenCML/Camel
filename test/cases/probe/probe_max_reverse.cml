@@ -31,12 +31,11 @@ func measure(x: f32[1, 2, 4, 4]) => string! {
     return `probe max_reverse diff={} library_norm={}`->format<diff, norm>
 }
 
-func main() => int sync {
+func main() sync {
     let x = image() as f32[1, 2, 4, 4]
     let line = match attempt(measure)(x) {
         case error e => `probe max_reverse wall kind={}`->format<e.kind>
         case measured => measured
     }
     println(line)
-    return 0
 }

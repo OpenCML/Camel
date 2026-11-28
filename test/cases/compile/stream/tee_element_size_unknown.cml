@@ -21,9 +21,8 @@ func length(s: string..) => int {
     return loop acc = 0 for x in s do acc + len(x)
 }
 
-func main() => int sync {
+func main() sync {
     let (front, back) = stream::tee(words(3))
     println(length(front))
     println(length(back))
-    return 0
 }

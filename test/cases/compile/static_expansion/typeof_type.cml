@@ -22,9 +22,8 @@ func describe::<T>(t: T) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(width(7))
     println(describe(7))
     println(width('x'))
-    return 0
 }

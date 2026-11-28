@@ -21,7 +21,6 @@ func total(x: int) => int {
     read()
 }
 
-func main() => int sync {
+func main() sync {
     println(total(3))
-    return 0
 }

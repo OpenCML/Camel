@@ -12,6 +12,6 @@ func viaTuple(t: (int, int, int)) => int {
     return sum3(...t)
 }
 
-func main() => int sync {
-    return viaTuple((1, 2, 3))
+func main() sync {
+    viaTuple((1, 2, 3))
 }

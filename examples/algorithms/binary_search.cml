@@ -21,7 +21,7 @@ func describe(xs: int[], target: int) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let xs = sort([41, 7, 19, 3, 88, 54, 23, 60])
     println(xs)
     println([54, 3, 88, 20]->map<func (t: int) => string {
@@ -34,5 +34,4 @@ func main() => int sync {
         i * 2
     }>
     println(search(evens, 1337330, 0, len(evens)) ?? -1, search(evens, 1337331, 0, len(evens)) ?? -1)
-    return 0
 }

@@ -25,7 +25,7 @@ func row(name: string, x: float) {
     println(name, plus(x), twice(x))
 }
 
-func main() => int sync {
+func main() sync {
     let max = 1.7976931348623157e308
     let half = max / 2.0
     row('zero', 0.0)
@@ -44,5 +44,4 @@ func main() => int sync {
     row('inf', inf)
     row('minus_inf', -inf)
     row('nan', nan)
-    return 0
 }

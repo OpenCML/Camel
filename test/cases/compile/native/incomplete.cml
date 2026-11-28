@@ -1,6 +1,5 @@
 /// A body-less declaration is a whole signature, result type included.
 func foo(x: int)
 
-func main() => int {
-    return 0
+func main() {
 }

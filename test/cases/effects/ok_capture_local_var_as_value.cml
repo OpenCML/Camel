@@ -18,8 +18,7 @@ func total(x: int) => int {
     read()
 }
 
-func main() => int sync {
+func main() sync {
     let f: (x: int) => int pure = total
     println(f(3))
-    return 0
 }

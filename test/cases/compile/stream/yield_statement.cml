@@ -30,7 +30,6 @@ func sign(x: int) => int.. {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(1)
-    return 0
 }

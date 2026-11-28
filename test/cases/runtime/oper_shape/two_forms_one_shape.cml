@@ -54,7 +54,7 @@ func by_member(t: (int, int)) => int {
     return t.0
 }
 
-func main() => int sync {
+func main() sync {
     let point: Point = { x: 1, y: 2 }
     let pair = (5, 6)
     println(
@@ -66,5 +66,4 @@ func main() => int sync {
         by_aggregate(7, 8).0,
         by_member(pair)
     )
-    return 0
 }

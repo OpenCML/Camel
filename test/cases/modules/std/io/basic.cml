@@ -3,7 +3,7 @@
  */
 
 // io 模块基础测试
-func main() => int sync {
+func main() sync {
     println('=== IO Module Basic Tests ===')
     
     println('\n[1] print(1 + 2)')
@@ -13,5 +13,4 @@ func main() => int sync {
     println('hello')
     
     println('\n=== IO tests completed ===')
-    return 0
 }

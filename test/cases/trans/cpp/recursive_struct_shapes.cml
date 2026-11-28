@@ -17,7 +17,7 @@ func total(tree: Tree) => int sync {
     return acc
 }
 
-func main() => int sync {
+func main() sync {
     // The empty array at the field, with a value beside it.
     let leaf: Tree = { value: 4, children: [] }
     let tree: Tree = { value: 1, children: [leaf, { value: 3, children: [leaf] }] }
@@ -29,5 +29,4 @@ func main() => int sync {
     let state: State = { board: [7, 8], to_move: 1 }
     let node: Node = { state: state, children: [] }
     println(len(node.state.board), node.state.to_move, len(node.children))
-    return 0
 }

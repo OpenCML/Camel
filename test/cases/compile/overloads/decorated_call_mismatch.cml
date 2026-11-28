@@ -14,8 +14,7 @@ func scale(x: int) => int {
     return x * 3
 }
 
-func main() => int sync {
+func main() sync {
     println(scale(1.5))
     println('never printed')
-    return 0
 }

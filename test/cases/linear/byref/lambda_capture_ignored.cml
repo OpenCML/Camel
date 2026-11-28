@@ -23,7 +23,6 @@ func ignored() => int {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println(ignored())
-    return 0
 }

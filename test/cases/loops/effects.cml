@@ -8,12 +8,11 @@ func countdown(n: int) => int sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let last = loop i = 0 for x in ['a', 'b', 'c'] do sync {
         println(i, x)
         i + 1
     }
     println('rounds', last)
     println('countdown', countdown(3))
-    return 0
 }

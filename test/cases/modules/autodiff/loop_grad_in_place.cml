@@ -22,10 +22,9 @@ func growSeed(seed: float[]) => float {
     return xs[1] + xs[2]
 }
 
-func main() => int sync {
+func main() sync {
     let a = grad(growLiteral)<2.0>()
     let b = grad(growSeed)<2.0>([0.0])
     let va = with_grad(growLiteral)<2.0>()
     'loop_grad_in_place a={} b={} va={}'->format<a, b, va>->println
-    return 0
 }

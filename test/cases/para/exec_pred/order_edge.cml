@@ -19,7 +19,6 @@ func two() => int {
     return a + b
 }
 
-func main() => int sync {
+func main() sync {
     println('order', two())
-    return 0
 }

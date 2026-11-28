@@ -20,8 +20,7 @@ func chained::<W>(x: W) => W {
     return first(pair(x))
 }
 
-func main() => int sync {
+func main() sync {
     println(chained(7))
     println(first(pair('s')))
-    return 0
 }

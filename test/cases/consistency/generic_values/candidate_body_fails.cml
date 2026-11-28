@@ -14,9 +14,8 @@ func pick::<T>(x: int, y: T) => T {
     return y
 }
 
-func main() => int sync {
+func main() sync {
     let f: (x: int, y: int) => int = pick
     let g: (x: int, y: int) => int = pick
     println(f(1, 2) + g(3, 4))
-    return 0
 }

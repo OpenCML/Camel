@@ -59,7 +59,7 @@ func train(var weights: f32[?, ?]) => void {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let lr = 0.001 // learning rate
     let its = 1000 // number of iterations
     let num_samples = 4
@@ -85,5 +85,4 @@ func main() => int sync {
     let final_loss = mean_squared_error(predictions, y)
     'Final MSE Loss: {}'->format<final_loss>->println
     
-    return 0
 }

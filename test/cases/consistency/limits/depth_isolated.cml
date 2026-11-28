@@ -18,7 +18,7 @@ func kind(r: int!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let n = int(get_env('N') ?? '')
     println('start')
     println(depth(200))
@@ -26,5 +26,4 @@ func main() => int sync {
     println(kind(attempt(depth)(n)))
     println(depth(200))
     println('done')
-    return 0
 }

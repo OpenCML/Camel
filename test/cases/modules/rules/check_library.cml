@@ -63,7 +63,7 @@ import {
     array_distribute
 } from rules
 
-func main() => int sync {
+func main() sync {
     print(check_text([
         add_self,
         int_add_zero,
@@ -99,5 +99,4 @@ func main() => int sync {
         array_sub_zero,
         array_distribute
     ]->check<200, 7>))
-    return 0
 }

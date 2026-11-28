@@ -30,7 +30,7 @@ func swap(s: Pair) => Pair {
     return loop x = s for k in [1.0, 10.0] do { a: x.b, b: x.a + x.b * k }
 }
 
-func main() => int sync {
+func main() sync {
     let flat = jvp(identity)
     let (value, d1) = flat({ a: 1.0, b: 2.0 }, { a: 1.0, b: 0.0 })
     println('identity value= ', value.a, ' ', value.b)
@@ -43,5 +43,4 @@ func main() => int sync {
     println('swap d1=', e1.a, ' ', e1.b)
     let (_, e2) = lifted({ a: 1.0, b: 2.0 }, { a: 0.0, b: 1.0 })
     println('swap d2=', e2.a, ' ', e2.b)
-    return 0
 }

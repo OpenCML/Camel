@@ -17,7 +17,7 @@ func call_then_value() => int[] {
     return [direct]->map<plus_base>
 }
 
-func main() => int sync {
+func main() sync {
     let b = 1
     func g(a: int) => int {
         return a + b

@@ -7,6 +7,6 @@ func f(a: int = 'x') => int {
     return a
 }
 
-func main() => int sync {
-    return f()
+func main() sync {
+    f()
 }

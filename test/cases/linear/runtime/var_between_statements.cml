@@ -59,12 +59,11 @@ func unused_read() => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     read_twice()
     declared_first()
     declared_last()
     three()
     nested()
     unused_read()
-    return 0
 }

@@ -33,7 +33,7 @@ func typeText(n: Node) => string {
     }
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     let g = graph_of(subject)
     let before = len(portsOf(g))
     let d = open(subject)
@@ -43,5 +43,4 @@ func main() => int spelling sync {
     let h = graph_of(edited)
     let after = len(portsOf(h))
     println(`[add_param] ports=${before}->${after} made=${madeText}`)
-    return 0
 }

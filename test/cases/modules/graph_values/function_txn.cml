@@ -47,7 +47,7 @@ func viaB(x: int) => int {
     return target(x) * 2
 }
 
-func main() => int sync {
+func main() sync {
     let before = size(graph_of(target))
     let held = func (x: int) => int {
         target(x) + 1000
@@ -60,5 +60,4 @@ func main() => int sync {
     println(`new: ${g(5)} ${addOnes(graph_of(g))}`)
     println(`old: ${target(5)} ${addOnes(graph_of(target))} ${size(graph_of(target)) == before}`)
     println(`holders: ${held(5)} ${viaA(5)} ${viaB(5)}`)
-    return 0
 }

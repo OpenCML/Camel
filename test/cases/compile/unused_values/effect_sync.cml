@@ -9,8 +9,7 @@ func report(tag: string) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     report('first')
     println('second')
-    return 0
 }

@@ -23,7 +23,6 @@ func probe(x: int) => int sync {
     return w + p.0
 }
 
-func main() => int sync {
+func main() sync {
     println(probe(7))
-    return 0
 }

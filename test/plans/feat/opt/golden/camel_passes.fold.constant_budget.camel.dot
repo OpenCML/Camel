@@ -5,18 +5,17 @@ digraph GraphIR {
         N00 [label="[1, 2, 3, 4, 5, 6, 7, 8]", type="DATA", origin=<ORIGIN>, span="1:12-1:36", srcfile="<ROOT>/test/cases/opt/camel_passes/fold_constant_budget.cml", value_type="int[]"];
         N01 [label=":struct/len_arr", type="OPER", origin=<ORIGIN>, span="2:12-2:15", srcfile="<ROOT>/test/cases/opt/camel_passes/fold_constant_budget.cml", value_type="int"];
         N02 [label=":io/println", type="OPER", origin=<ORIGIN>, span="2:4-2:11", srcfile="<ROOT>/test/cases/opt/camel_passes/fold_constant_budget.cml", value_type="int"];
-        N03 [label="0", type="DATA", origin=<ORIGIN>, span="3:11-3:12", srcfile="<ROOT>/test/cases/opt/camel_passes/fold_constant_budget.cml", value_type="int"];
-        N04 [label="GATE", type="GATE", value_type="int"];
-        N04 -> O01 [label="0", type="EXIT"];
+        N03 [label="GATE", type="GATE", value_type="int"];
+        N03 -> O01 [label="0", type="EXIT"];
         N00 -> N01 [label="0|0", type="NORM"];
         N01 -> N02 [label="0|0", type="NORM"];
-        N03 -> N04 [label="0|0", type="NORM"];
-        N02 -> N04 [label="0|0", type="CTRL"];
-        N02 -> N04 [label="SYNC", type="SYNC"];
+        N02 -> N03 [label="0|0", type="NORM"];
+        N02 -> N03 [label="0|0", type="CTRL"];
+        N02 -> N03 [label="SYNC", type="SYNC"];
     }
     O00 [label="EXIT", type="EXIT"];
-    N05 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="0:0-4:1", srcfile="<ROOT>/test/cases/opt/camel_passes/fold_constant_budget.cml", value_type="() => int uses var console"];
-    N06 [label="CALL", type="CALL", value_type="int"];
-    N06 -> O00 [label="0", type="EXIT"];
-    N05 -> N06 [label="0|0", type="WITH"];
+    N04 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="0:0-3:1", srcfile="<ROOT>/test/cases/opt/camel_passes/fold_constant_budget.cml", value_type="() => int uses var console"];
+    N05 [label="CALL", type="CALL", value_type="int"];
+    N05 -> O00 [label="0", type="EXIT"];
+    N04 -> N05 [label="0|0", type="WITH"];
 }

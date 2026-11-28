@@ -43,7 +43,7 @@ func zeros() => Tangent<(float, float)> {
     return Tangent<(float, float)> { static for n, _ in fields Tangent<(float, float)> do 0.0 }
 }
 
-func main() => int sync {
+func main() sync {
     let v: Tangent<(float, int)> = (1.0, ())
     println(take(v))
     println(v)
@@ -57,5 +57,4 @@ func main() => int sync {
     let z: PairTangent = (4.0, 5.0)
     println(z)
     println(is_same::<Tangent<Tangent<(float, float)>>, (float, float)>())
-    return 0
 }

@@ -2,7 +2,7 @@
  * A lambda written where it is called: in parentheses before the arguments, on the right of
  * `->` and of `->`. Each used to end in the bare text `bad any_cast`.
  */
-func main() => int sync {
+func main() sync {
     println((func (x: int) => int {
         x + 1
     })(3))
@@ -29,5 +29,4 @@ func main() => int sync {
             y * y
         })(x)
     }>)
-    return 0
 }

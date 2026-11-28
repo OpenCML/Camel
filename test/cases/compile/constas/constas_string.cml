@@ -8,7 +8,6 @@ func label(constas k: string, n: int) => string {
     return k
 }
 
-func main() => int sync {
+func main() sync {
     println(label('w', 1), label('h', 2), label('w', 3))
-    return 0
 }

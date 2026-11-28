@@ -3,10 +3,9 @@
  * it is the in-place form of the store. `--copies` names it by the call shape the operator's
  * declaration states, and `--reuse` names every operator node the same way.
  */
-func main() => int sync {
+func main() sync {
     var a: int[] = [1, 2, 3]
     let b: int[] = a
     a[0] = 5
     println(a[0] + b[0])
-    return 0
 }

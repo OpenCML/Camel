@@ -15,7 +15,6 @@ namespace N {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(N::a() + N::b())
-    return 0
 }

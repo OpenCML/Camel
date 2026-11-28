@@ -80,7 +80,7 @@ func growThroughCall(n: int) => (int[], int) {
     return loop xs = [0], rounds = 0 while len(xs) < n do stepOf(xs, rounds)
 }
 
-func main() => int sync {
+func main() sync {
     let before = std::mem::blocks()
     let xs = grow(200)
     let mid = std::mem::blocks()
@@ -128,5 +128,4 @@ func main() => int sync {
     println(len(gs), gs[0], gs[199], gr, afterNamed.allocs - beforeNamed.allocs)
     println(len(hs), hs[0], hs[199], hr, afterNamedAlias.allocs - afterNamed.allocs)
     println(len(ks), ks[0], ks[199], kr, afterCall.allocs - afterNamedAlias.allocs)
-    return 0
 }

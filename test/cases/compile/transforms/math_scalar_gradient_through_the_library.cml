@@ -37,7 +37,7 @@ func complement(x: float) => float {
     return erfc(x)
 }
 
-func main() => int sync {
+func main() sync {
     let (rootValue, rootPullback) = vjp(root)(9.0)
     let rootCotangents = rootPullback(1.0)
     `sqrt value={} d/dx={}`->format<rootValue, rootCotangents.0>->println
@@ -54,5 +54,4 @@ func main() => int sync {
     let (erfZero, erfZeroPullback) = vjp(bell)(0.0)
     let erfZeroCotangents = erfZeroPullback(1.0)
     `erf at zero value={} d/dx={}`->format<erfZero, erfZeroCotangents.0>->println
-    return 0
 }

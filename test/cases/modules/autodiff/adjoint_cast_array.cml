@@ -32,11 +32,10 @@ func weighted() => float {
     return float(sum(t * c))
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [1.0, 2.0, 3.0]
     let g = grad(plain)<xs>()
     let w = [3.0, 4.0, 5.0]
     let gw = grad(weighted)<w>()
     'adjoint_cast_array g={} gw={}'->format<g, gw>->println
-    return 0
 }

@@ -35,9 +35,8 @@ func fib() => int.. sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(loop acc = 0 for x in three(5) do acc * 10 + x)
     println(loop acc = 0 for x in nested() do acc * 100 + x)
     println(loop acc = 0 for x in fib() do acc + x)
-    return 0
 }

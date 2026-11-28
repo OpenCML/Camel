@@ -15,9 +15,8 @@ func kind(r: float!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(kind(attempt(limit)(-1.0)))
     println((attempt(limit)(2.0) !! -1.0) == 2.0)
     println('end')
-    return 0
 }

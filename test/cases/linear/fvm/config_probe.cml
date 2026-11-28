@@ -8,7 +8,6 @@
  * `main` returns an exit code, so it prints `probe` once and writes nothing else.
  */
 
-func main() => int sync {
+func main() sync {
     println('probe')
-    return 0
 }

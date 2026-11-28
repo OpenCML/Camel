@@ -17,10 +17,9 @@ func rounds(n: int) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println('first')
     println('second')
     rounds(2)
     println('last')
-    return 0
 }

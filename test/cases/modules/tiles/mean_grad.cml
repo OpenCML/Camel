@@ -10,7 +10,7 @@ with <x: f32[...]>
 func mse() => float {
     return float(mean(x * x))
 }
-func main(run_gpu: bool) => int sync {
+func main(run_gpu: bool) sync {
     let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     let derivative = func (v: f32[...]) => f32[...] {
         grad(mse)<v>()
@@ -27,5 +27,4 @@ func main(run_gpu: bool) => int sync {
         println('mean_grad error={}'->format<sum(abs(gpu - derivative(x)))>)
         println('mean_grad changed_shape={}'->format<sum(abs(download(run_preferred_resident<derivative>(y)) - derivative(y)))>)
     }
-    return 0
 }

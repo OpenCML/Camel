@@ -22,7 +22,7 @@ func total(s: int..) => int {
     return loop acc = 0 for x in s do acc + x
 }
 
-func main() => int sync {
+func main() sync {
     let (left, right) = stream::tee<0>(count(3))
-    return total(left) + total(right)
+    total(left) + total(right)
 }

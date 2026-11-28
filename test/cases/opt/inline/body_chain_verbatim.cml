@@ -15,9 +15,8 @@ func inner(x: int) => int sync {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     println(1)
     println(inner(3))
     println(2)
-    return 0
 }

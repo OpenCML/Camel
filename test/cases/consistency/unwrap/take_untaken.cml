@@ -12,8 +12,7 @@ func pick(n: int) => int {
     return if n > 12 then parse(n)! else 0
 }
 
-func main() => int sync {
+func main() sync {
     println(pick(7))
     println('end')
-    return 0
 }

@@ -8,8 +8,7 @@
  */
 import { seed } from random
 
-func main() => int {
+func main() {
     seed(7)
     println('alpha')
-    return 0
 }

@@ -44,7 +44,7 @@ func total_sub(x: float[2, 3], b: float[3]) => float[...] {
     return x - b
 }
 
-func main() => int sync {
+func main() sync {
     let weighted = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
     let plain = [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]] as float[2, 3]
     
@@ -61,5 +61,4 @@ func main() => int sync {
     
     let (_, sdb_p) = transpose(total_sub)(plain)
     `sub plain dL/db numel={} dL/db={}`->format<numel(sdb_p), sdb_p>->println
-    return 0
 }

@@ -13,10 +13,9 @@ func seed() => int {
     return 7
 }
 
-func main() => int sync {
+func main() sync {
     let a = seed() + 20
     let c = a + 1
     println(c)
     println(a)
-    return 0
 }

@@ -13,7 +13,7 @@ func e10() => (float, bool, int) sync {
     return (1.0, false, 0)
 }
 
-func main() => int sync {
+func main() sync {
     let h35 = func (p33: int) => int sync {
         let n34 = e10()
         return 7
@@ -24,5 +24,4 @@ func main() => int sync {
     } else sync {
         null
     }
-    return 0
 }

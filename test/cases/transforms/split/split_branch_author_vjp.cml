@@ -45,12 +45,11 @@ func f(x: float) => float {
     return if x > 0.0 then x * x else 3.0 * x
 }
 
-func main() => int sync {
+func main() sync {
     let (y, pullback) = vjp(f)(2.0)
     let dfdx = pullback(1.0).0
     'author vjp value={} dfdx={}'->format<y, dfdx>->println
     let (z, pullbackNeg) = vjp(f)(-2.0)
     let dfdz = pullbackNeg(1.0).0
     'author vjp value={} dfdx={}'->format<z, dfdz>->println
-    return 0
 }

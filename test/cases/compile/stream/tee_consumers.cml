@@ -31,7 +31,6 @@ func twice(s: int..) => int {
     return whole + firstOf(right())
 }
 
-func main() => int sync {
+func main() sync {
     println(twice(count(3)))
-    return 0
 }

@@ -30,9 +30,8 @@ camel --version
 // The smallest program: `main` is the entry, and its body is a sync block.
 // Run: camel docs/tutorial/examples/01_hello.cml
 
-func main() => int sync {
+func main() sync {
     println('Hello, Camel!')
-    return 0
 }
 ```
 
@@ -61,9 +60,8 @@ Graphviz 的格式，交给 `dot` 就是一张图）。文件名后面写的东�
 // The smallest program: `main` is the entry, and its body is a sync block.
 // Run: camel docs/tutorial/examples/01_hello.cml
 
-func main() => int sync {
+func main() sync {
     println('Hello, Camel!')
-    return 0
 }
 ```
 
@@ -101,9 +99,8 @@ func twice(x: int) => int {
     return x * 2 + x * 2
 }
 
-func main() => int sync {
+func main() sync {
     println(twice(3))
-    return 0
 }
 ```
 
@@ -126,9 +123,8 @@ func twice(x: int) => int {
     return x * 2 + x * 2
 }
 
-func main() => int sync {
+func main() sync {
     println(twice(3))
-    return 0
 }
 ```
 
@@ -171,9 +167,8 @@ func area(w: int, h: int) => int {
     return w * h
 }
 
-func main() => int sync {
+func main() sync {
     println(area(3, 4))
-    return 0
 }
 ```
 

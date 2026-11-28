@@ -127,7 +127,7 @@ func row_where(r: float[3]) => float[3] {
     let m: bool[3] = [true, false, true]
     return where(m, r, 0.0)
 }
-func main() => int sync {
+func main() sync {
     let xs: float[3] = [1.0, 2.0, 3.0]
     let rows: float[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
     let planes: float[2, 2, 2] = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]]
@@ -158,5 +158,4 @@ func main() => int sync {
     println(vmap(plane_concat)(planes))
     println(vmap(plane_dim)(planes))
     println(vmap(row_where)(rows))
-    return 0
 }

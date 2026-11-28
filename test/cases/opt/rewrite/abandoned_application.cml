@@ -58,7 +58,6 @@ func drop_probe(a: int) => int {
     return a + 0
 }
 
-func main() => int spelling sync {
+func main() spelling sync {
     println(leak_probe(7), drop_probe(7))
-    return 0
 }

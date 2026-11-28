@@ -9,10 +9,9 @@ func opaque() => int {
     return len(get_env('BROKEN_BRANCH') ?? '')
 }
 
-func main() => int sync {
+func main() sync {
     println('main start')
     let n = opaque()
     let r = if n > 3 then n + 1 else n - 1
     println(r)
-    return 0
 }

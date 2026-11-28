@@ -8,7 +8,6 @@ func add(x: int) => int when on {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     println(add<true>(41))
-    return 0
 }

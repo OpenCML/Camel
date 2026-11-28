@@ -30,7 +30,7 @@ func finite(x: float) => bool {
     return !is_nan(x) && !is_inf(x)
 }
 
-func main() => int sync {
+func main() sync {
     // A logit of 89 is the first one whose exp exceeds the f32 maximum; a logit of about -104
     // is the first one whose exp becomes zero.  The scan prints every probed value.
     let softmax_values = [85.0, 88.0, 89.0, 90.0, 100.0, 1000.0]
@@ -39,7 +39,7 @@ func main() => int sync {
         let bad = !finite(sum(naive_softmax(x)))
         let ok = finite(sum(softmax(x)))
         'accuracy camel softmax m={} naive_bad={} stable_finite={}'->format<m, bad, ok>->println
-        return n + 1
+        n + 1
     }
     
     let underflow_values = [90.0, 93.0, 100.0, 103.0, 104.0, 105.0, 1000.0]
@@ -48,7 +48,7 @@ func main() => int sync {
         let bad = !finite(sum(naive_softmax(x)))
         let ok = finite(sum(softmax(x)))
         'accuracy camel softmax_underflow m={} naive_bad={} stable_finite={}'->format<m, bad, ok>->println
-        return n + 1
+        n + 1
     }
     
     let _ = loop n = 0 for m in underflow_values do sync {
@@ -56,7 +56,7 @@ func main() => int sync {
         let bad = !finite(sum(naive_log_softmax(x)))
         let ok = finite(sum(log_softmax(x)))
         'accuracy camel log_softmax m={} naive_bad={} stable_finite={}'->format<m, bad, ok>->println
-        return n + 1
+        n + 1
     }
     
     let offsets = [85.0, 87.0, 88.0, 89.0, 100.0, 1000.0]
@@ -65,7 +65,7 @@ func main() => int sync {
         let bad = !finite(naive_cross_entropy(logits, 0))
         let ok = finite(softmax_cross_entropy(logits, [0] as int[]))
         'accuracy camel cross_entropy_offset k={} naive_bad={} expert_finite={}'->format<k, bad, ok>->println
-        return n + 1
+        n + 1
     }
     
     let _ = loop n = 0 for m in underflow_values do sync {
@@ -73,7 +73,7 @@ func main() => int sync {
         let bad = !finite(naive_cross_entropy(logits, 0))
         let ok = finite(softmax_cross_entropy(logits, [0] as int[]))
         'accuracy camel cross_entropy_true_class m={} naive_bad={} expert_finite={}'->format<m, bad, ok>->println
-        return n + 1
+        n + 1
     }
     
     // 1e8 + 1 is not representable in f32; the matmul accumulates left to right and rounds the
@@ -83,5 +83,4 @@ func main() => int sync {
     let product = sum(a @ b)
     let reference = sum(a * transpose(b))
     'accuracy camel matmul f32_matmul={:.6f} fp64_sum={:.6f}'->format<product, reference>->println
-    return 0
 }

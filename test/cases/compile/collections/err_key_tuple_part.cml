@@ -1,6 +1,5 @@
 // A tuple is a key type only when every element of it is one.
-func main() => int sync {
+func main() sync {
     let m = [((1, 2.5), 'a')] as Map<(int, float), string>
     println('never printed')
-    return 0
 }

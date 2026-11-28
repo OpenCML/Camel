@@ -1,7 +1,7 @@
 // `loop` carries its state from one round to the next; the body's value is the next state.
 // Run: camel docs/tutorial/examples/05_loops.cml
 
-func main() => int sync {
+func main() sync {
     // One round per element of the sequence.
     let total = loop acc = 0 for x in 1 .. 6 do acc + x * x
     println(total)
@@ -17,5 +17,4 @@ func main() => int sync {
     // Both forms: the condition is checked before each round.
     let first_big = loop hit = 0 for x in [2, 7, 9] while hit == 0 do if x > 5 then x else hit
     println(first_big)
-    return 0
 }

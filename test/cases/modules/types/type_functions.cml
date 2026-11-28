@@ -29,12 +29,11 @@ func first_or::<T>(xs: T, fallback: ElementOf<T>) => ElementOf<T> {
     return if len(xs) > 0 then xs[0] else fallback
 }
 
-func main() => int sync {
+func main() sync {
     println(element_is_integer::<int[]>(), element_is_integer::<f32[]>(), element_is_integer::<Set<i32>>())
     println(payload_is_float::<float?>(), payload_is_float::<int!>(), payload_is_float::<f32?>())
     println(map_key_is_string::<Map<string, int>>(), map_key_is_string::<Map<int, int>>())
     println(map_value_is_array::<Map<string, int[]>>(), map_value_is_array::<Map<string, int>>())
     println(inner_is_integer::<int[][]>(), inner_is_integer::<f32[][]>())
     println(first_or([4, 5], 0), first_or(['a'], 'z'))
-    return 0
 }

@@ -1,7 +1,6 @@
 /// std::cpp has no standalone translation of a string operator: the program links the runtime.
 import str
 
-func main() => int sync {
+func main() sync {
     println(str::to_upper('a'))
-    return 0
 }

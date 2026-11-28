@@ -6,8 +6,7 @@ func every(xs: int[], a: int, b: int, s: int) => int[] {
     return xs[range(a, b, s)]
 }
 
-func main() => int sync {
+func main() sync {
     println(every([1, 2, 3], 0, 3, 0))
     println('not reached')
-    return 0
 }

@@ -52,7 +52,6 @@ func callInArm(flag: bool) => int sync {
     return lam(0)
 }
 
-func main() => int sync {
+func main() sync {
     println(firstArm(), secondArm(), callInArm(true), callInArm(false))
-    return 0
 }

@@ -6,7 +6,7 @@
 
 import { exit } from process
 
-func main(used: int, limit: int) => int sync {
+func main(used: int, limit: int) sync {
     if limit <= 0 then sync {
         println('limit must be positive')
         exit(2)
@@ -17,5 +17,4 @@ func main(used: int, limit: int) => int sync {
     if over then sync {
         exit(1)
     }
-    return 0
 }

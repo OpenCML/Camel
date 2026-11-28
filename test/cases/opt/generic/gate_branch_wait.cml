@@ -6,10 +6,9 @@ func held_value(x: float, label: string) => float sync {
     return x
 }
 
-func main(k: int) => int sync {
+func main(k: int) sync {
     seed(k)
     let x = rand()
     let value = if x > 0.5 then held_value(x, 'left') else held_value(x, 'right')
     println(value)
-    return 0
 }

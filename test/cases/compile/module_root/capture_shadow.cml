@@ -6,8 +6,7 @@ func add_k(x: int) => int {
     return x + k
 }
 
-func main() => int sync {
+func main() sync {
     let k = 5
     println(add_k(1), k)
-    return 0
 }

@@ -10,7 +10,6 @@ func bad::<T>(t: T) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(bad(1))
-    return 0
 }

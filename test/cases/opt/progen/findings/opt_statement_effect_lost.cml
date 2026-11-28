@@ -15,10 +15,9 @@ func f4(a5: (string, int)[]) => int {
     return r1(8, 0 * (-3))
 }
 
-func main() => int sync {
+func main() sync {
     println('')
     let n23 = if false then sync {
-        return f4([('', 0)])
+        f4([('', 0)])
     } else 0
-    return 0
 }

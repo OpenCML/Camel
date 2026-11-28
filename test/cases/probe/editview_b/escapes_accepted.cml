@@ -25,7 +25,7 @@ func keeper::<F>(f: F) => (() => Node) when is_function::<F>() {
     return func () => Node { firstNode(graph_of(f)) }
 }
 
-func main() => int sync {
+func main() sync {
     // 1. A handle as the value of a read: accepted.
     let n = firstNode(graph_of(plus_zero))
     println(`[escape-value] accepted: ${n == n}`)
@@ -50,5 +50,4 @@ func main() => int sync {
     let edited = commit(t) !! plus_zero
     let after = len(nodes(graph_of(other)))
     println(`[view-node-to-replace] accepted: ${before}->${after} edited=${edited(5)}`)
-    return 0
 }

@@ -29,9 +29,8 @@ func loop_total::<P>(p: P) => int {
     })
 }
 
-func main() => int sync {
+func main() sync {
     let box: Box = { low: 1, high: 2 }
     println(comprehension_total(box))
     println(loop_total(box))
-    return 0
 }

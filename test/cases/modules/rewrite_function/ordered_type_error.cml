@@ -8,9 +8,8 @@ rule add_zero(x: int) { x + 0 => x }
 func target(x: int) => int {
     return x + 0
 }
-func main() => int sync {
+func main() sync {
     println(target->rewrite<[add_zero], ordered: 'ordered'>)
     println(target->run<[add_zero], ordered: 'ordered'>)
     println(target->saturate<[add_zero], ordered: 'ordered'>)
-    return 0
 }

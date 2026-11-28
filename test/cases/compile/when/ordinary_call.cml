@@ -13,7 +13,6 @@ func bump(x: int) => int when is_positive(1) {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     println(bump(41))
-    return 0
 }

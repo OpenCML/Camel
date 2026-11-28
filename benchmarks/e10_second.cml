@@ -35,9 +35,8 @@ func loss_s() => float {
     return float(mean(y * y))
 }
 
-func main() => int sync {
+func main() sync {
     let d2_branch = grad(grad(branchy))(2.0)
     let d2_mlp = grad(grad(loss_s))<1.0>()
     'd2_branch={} d2_mlp={}'->format<d2_branch, d2_mlp>->println
-    return 0
 }

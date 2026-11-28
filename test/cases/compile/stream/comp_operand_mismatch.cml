@@ -1,8 +1,7 @@
 // A text is not an integer, and `..` is the interval of two integers (design principles 4.2), so
 // the compiler refuses the two ends and names what it does take.
 
-func main() => int sync {
+func main() sync {
     let xs = 'a' .. 'b'
     println(xs)
-    return 0
 }

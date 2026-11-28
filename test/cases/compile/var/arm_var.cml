@@ -23,7 +23,6 @@ func pick(c: bool) => int sync {
     return x
 }
 
-func main() => int sync {
+func main() sync {
     println(pick(true))
-    return 0
 }

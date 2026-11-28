@@ -10,7 +10,6 @@ func element_is_integer::<T>() => bool {
     return is_integer::<OnlyArrays<T>>()
 }
 
-func main() => int sync {
+func main() sync {
     println(element_is_integer::<int>())
-    return 0
 }

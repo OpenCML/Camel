@@ -1,5 +1,4 @@
-func main() => int sync {
+func main() sync {
     println(`A ${/**/ 1}`)
     println(`B ${/* c */ 2:d}`)
-    return 0
 }

@@ -14,7 +14,7 @@
  * a consequence of `!=` being built from `==`.
  */
 
-func main() => int sync {
+func main() sync {
     let zeroBf: bf16 = bf16(0.0)
     let twoBf: bf16 = bf16(2.0)
     let zeroF6: f16 = f16(0.0)
@@ -31,5 +31,4 @@ func main() => int sync {
     println(oneF6 != oneF6)
     println(!(oneF6 == oneF6))
     
-    return 0
 }

@@ -15,9 +15,8 @@ func helper(a: f32[2, 2], b: f32[2]) => f32[2] {
     tanh(a @ b)
 }
 
-func main() => int sync {
+func main() sync {
     let a = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as f32[])
     let b = reshape<[2]>([1.0, 2.0] as f32[])
     println(sum(step(a, b)))
-    return 0
 }

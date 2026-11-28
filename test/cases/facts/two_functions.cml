@@ -3,7 +3,6 @@ func f(x: int) => int {
     return x * 2 + 1
 }
 
-func main() => int sync {
+func main() sync {
     println(f(20))
-    return 0
 }

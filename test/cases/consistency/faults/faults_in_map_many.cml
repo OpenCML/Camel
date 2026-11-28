@@ -8,10 +8,9 @@ func bad(x: int) => int {
     return if x % 2 == 0 then 10 / (x - x) else 20 % (x - x)
 }
 
-func main() => int sync {
+func main() sync {
     println('before')
     let ys = (0 .. 64)->map<bad>
     println(ys)
     println('not reached')
-    return 0
 }

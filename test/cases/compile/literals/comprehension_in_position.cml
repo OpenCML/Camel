@@ -12,7 +12,7 @@ func doubles(n: int) => f32[] {
     return [f32(i) * 0.5 for i in 0 .. n]
 }
 
-func main() => int sync {
+func main() sync {
     let n = 4
     let declared: f32[] = [f32(i) for i in 0 .. n]
     let cast = [i + 1 for i in 0 .. n] as int[]
@@ -23,5 +23,4 @@ func main() => int sync {
     println(doubles(n), len(doubles(n)))
     var bound: int[] = [i * i for i in 0 .. n]
     println(bound, len(bound))
-    return 0
 }

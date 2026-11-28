@@ -4,6 +4,5 @@ func optional(x: int? ?) => int? ? {
 func fallible(x: int! !) => int! ! {
     return x
 }
-func main() => int sync {
-    return 0
+func main() sync {
 }

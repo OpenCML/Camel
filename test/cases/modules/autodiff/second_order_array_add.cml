@@ -22,7 +22,7 @@ func df0() => float {
     return g[0]
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [2.0, 3.0, 0.0]
     let g = grad(f)<xs>()
     let h = grad(df0)<xs>()
@@ -33,5 +33,4 @@ func main() => int sync {
         h[0],
         h[1]
     >->println
-    return 0
 }

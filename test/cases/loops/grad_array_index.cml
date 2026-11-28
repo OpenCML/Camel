@@ -16,10 +16,9 @@ func pick_x() => float {
     return ps[0].x + ps[1].x
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [1.0, 2.0, 3.0]
     let ps = [{ x: 1.0, y: 10.0 }, { x: 2.0, y: 20.0 }]
     println(grad(pick)<xs>())
     println(grad(pick_x)<ps>())
-    return 0
 }

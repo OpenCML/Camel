@@ -7,7 +7,7 @@
 
 import { max, min } from math
 
-func main() => int sync {
+func main() sync {
     let a = -3
     let b = 5
     print(min(a, b))
@@ -17,5 +17,4 @@ func main() => int sync {
     let y = -9000000000
     print(min(x, y))
     print(max(x, y))
-    return 0
 }

@@ -4,9 +4,8 @@
  * must be declared, and only a `var` can be changed).
  */
 
-func main() => int sync {
+func main() sync {
     let k = 1
     k += 2
     println(k)
-    return 0
 }

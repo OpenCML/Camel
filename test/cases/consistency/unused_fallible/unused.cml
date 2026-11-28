@@ -17,8 +17,7 @@ func checked(s: string) => int sync {
     return kept !! -1
 }
 
-func main() => int sync {
+func main() sync {
     println(checked('12'))
     println(checked('zz'))
-    return 0
 }

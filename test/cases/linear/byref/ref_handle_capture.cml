@@ -41,8 +41,7 @@ func write_through_closure() => int sync {
     return state::get(box)
 }
 
-func main() => int sync {
+func main() sync {
     println(read_through_closure())
     println(write_through_closure())
-    return 0
 }

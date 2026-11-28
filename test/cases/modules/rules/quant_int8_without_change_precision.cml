@@ -22,7 +22,7 @@ func model(x: float[2, 2]) => float[2, 2] {
 
 import { exit } from process
 
-func main(tol: float) => int sync {
+func main(tol: float) sync {
     let xs: float[2, 2] = [[1.0, 0.5], [0.25, 2.0]]
     let reference = model(xs)
     let measured = match model->run<[matmul_int8]> {

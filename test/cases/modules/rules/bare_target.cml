@@ -48,7 +48,7 @@ func f64_combine_one_zero(x: float) => float {
     return x * -1.0 + x
 }
 
-func main() => int sync {
+func main() sync {
     println(i32_combine_one(2), i32_one_combine(2), i32_combine_one_wrap(1))
     println(i64_combine_one(3), i64_one_combine(3))
     println(
@@ -59,5 +59,4 @@ func main() => int sync {
         f32_combine_one_mixed_ok(2.0)
     )
     println(f64_combine_one(2.0), f64_one_combine(2.0), f64_combine_one_zero(-0.0))
-    return 0
 }

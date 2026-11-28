@@ -6,7 +6,6 @@
 
 import { argsort } from array
 
-func main() => int sync {
+func main() sync {
     println(argsort([1, 2], 3))
-    return 0
 }

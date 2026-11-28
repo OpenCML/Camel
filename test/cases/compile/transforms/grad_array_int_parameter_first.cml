@@ -12,11 +12,10 @@ func read_at(n: int, xs: float[]) => float {
     return xs[n]
 }
 
-func main() => int sync {
+func main() sync {
     let (value, pullback) = vjp(read_at)(1, [3.0, 2.0])
     println(value)
     let cotangents = pullback(1.0)
     println(cotangents.0)
     println(cotangents.1)
-    return 0
 }

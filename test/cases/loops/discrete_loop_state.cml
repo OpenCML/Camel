@@ -10,7 +10,6 @@ func f() => float {
     return pair.0
 }
 
-func main() => int sync {
+func main() sync {
     println(grad(f)<2.0>())
-    return 0
 }

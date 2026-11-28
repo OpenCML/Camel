@@ -27,9 +27,8 @@ func message(r: int!) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(kind(attempt(take)(7)))
     println(message(attempt(take)(7)))
     println((attempt(take)(12) !! -1) == 12)
-    return 0
 }

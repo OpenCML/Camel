@@ -6,7 +6,6 @@ func repeated(x: float) => float {
     return float(len(s)) * x
 }
 
-func main() => int sync {
+func main() sync {
     println(grad(repeated)<'abc'>(2.0))
-    return 0
 }

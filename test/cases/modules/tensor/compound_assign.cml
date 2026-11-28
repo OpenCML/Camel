@@ -11,7 +11,7 @@ func bump(var w: f32[], d: f32) => float sync {
     return float(sum(w))
 }
 
-func main() => int sync {
+func main() sync {
     var t = ones::<f32>([2])
     let a = t
     let u = ones::<f32>([2])
@@ -33,5 +33,4 @@ func main() => int sync {
     println(sum(t), sum(a))
     // through a var parameter: the caller's variable is the one rebound
     println(bump(t, 1.0), sum(t), sum(a))
-    return 0
 }

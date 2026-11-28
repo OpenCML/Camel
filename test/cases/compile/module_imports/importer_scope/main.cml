@@ -4,7 +4,6 @@
 
 import graph
 
-func main() => int sync {
+func main() sync {
     println(graph::answer())
-    return 0
 }

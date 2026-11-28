@@ -5,8 +5,7 @@
 
 import { Range, reduce } from prelude
 
-func main() => int sync {
+func main() sync {
     let r: Range = 0 .. 5
     println(r->reduce<func (acc: int, x: int) => int { acc + x }, 0>)
-    return 0
 }

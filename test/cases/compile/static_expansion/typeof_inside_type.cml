@@ -1,5 +1,4 @@
 /** `typeof` stands for a whole type: an array of `typeof 1` is refused. */
-func main() => int sync {
+func main() sync {
     static for j, C in fields typeof (1)[] do println(j)
-    return 0
 }

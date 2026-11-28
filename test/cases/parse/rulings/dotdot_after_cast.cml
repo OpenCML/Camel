@@ -9,9 +9,8 @@
 // and `camel-parsecheck fuzz` reported "the formatted text does not parse" on that text
 // (iteration 929, a mutation of the rule case above with the line break inserted).
 
-func main() => int sync {
+func main() sync {
     let n = 3
     let r = (n as int) .. 5
     println(r)
-    return 0
 }

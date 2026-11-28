@@ -17,9 +17,8 @@ func run(f: () => void) => int {
     return read()
 }
 
-func main() => int sync {
+func main() sync {
     println(run(func () {
         counter = 5
     }))
-    return 0
 }

@@ -160,10 +160,10 @@ func blk(p: string) => Block {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let m = { b1: blk('b1.'), b2: blk('b2.'), b3: blk('b3.'), b4: blk('b4.') }
     let workload = get_env('CAMEL_BENCH_WORKLOAD') ?? ''
-    return if workload == 'train_export' then export_step(m, get_env('CAMEL_BENCH_EXPORT') ?? '')
+    if workload == 'train_export' then export_step(m, get_env('CAMEL_BENCH_EXPORT') ?? '')
     else if workload == 'train' then run_training(
         func (x: f32[...]) => float {
             return train_step(m, x)

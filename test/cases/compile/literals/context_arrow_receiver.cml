@@ -84,10 +84,9 @@ func declaredElement() => f32 {
     return xs[0] + xs[1]
 }
 
-func main() => int sync {
+func main() sync {
     println(arrayReceiver(), integerElement(), emptyReceiver(), nestedArray())
     println(structReceiver(), structArrayField(), tupleReceiver())
     println(chainedReceiver(), afterReceiver())
     println('{:.9g}'->format<exactElement()>, '{:.9g}'->format<declaredElement()>)
-    return 0
 }

@@ -4,7 +4,7 @@
 
 import { pi_hits, asian_call_price } from sim
 
-func main() => int sync {
+func main() sync {
     println('=== Sim Module Basic Tests ===')
     
     println('\n[1] pi_hits(10000, 42)')
@@ -22,5 +22,4 @@ func main() => int sync {
     println('  same seed same result =', price1 == price2)
     
     println('\n=== Sim tests completed ===')
-    return 0
 }

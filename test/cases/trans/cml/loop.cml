@@ -21,7 +21,7 @@ func announce(xs: int[]) => int sync {
     return total
 }
 
-func main() => int sync {
+func main() sync {
     let xs = [1, 2, 3]
     let total = sum(xs)
     let (i, acc) = count_to(3)
@@ -30,5 +30,4 @@ func main() => int sync {
     let p = loop p = { x: 0 } for d in [5, 6] do { x: p.x + d }
     let announced = announce([4, 5])
     println(total, i, acc, found, none, p.x, announced)
-    return 0
 }

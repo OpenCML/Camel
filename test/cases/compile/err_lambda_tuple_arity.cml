@@ -4,9 +4,8 @@ func apply_all(ps: (int, int)[]) => int[] {
     return ps->map<f>
 }
 
-func main() => int sync {
+func main() sync {
     println(apply_all<func ((a, b, c)) {
         a + b + c
     }>([(1, 2)]))
-    return 0
 }

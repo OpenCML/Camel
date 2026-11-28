@@ -19,7 +19,7 @@ func add3(a: float, b: float, c: float = 0.0) => float {
     return a + b + c
 }
 
-func main() => int sync {
+func main() sync {
     let none: () => float = func (...ys) {
         add3(1.0, 2.0, ...ys)
     }
@@ -28,5 +28,4 @@ func main() => int sync {
     }
     println('rest empty {}'->format<none()>)
     println('rest onemember {}'->format<one(5.0)>)
-    return 0
 }

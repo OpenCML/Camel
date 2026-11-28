@@ -25,7 +25,7 @@ import { max as array_max, min as array_min, sum as array_sum } from array
 import { abs, max, min } from math
 import { sum as whole_sum } from tensor
 
-func main() => int sync {
+func main() sync {
     let xs: bf16[] = [0.5, -1.5, 2.0]
     println(array_sum(xs), array_min(xs), array_max(xs))
     let hs: f16[] = [0.5, -1.5, 2.0]
@@ -51,5 +51,4 @@ func main() => int sync {
     println(whole_sum(m), whole_sum(xs))
     let h2: f16[2, 2] = [[0.5, 1.5], [2.5, 3.5]]
     println(whole_sum(h2))
-    return 0
 }

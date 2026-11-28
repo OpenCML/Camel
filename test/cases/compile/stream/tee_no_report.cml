@@ -15,7 +15,6 @@ func step(n: int) => () => (int, int..)? {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(loop acc = 0 for x in count(3) do acc + x)
-    return 0
 }

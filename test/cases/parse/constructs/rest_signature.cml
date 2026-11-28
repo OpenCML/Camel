@@ -11,9 +11,8 @@ func forward(...ts) => int {
     return total(...ts)
 }
 
-func main() => int sync {
+func main() sync {
     println(total(1, 2, 3))
     println(total(...(4, 5)))
     println(forward(6, 7))
-    return 0
 }

@@ -31,8 +31,7 @@ func divide(x: float) => float {
     return 1.0 / x
 }
 
-func main(x: float) => int sync {
+func main(x: float) sync {
     println(left(x), right(x))
     println(subtract(x), divide(x))
-    return 0
 }

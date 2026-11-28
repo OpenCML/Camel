@@ -20,11 +20,10 @@ func row(i: int) => int {
     }, 0>
 }
 
-func main() => int sync {
+func main() sync {
     println((0 .. 40)->map<row>)
     println((0 .. 40)->map<row>->reduce<func (a: int, x: int) => int {
         a + x
     }, 0>)
     println('end')
-    return 0
 }

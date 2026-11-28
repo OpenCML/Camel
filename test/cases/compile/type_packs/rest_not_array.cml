@@ -5,7 +5,6 @@ func firsts::<...A>(...xs: ...A) => (...ElementOf<A>) when ...is_array::<A>() {
     return (static for j in indices xs do xs.[j][0])
 }
 
-func main() => int sync {
+func main() sync {
     println(firsts([1, 2], 3))
-    return 0
 }

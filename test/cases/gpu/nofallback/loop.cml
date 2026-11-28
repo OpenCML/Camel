@@ -16,10 +16,9 @@ func repeat_host(x: f32[3]) => f32[3] sync {
     return y
 }
 
-func main() => int sync {
+func main() sync {
     println(regions<repeat>())
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(sum(repeat(x)))
     println(sum(repeat_host(x)))
-    return 0
 }

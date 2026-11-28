@@ -15,7 +15,7 @@ func firstKeyLo() => int sync {
     return next_key().lo
 }
 
-func main() => int {
+func main() {
     seed(7)
     let outside = next_key()
     let inside = firstKeyLo()

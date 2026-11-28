@@ -9,9 +9,8 @@ func shaped(rows: int, cols: int) => f32[...] {
     return zeros::<f32>([rows, cols])
 }
 
-func main() => int sync {
+func main() sync {
     println('before')
     let unused = shaped(3, 2) as f32[2, 3]
     println('not reached')
-    return 0
 }

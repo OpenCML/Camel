@@ -50,12 +50,11 @@ func total_plain(x: float[4]) => float {
     return sum(erf(x))
 }
 
-func main() => int sync {
+func main() sync {
     let engine = grad(total)<[0.5, 1.0, -0.75, 2.0] as float[]>()
     `erf engine={}`->format<engine>->println
     let (_, pullback) = vjp(total_plain)([0.5, 1.0, -0.75, 2.0] as float[4])
     let library = pullback(1.0).0
     let same = sum(abs(engine - library)) == 0.0
     `erf: engine={} library={} same={}`->format<engine, library, same>->println
-    return 0
 }

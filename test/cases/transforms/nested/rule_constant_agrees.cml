@@ -26,9 +26,8 @@ func loss() => f32 {
     return sum(t)
 }
 
-func main() => int sync {
+func main() sync {
     let xs: f32[] = [1.0, 2.0, 3.0, 4.0]
     let g = grad(loss)<xs>()
     println('agrees g0=', g[0], ' g3=', g[3])
-    return 0
 }

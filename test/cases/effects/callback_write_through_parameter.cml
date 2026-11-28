@@ -22,7 +22,7 @@ func apply(f: (x: int) => void, v: int) {
     f(v)
 }
 
-func main() => int sync {
+func main() sync {
     let local = state::ref(1)
     let localBefore = state::get(local)
     let counterBefore = counter
@@ -34,5 +34,4 @@ func main() => int sync {
     }, 5)
     println(localBefore, state::get(local))
     println(counterBefore, counter)
-    return 0
 }

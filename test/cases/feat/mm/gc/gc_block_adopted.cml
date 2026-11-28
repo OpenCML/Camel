@@ -16,7 +16,7 @@ func churn(rounds: int, seed: int) => int {
     return total
 }
 
-func main(pause: int, rounds: int, grow: int) => int sync {
+func main(pause: int, rounds: int, grow: int) sync {
     let start = std::mem::blocks()
     let (jLeft, acc, total) = loop j = 0, acc = [] as int[], total = 0 while j < grow do {
         let c = if j < pause then churn(rounds, j) else 0
@@ -24,5 +24,4 @@ func main(pause: int, rounds: int, grow: int) => int sync {
     }
     let now = std::mem::blocks()
     println('gc_block_adopted len={} total={} bytes={}'->format<len(acc), total, now.bytes - start.bytes>)
-    return 0
 }

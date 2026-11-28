@@ -11,7 +11,7 @@ with <ax: int>
 func axis(x: f32[2, 3]) => f32[...] {
     return x + sum<ax, true>(x)
 }
-func main() => int sync {
+func main() sync {
     let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]) as f32[2, 3]
     let y = reshape<[4, 1]>([1.0, 2.0, 3.0, 4.0] as f32[])
     println(inspect<fixed>(x))
@@ -26,5 +26,4 @@ func main() => int sync {
     println(sum(abs(download(run_preferred_resident<dynamic>(y)) - dynamic(y))))
     println(sum(abs(download(run_preferred_resident<axis<0>>(x)) - axis<0>(x))))
     println(sum(abs(download(run_preferred_resident<axis<1>>(x)) - axis<1>(x))))
-    return 0
 }

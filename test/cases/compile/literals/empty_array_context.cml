@@ -28,7 +28,7 @@ func inferred(n: int) => int[] sync {
     return squares
 }
 
-func main() => int sync {
+func main() sync {
     // A cast: the same literal with the element type of the cast.
     let none = [] as int[]
     println(len(none))
@@ -46,5 +46,4 @@ func main() => int sync {
     let box = { xs: [] }
     println(len(box.xs))
     println(takes([]))
-    return 0
 }

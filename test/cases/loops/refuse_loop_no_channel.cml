@@ -9,7 +9,6 @@ func f() => float {
     return w * float(n)
 }
 
-func main() => int sync {
+func main() sync {
     println(grad(f)<2.0>())
-    return 0
 }

@@ -2,6 +2,6 @@ func element(t: (int, int)) => int {
     return t.[2]
 }
 
-func main() => int {
-    return element((1, 2))
+func main() {
+    element((1, 2))
 }

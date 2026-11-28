@@ -39,9 +39,8 @@ func read_sync() => int sync {
     return t
 }
 
-func main() => int sync {
+func main() sync {
     dropped_nsync()
     dropped_sync()
     println(read_nsync(), read_sync())
-    return 0
 }

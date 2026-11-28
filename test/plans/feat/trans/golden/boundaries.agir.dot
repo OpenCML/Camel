@@ -48,9 +48,8 @@ digraph GraphIR {
         N13 [label="gate={}", type="DATA", origin=<ORIGIN>, span="19:4-19:13", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="string"];
         N14 [label=":str/format", type="OPER", role="export-capability", origin=<ORIGIN>, span="19:21-19:27", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="string"];
         N15 [label=":io/println", type="OPER", role="effect;export-capability", origin=<ORIGIN>, span="19:29-19:36", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="string"];
-        N16 [label="0", type="DATA", origin=<ORIGIN>, span="20:11-20:12", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="int"];
-        N17 [label="GATE", type="GATE", value_type="int"];
-        N17 -> O01 [label="0", type="EXIT"];
+        N16 [label="GATE", type="GATE", value_type="string"];
+        N16 -> O01 [label="0", type="EXIT"];
         N0D -> N0F [label="0|0", type="WITH"];
         N0E -> N0F [label="0|0", type="NORM"];
         N0F -> N10 [label="0|0", type="NORM"];
@@ -67,15 +66,15 @@ digraph GraphIR {
         N14 -> N15 [label="0|0", type="NORM"];
         N14 -> N15 [label="0|0", type="CTRL"];
         N14 -> N15 [label="SYNC", type="SYNC"];
-        N16 -> N17 [label="0|0", type="NORM"];
-        N15 -> N17 [label="0|0", type="CTRL"];
-        N15 -> N17 [label="SYNC", type="SYNC"];
+        N15 -> N16 [label="0|0", type="NORM"];
+        N15 -> N16 [label="0|0", type="CTRL"];
+        N15 -> N16 [label="SYNC", type="SYNC"];
     }
     O00 [label="EXIT", type="EXIT"];
-    N18 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="17:0-21:1", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="() => int uses var console"];
-    N19 [label="CALL", type="CALL", value_type="int"];
-    N19 -> O00 [label="0", type="EXIT"];
-    N18 -> N19 [label="0|0", type="WITH"];
+    N17 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="17:0-20:1", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="() => string uses var console"];
+    N18 [label="CALL", type="CALL", value_type="string"];
+    N18 -> O00 [label="0", type="EXIT"];
+    N17 -> N18 [label="0|0", type="WITH"];
     subgraph cluster_legend {
         label="roles";
         "legend_scalar-boundary" [label="scalar boundary (tensor <-> host number)", type="LEGEND", role="scalar-boundary"];

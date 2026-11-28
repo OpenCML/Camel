@@ -11,7 +11,7 @@ func rank(v: f32[...]) => int {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     let scalar: f32 = 2.5
     println(rank(scalar))
     let row: f32[3] = [1.0, 2.0, 3.0]
@@ -22,5 +22,4 @@ func main() => int sync {
     println(open)
     let cast = scalar as f32[...]
     println(cast)
-    return 0
 }

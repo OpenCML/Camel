@@ -10,10 +10,9 @@ func tangent_of::<T>(x: T) => Tangent<T> {
     return x as Tangent<T>
 }
 
-func main() => int sync {
+func main() sync {
     let v: (float, ()) = (1.0, ())
     println(v as Tangent<(float, int)>)
     println(tangent_of::<(float, float)>((2.0, 3.0)))
     println((4.0, 5.0) as (float, float))
-    return 0
 }

@@ -21,7 +21,7 @@
 
 import { sum } from array
 
-func main() => int sync {
+func main() sync {
     // The integer declaration's executor: `array:sum_i`.
     let small: i32[] = [1, 2, 3]
     println('i32 {}', sum(small))
@@ -36,5 +36,4 @@ func main() => int sync {
     let z1: c64 = 3 + 4i
     let complex: c64[] = [z0, z1]
     println('complex {}', sum(complex))
-    return 0
 }

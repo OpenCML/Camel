@@ -14,12 +14,11 @@ func effect_value() => int sync {
     return println(4)
 }
 
-func main() => int sync {
+func main() sync {
     constant()
     println(2)
     effect_value()
     println(5)
     let kept = effect_value()
     println(kept)
-    return 0
 }

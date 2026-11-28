@@ -44,7 +44,7 @@ func normalize(x: f32[...]) => f32[...] {
 func mixed(x: f32[...]) => (float, f32[...], float) {
     return (float(sum(x)), x + 1.0, 1.0000000000000002)
 }
-func main() => int sync {
+func main() sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     let vg = func (v: f32[...]) => (float, f32[...]) {
         with_grad(loss)<v>()
@@ -64,5 +64,4 @@ func main() => int sync {
     println(download(run_preferred_resident<total>(zeros::<f32>([0]))))
     println(inspect<mixed>(exact))
     println(benchmark<vg>(x))
-    return 0
 }

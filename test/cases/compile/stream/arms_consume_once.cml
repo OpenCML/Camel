@@ -35,10 +35,9 @@ func pullOrLoop(flag: bool, s: int..) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(pullOrPull(true, count(3)))
     println(pullOrPull(false, count(3)))
     println(pullOrLoop(true, count(3)))
     println(pullOrLoop(false, count(3)))
-    return 0
 }

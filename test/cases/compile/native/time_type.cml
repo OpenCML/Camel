@@ -6,7 +6,6 @@
 
 import { strptime } from time
 
-func main() => int sync {
+func main() sync {
     println(strptime<'%Y'>(42))
-    return 0
 }

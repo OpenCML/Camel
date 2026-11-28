@@ -6,6 +6,6 @@ func pick(c: bool, a: int, b: int) => int {
     return if c then a else b
 }
 
-func main() => int {
-    return pick(true, 3, 4)
+func main() {
+    pick(true, 3, 4)
 }

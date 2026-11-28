@@ -20,7 +20,6 @@ func repeat(n: int, left: int, total: int) => int {
     return if left == 0 then total else repeat(n, left - 1, total + weigh(kept(n, left)))
 }
 
-func main() => int sync {
+func main() sync {
     println('filter_keeps_all total={}'->format<repeat(3000, 40, 0)>)
-    return 0
 }

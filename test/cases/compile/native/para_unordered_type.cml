@@ -6,9 +6,8 @@
 
 import { unordered_foreach } from para
 
-func main() => int sync {
+func main() sync {
     unordered_foreach<func (item: int) {
         item
     }>(42)
-    return 0
 }

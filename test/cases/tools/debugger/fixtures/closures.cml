@@ -8,7 +8,7 @@ func classify(n: int) => string {
     return if n > 2 then 'big' else 'small' // mark:branch
 }
 
-func main() => int sync {
+func main() sync {
     let base = 10
     let add = make_adder(base) // mark:make
     let ys = [1, 2, 3]->map<func (x: int) => int {
@@ -18,5 +18,4 @@ func main() => int sync {
     println(add(5)) // mark:calladd
     println(ys)
     println(classify(3)) // mark:classify
-    return 0
 }

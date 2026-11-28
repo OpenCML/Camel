@@ -12,7 +12,7 @@ func eq(a: string, b: string) => bool {
     return a == b
 }
 
-func main() => int sync {
+func main() sync {
     println(cat('ab', 'cd'))
     println(cat('', ''))
     println(len(cat('abc', 'de')))
@@ -23,5 +23,4 @@ func main() => int sync {
     println(lt('Z', 'a'))
     println(lt('', 'a'))
     println(cat(cat('x', string(12)), cat('y', string(-3))))
-    return 0
 }

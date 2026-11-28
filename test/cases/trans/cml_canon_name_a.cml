@@ -13,7 +13,6 @@ func bump2(x: int) => int {
     return step
 }
 
-func main() => int sync {
+func main() sync {
     println(bump(1), bump2(2))
-    return 0
 }

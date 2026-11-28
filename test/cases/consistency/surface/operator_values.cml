@@ -27,7 +27,7 @@ func pick(upper: bool) => (s: string) => string {
     return if upper then to_upper else trim
 }
 
-func main() => int sync {
+func main() sync {
     println([' a ', ' b']->map<trim>)
     println(['a', 'b']->map<to_upper>)
     println(apply(trim, '  padded  ') + '|')
@@ -39,5 +39,4 @@ func main() => int sync {
     // Several signatures: the parameter type of the callee selects one.
     println(on_int(abs, -3), on_float(abs, -2.5))
     println(on_int(twice, 21), on_float(twice, 1.25))
-    return 0
 }

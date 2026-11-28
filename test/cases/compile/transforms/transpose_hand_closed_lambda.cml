@@ -22,7 +22,7 @@ func g(x: float) => float {
     return x * x
 }
 
-func main() => int sync {
+func main() sync {
     // The cut's second half: closed over the residuals, which hold x = 3.
     let (_, lin) = split(jvp(g))(3.0)
     let byCut = transpose(lin)
@@ -36,5 +36,4 @@ func main() => int sync {
     let byHand = transpose(hand)
     println('hand ct1=', byHand(1.0))
     println('hand ct3=', byHand(3.0))
-    return 0
 }

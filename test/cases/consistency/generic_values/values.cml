@@ -46,7 +46,7 @@ func each::<T, U>(xs: T[], f: (x: T) => U) => U[] {
     return xs->map<f>
 }
 
-func main() => int sync {
+func main() sync {
     // passed to another generic function: its other arguments fix the types
     println(apply(id, 3), apply(id, 'a'), apply(pair, 2), apply(first, [7, 8]))
     // two of them in one call, the second waiting for the first
@@ -66,5 +66,4 @@ func main() => int sync {
     println(f(4), g([2.5]), pick()('s'))
     // a variable that its first binding position leaves open takes its type elsewhere
     println(or_zero(null, 4), or_zero(7, 4))
-    return 0
 }

@@ -10,6 +10,6 @@ func bad(t: (int, int), k: int) => int {
     }
 }
 
-func main() => int {
-    return bad((1, 2), 10)
+func main() {
+    bad((1, 2), 10)
 }

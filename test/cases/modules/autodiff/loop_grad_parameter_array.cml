@@ -14,7 +14,6 @@ func f() => float {
     return loop acc = w for x in xs do acc + x * w
 }
 
-func main() => int sync {
+func main() sync {
     'loop_grad_parameter_array d={}'->format<grad(f)<2.0>()>->println
-    return 0
 }

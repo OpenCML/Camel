@@ -8,8 +8,7 @@ func calc() => int {
     return y
 }
 
-func main() => int sync {
+func main() sync {
     let out = calc()
     'inline_no_param_reverse_root out={}'->format<out>->println
-    return 0
 }

@@ -5,7 +5,7 @@
 import { asian_call_price } from sim
 import { now } from time
 
-func main() => int sync {
+func main() sync {
     let workers = 50
     let paths_per_worker = 200000
     let steps = 256
@@ -27,5 +27,4 @@ func main() => int sync {
     'Worker prices (first 8 shown) = {}'->format<prices[0..8]>->println
     'Estimated Asian call price = {:.6f}'->format<price>->println
     'Asian option Monte Carlo completed in {:.2f} seconds'->format<duration>->println
-    return 0
 }

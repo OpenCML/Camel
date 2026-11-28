@@ -22,7 +22,7 @@ func pair() => float[2] {
     return [1.0, 2.0]
 }
 
-func main() => int sync {
+func main() sync {
     let xs: float[2][3] = [pair(), pair(), pair()]
     let outside = extent_of::<float[2][3]>()
     let innermost = extent_of::<float[2]>()
@@ -36,5 +36,4 @@ func main() => int sync {
     println(outside == rank2)
     println(innermost)
     println(rank2)
-    return 0
 }

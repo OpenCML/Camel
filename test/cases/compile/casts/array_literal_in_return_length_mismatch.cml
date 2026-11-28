@@ -5,8 +5,7 @@ func bad() => float[3] sync {
     return [1.5, 2.5]
 }
 
-func main() => int sync {
+func main() sync {
     let xs = bad()
     println(xs)
-    return 0
 }

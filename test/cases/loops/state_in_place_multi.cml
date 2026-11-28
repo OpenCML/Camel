@@ -65,7 +65,7 @@ func sameLiteral(n: int) => (int[], int[]) {
     return loop a = [0], b = [0] while len(a) < n do (a->append<1>, b->append<2>)
 }
 
-func main() => int sync {
+func main() sync {
     let b0 = std::mem::blocks()
     let (xs, count, flip, total) = threeTyped(200)
     let b1 = std::mem::blocks()
@@ -109,5 +109,4 @@ func main() => int sync {
         b9.allocs - b8.allocs,
         b10.allocs - b9.allocs
     )
-    return 0
 }

@@ -5,10 +5,9 @@
  * address.
  */
 
-func main() => int sync {
+func main() sync {
     let xs = [1, 2, 3]
     let ys = [...xs, 4]
     println('never printed')
     println(ys)
-    return 0
 }

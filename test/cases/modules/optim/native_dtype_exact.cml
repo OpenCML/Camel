@@ -45,7 +45,7 @@ func total() => float {
     return float(sum(m.wide)) + float(sum(m.narrow))
 }
 
-func main() => int sync {
+func main() sync {
     let model: Leaves = {
         wide: [16777217.0, 1.0] as f64[],
         narrow: [f32(16777217.0), f32(1.0)]
@@ -107,5 +107,4 @@ func main() => int sync {
     
     'optim native_dtype_exact adam leaves={} elements={} wide_bytes={} narrow_bytes={} wide_agrees={} narrow_agrees={}'->format<leaves, elements, len(to_bytes(second.0.wide)), len(to_bytes(second.0.narrow)), agrees_wide, agrees_narrow>->println
     'optim native_dtype_exact failures={}'->format<failures>->println
-    return failures
 }

@@ -10,7 +10,6 @@ func f(x: (int?)?) => int {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     println('never printed')
-    return 0
 }

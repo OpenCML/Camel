@@ -69,7 +69,7 @@ func scaled() => float {
     return k * x * 2.0
 }
 
-func main() => int sync {
+func main() sync {
     let gx = grad(weighted)<3.0>(2.0)
     let vg = with_grad(weighted)<3.0>(2.0)
     
@@ -101,5 +101,4 @@ func main() => int sync {
     'grad_first_with_parameter pg={} pvg={}'->format<pg, pvg>->println
     'grad_first_with_parameter wg={} wvg={}'->format<wg, wvg>->println
     'grad_first_with_parameter sk={} sx={}'->format<sk, sx>->println
-    return 0
 }

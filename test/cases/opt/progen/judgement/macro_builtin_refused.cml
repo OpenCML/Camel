@@ -13,7 +13,6 @@ func total(n: int) => int {
     }, 0>
 }
 
-func main() => int sync {
+func main() sync {
     println(total(4))
-    return 0
 }

@@ -38,12 +38,11 @@ func named_axis() => float {
     return sum(mean<1, true>(w))
 }
 
-func main() => int sync {
+func main() sync {
     let input = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
     let negative = grad(last_axis)<input>()
     let positive = grad(named_axis)<input>()
     `mean_axis_negative negative={}`->format<negative>->println
     `mean_axis_negative positive={}`->format<positive>->println
     `mean_axis_negative same={}`->format<negative == positive>->println
-    return 0
 }

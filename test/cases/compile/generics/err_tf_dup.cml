@@ -1,5 +1,4 @@
 type Two<T, T> = (T, T)
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

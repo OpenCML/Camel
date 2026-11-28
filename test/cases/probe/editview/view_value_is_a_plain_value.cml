@@ -19,7 +19,6 @@ func count(g: (x: int) => int) => int {
     return n + 1
 }
 
-func main() => int sync {
+func main() sync {
     println(count(dbl))
-    return 0
 }

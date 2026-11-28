@@ -17,12 +17,11 @@ func pair(a: float, b: float) => (float, float) {
     return (a + b, a * b)
 }
 
-func main() => int sync {
+func main() sync {
     println(available())
     println(download(run_preferred_resident<add>((2.0, 3.0))))
     println(download(run_preferred_resident<effect>(4.0)))
     println(download(run_preferred_resident<nested>((2.0, 3.0))))
     let p = download(run_preferred_resident<pair>((2.0, 3.0)))
     println(p.0, p.1)
-    return 0
 }

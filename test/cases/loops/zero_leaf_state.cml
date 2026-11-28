@@ -21,11 +21,10 @@ func printing(xs: int[]) => Nothing {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let a = carried(3)
     let c = printing([7, 8])
     let fresh: Nothing = {}
     println(a, c)
     println(a == fresh)
-    return 0
 }

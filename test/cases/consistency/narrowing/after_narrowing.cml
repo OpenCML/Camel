@@ -16,9 +16,8 @@ func describe(x: int?, ready: bool) => string {
     } else 'none'
 }
 
-func main() => int sync {
+func main() sync {
     println(describe(4, true))
     println(describe(null, true))
     println(describe(4, false))
-    return 0
 }

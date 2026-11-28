@@ -19,7 +19,7 @@ func label(p: Product?) => string {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let catalog: Product[] = [
         { id: 10, name: 'lamp', price: 19.5 },
         { id: 20, name: 'desk', price: 120.0 },
@@ -40,5 +40,4 @@ func main() => int sync {
     
     let nothing: int? = null
     println(nothing, nothing ?? -1)
-    return 0
 }

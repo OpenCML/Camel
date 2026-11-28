@@ -6,7 +6,6 @@ func ident(x: float) => float {
     return x
 }
 
-func main() => int sync {
+func main() sync {
     println(ident(2.5))
-    return 0
 }

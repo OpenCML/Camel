@@ -21,7 +21,7 @@ func square(x: int) => int {
     return x * x
 }
 
-func main() => int sync {
+func main() sync {
     let add3 = adder(3)
     println(twice(add3, 1), twice(square, 3), compose(add3, square)(2))
     let xs = [1, 2, 3, 4, 5, 6]
@@ -39,5 +39,4 @@ func main() => int sync {
     }>
     let words = ['camel', 'graph'][0]->contains<'mel'>
     println(words, square)
-    return 0
 }

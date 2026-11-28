@@ -39,7 +39,7 @@ func halved(x: f32[...]) => f16[...] {
     return f16(x)
 }
 
-func main() => int sync {
+func main() sync {
     let tenth: f32[] = [0.1]
     println(to_array(to_bytes(narrowed(tenth))))
     
@@ -71,5 +71,4 @@ func main() => int sync {
     let overF16 = halved(f16Over)
     println(to_array(to_bytes(overF16)))
     println(to_array(to_bytes(f32(overF16))))
-    return 0
 }

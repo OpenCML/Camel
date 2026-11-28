@@ -13,7 +13,7 @@ func unit_cost(n: Node, inputs: float[]) => float {
     }, 0.0>
 }
 
-func main() => int sync {
+func main() sync {
     let rules = [bump_one]
     let g = target->rewrite<rules> !! target
     println(target(5), g(5))
@@ -26,5 +26,4 @@ func main() => int sync {
     println(e(5))
     println(len(check_text(rules->check<8, 1>)) > 0)
     println(len((rules->check<8, 1>(target)).rows))
-    return 0
 }

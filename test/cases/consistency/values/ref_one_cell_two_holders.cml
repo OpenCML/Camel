@@ -5,7 +5,7 @@
 
 import state
 
-func main() => int sync {
+func main() sync {
     let n = state::ref(0)
     let bump = func () => int sync {
         return state::update(n, func (x: int) {
@@ -17,5 +17,5 @@ func main() => int sync {
     println(state::get(n))
     state::set(n, 10)
     println(bump())
-    return 0
+    0
 }

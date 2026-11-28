@@ -2,8 +2,7 @@ func u46(a47: string?, a48: string) => string {
     return 'm'
 }
 
-func main() => int sync {
+func main() sync {
     var v68 = ''
     u46(v68, '{},{}'->format<true, 2>)
-    return 0
 }

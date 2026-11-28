@@ -33,7 +33,7 @@ func twice::<T>(x: T) => (T, T) {
     return (x, x)
 }
 
-func main() => int sync {
+func main() sync {
     let a = show(1)
     let b = show('two')
     tally(a, 2)
@@ -43,5 +43,4 @@ func main() => int sync {
     println(name_of({ name: 'n' }))
     println(name_of({ name: 5 }))
     println(twice(3))
-    return 0
 }

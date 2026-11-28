@@ -31,7 +31,7 @@ func report(j: Json) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     let m = [('a', 1), ('b', 2)] as Map<string, int>
     let s = [3, 1, 2] as Set<int>
     // The name reaches the position in each rule, and the type of the argument picks the rule.
@@ -43,5 +43,5 @@ func main() => int sync {
     println(items(m), items(s))
     // A single rule of a declaration module: its one parameter is `s`.
     println('[' + trim(s: '  x  ') + ']', '[' + trim('  x  ') + ']')
-    return decode('{"a": 7, "b": 8}')->report !! 1
+    decode('{"a": 7, "b": 8}')->report !! 1
 }

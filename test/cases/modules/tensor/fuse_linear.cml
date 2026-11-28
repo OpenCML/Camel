@@ -8,7 +8,7 @@
 
 import { reshape, relu, sum } from tensor
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[2, 3]>([1.0, -2.0, 3.0, 0.5, -1.5, 2.5] as f32[])
     let w = reshape<[3, 2]>([0.5, -1.0, 2.0, 1.0, -0.5, 0.25] as f32[])
     let u = reshape<[2, 2]>([1.0, 2.0, -1.0, 0.5] as f32[])
@@ -21,5 +21,4 @@ func main() => int sync {
     let d = product + b
     let e = x @ w + full
     'fuse a={} c={} chained={} product={} d={} e={}'->format<sum(a), sum(c), sum(chained), sum(product), sum(d), sum(e)>->println
-    return 0
 }

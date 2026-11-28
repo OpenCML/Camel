@@ -6,7 +6,6 @@
 
 import array
 
-func main() => int sync {
+func main() sync {
     println(array::sum([1, 2, 3]))
-    return 0
 }

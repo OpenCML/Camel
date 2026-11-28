@@ -27,7 +27,7 @@ func greet(name: string, greeting: string = 'hello') => string {
     return greeting + ' ' + name
 }
 
-func main() => int sync {
+func main() sync {
     // Omitted: the declaration's default.
     println(add(1))
     // Supplied by position: the argument wins.
@@ -49,5 +49,4 @@ func main() => int sync {
     // written after it still selects its parameter.
     println(1->three(c: 3))
     println(1->add)
-    return 0
 }

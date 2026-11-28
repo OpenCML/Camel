@@ -34,8 +34,7 @@ func greet() => string {
     return 'generic law'
 }
 
-func main() => int sync {
+func main() sync {
     println(greet())
     println(i64_zero(7), i64_also_zero(8), i32_zero(9), f64_minus_zero(1.5))
-    return 0
 }

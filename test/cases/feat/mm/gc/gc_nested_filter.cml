@@ -50,7 +50,6 @@ func repeat(n: int, left: int, total: int) => int {
     return if left == 0 then total else repeat(n, left - 1, total + probe_rows(rows(n, left), n) + len(kept(n, left)) + total_of(kept(n, left)))
 }
 
-func main(reps: int) => int sync {
+func main(reps: int) sync {
     println('gc_nested_filter total={}'->format<repeat(128, reps, 0)>)
-    return 0
 }

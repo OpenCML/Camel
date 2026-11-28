@@ -8,7 +8,7 @@ func spin(n: int) => int {
     return spin(n + 1)
 }
 
-func main() => int {
+func main() {
     let xs = (1, 2)
-    return xs.[spin(0)]
+    xs.[spin(0)]
 }

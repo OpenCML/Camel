@@ -26,16 +26,16 @@ export func interfere::<F>(p: F) => F! sync {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let p = redex
-    return match interfere(p) {
+    match interfere(p) {
         case error e => sync {
             println('outer error value: ', e.kind)
-            return 1
+            1
         }
         case q => sync {
             println('interleaved ok')
-            return 0
+            0
         }
     }
 }

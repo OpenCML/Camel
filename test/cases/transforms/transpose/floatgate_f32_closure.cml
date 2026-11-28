@@ -26,11 +26,10 @@ func f(x: f32, y: f32) => f32 {
     return x * x * y
 }
 
-func main() => int sync {
+func main() sync {
     let fwd = split(jvp(f))
     let (value, lin) = fwd(3.0, 2.0)
     let back = transpose(lin)
     let (bx, by) = back(1.0)
     'closure f32 value={} dx={} dy={}'->format<value, bx, by>->println
-    return 0
 }

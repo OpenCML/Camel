@@ -4,6 +4,5 @@ export tag width(w: int) on type
 #width
 type T = { a: int }
 
-func main() => int {
-    return 0
+func main() {
 }

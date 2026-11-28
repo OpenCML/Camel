@@ -38,9 +38,9 @@ func reread(a: int) => int sync {
 }
 
 // The results are used, so that every call stays ordered when the calls are inlined.
-func main() => int sync {
+func main() sync {
     let a = reassigned(1)
     let b = refilled(1) + a
     let c = refilled(1) + b
-    return reread(1) + c
+    reread(1) + c
 }

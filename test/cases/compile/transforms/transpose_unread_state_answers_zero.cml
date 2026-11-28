@@ -21,7 +21,7 @@ func m(x: float) => float {
     return loop s = x for i in [1, 2, 3] do s + 2.0
 }
 
-func main() => int sync {
+func main() sync {
     println('k value=', k(3.0))
     let back = transpose(k)
     println('k pullback(1.0)=', back(1.0))
@@ -29,5 +29,4 @@ func main() => int sync {
     println('m value=', m(3.0))
     let control = transpose(m)
     println('m pullback(1.0)=', control(1.0))
-    return 0
 }

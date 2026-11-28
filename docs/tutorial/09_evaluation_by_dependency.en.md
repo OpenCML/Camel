@@ -38,9 +38,8 @@ func total_with_a_spare(n: int) => int {
     return total(n)
 }
 
-func main() => int sync {
+func main() sync {
     println(total(10), total_with_a_spare(10))
-    return 0
 }
 ```
 
@@ -94,9 +93,8 @@ func total_with_a_spare(n: int) => int {
     return total(n)
 }
 
-func main() => int sync {
+func main() sync {
     println(total(10), total_with_a_spare(10))
-    return 0
 }
 ```
 
@@ -215,7 +213,7 @@ func longer(a: (int, int), b: (int, int)) => (int, int) {
     return if b.1 > a.1 then b else a
 }
 
-func main() => int sync {
+func main() sync {
     // Eight independent blocks of 2000 start values; each block is one element of the map.
     let block = 2000
     let results = (0..8)->map<func (i: int) => (int, int) { longest_in(i * block + 1, (i + 1) * block + 1) }>
@@ -223,7 +221,6 @@ func main() => int sync {
     println(results)
     let best = results->reduce<longer, (1, 0)>
     println(format<8 * block, best.0, best.1>('longest up to {}: start {} takes {} steps'))
-    return 0
 }
 ```
 
@@ -272,9 +269,8 @@ func total(n: int) => int {
     return price(tax(n))
 }
 
-func main() => int sync {
+func main() sync {
     println(total(100))
-    return 0
 }
 ```
 

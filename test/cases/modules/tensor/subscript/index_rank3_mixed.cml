@@ -26,7 +26,7 @@ func taken(c: f32[2, 3, 4], idx: int[2]) => float {
     return cube(c[.., idx, 2..4])
 }
 
-func main() => int sync {
+func main() sync {
     println('ran')
     let c = reshape<[2, 3, 4]>([
         1.0,
@@ -58,5 +58,4 @@ func main() => int sync {
     println(shape(c[.., [1, 1], 2..4]))
     println('one={}'->format<plane(c[.., 1, 2..4])>)
     println('two={}'->format<taken(c, [1, 1])>)
-    return 0
 }

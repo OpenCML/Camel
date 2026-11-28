@@ -40,7 +40,7 @@ func rethrow(r: int!) => int! {
     }
 }
 
-func main() => int sync {
+func main() sync {
     let a = safe_div(10, 2)
     let b = safe_div(1, 0)
     println(a)
@@ -55,5 +55,4 @@ func main() => int sync {
     println(show(safe_div(0, 1)->tenth_of->double))
     println(show(rethrow(a)))
     println(show(rethrow(b)))
-    return 0
 }

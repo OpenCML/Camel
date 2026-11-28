@@ -31,8 +31,7 @@ func wide(x: int) => int sync {
     return x + 3
 }
 
-func main() => int sync {
+func main() sync {
     let h = pick(true)
     println(h(1))
-    return 0
 }

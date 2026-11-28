@@ -9,10 +9,9 @@ func noisy() => int sync {
     return 1
 }
 
-func main() => int sync {
+func main() sync {
     let a = noisy() + 1
     let b = noisy() + 2
     println(a)
     println(b)
-    return 0
 }

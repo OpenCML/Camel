@@ -11,7 +11,6 @@ func shout() => int pure {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println(shout())
-    return 0
 }

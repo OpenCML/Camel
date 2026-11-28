@@ -3,7 +3,6 @@
 
 import lib_uses_include
 
-func main() => int sync {
+func main() sync {
     println(lib_uses_include::value())
-    return 0
 }

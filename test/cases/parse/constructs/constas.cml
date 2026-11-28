@@ -12,7 +12,6 @@ func affine(
     return float(sum(a)) + float(sum(b))
 }
 
-func main() => int sync {
+func main() sync {
     println(affine(ones::<f32>([2]), ones::<f32>([3])))
-    return 0
 }

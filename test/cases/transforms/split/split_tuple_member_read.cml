@@ -43,7 +43,7 @@ func h(qq: Point) => float {
     return qq.a * 4.0 + qq.b
 }
 
-func main() => int sync {
+func main() sync {
     // The cut, before the pullback: the numbers the transform was never wrong about.
     let lifted = jvp(g)
     let (v, t) = lifted((2.0, 3.0), (1.0, 0.0))
@@ -63,5 +63,4 @@ func main() => int sync {
     // The same read written as a name.
     let (yh, pbh) = vjp(h)({ a: 2.0, b: 3.0 })
     println('vjph y=', yh, ' dq=', pbh(1.0))
-    return 0
 }

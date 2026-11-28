@@ -33,7 +33,7 @@ func my_reduce::<U, T>(xs: T[]) => U {
     return xs->reduce<f, init>
 }
 
-func main() => int sync {
+func main() sync {
     println(my_head([3, 4]))
     println(my_head(['h', 't']))
     println(my_tail([3, 4, 5]))
@@ -46,5 +46,4 @@ func main() => int sync {
     println([1, 2, 3]->my_reduce<func (acc: int, x: int) {
         acc + x
     }, 0>)
-    return 0
 }

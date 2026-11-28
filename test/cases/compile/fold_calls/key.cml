@@ -17,8 +17,7 @@ func first_of::<S>(v: S) {
     return v.[first_field::<S>()]
 }
 
-func main() => int sync {
+func main() sync {
     println(first_of({ x: 7, y: (8, 9) }))
     println(first_of({ w: 1.5, h: 2.5 }))
-    return 0
 }

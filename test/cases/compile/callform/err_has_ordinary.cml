@@ -1,5 +1,4 @@
-func main() => int sync {
+func main() sync {
     let s = [(1, 10)] as Map<int, int>
     println(has(s, 2))
-    return 0
 }

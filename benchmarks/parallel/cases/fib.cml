@@ -6,7 +6,6 @@ func fib(n: int) => int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)
 }
 
-func main() => int sync {
+func main() sync {
     println(fib(30))
-    return 0
 }

@@ -7,8 +7,7 @@ func twice(x: float) => float {
     return x + x
 }
 
-func main() => int sync {
+func main() sync {
     let doubled = twice(2.0)
     println(doubled + 1.0)
-    return 0
 }

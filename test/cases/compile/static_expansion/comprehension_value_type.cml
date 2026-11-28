@@ -18,11 +18,10 @@ func half(x: float) => float {
     return x * 0.5
 }
 
-func main() => int sync {
+func main() sync {
     let t = { p: { x: 1, y: 2 }, q: (3, 4) }
     let w = widen(t)
     // Each argument binds to the `float` parameter: the fields hold the values' types.
     println(half(w.p.x), half(w.p.y), half(w.q.0), half(w.q.1))
     println(half(widen(5)))
-    return 0
 }

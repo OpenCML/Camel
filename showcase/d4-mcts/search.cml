@@ -288,7 +288,7 @@ func mark_of(character: string) => int {
     else if character == 'X' then 1 else 2
 }
 
-func main(seed: int, playouts: int, position: string) => int sync {
+func main(seed: int, playouts: int, position: string) sync {
     let board = board_of(position)
     let x_marks = board->count<func (mark: int) => bool {
         mark == 1
@@ -338,5 +338,4 @@ func main(seed: int, playouts: int, position: string) => int sync {
         `d4 child place=${child.place} visits=${child.visits} score=${child.score:.6f} mean=${mean:.6f}`->println
         index + 1
     }
-    return 0
 }

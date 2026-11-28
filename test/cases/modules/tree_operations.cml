@@ -11,7 +11,7 @@ func bump(x: int) => int {
 func bump(x: float) => float {
     return x + 0.5
 }
-func main() => int sync {
+func main() sync {
     let p = { w: 3.0, block: (4.0, 5.0) }
     println(tree_map<func (a: float, b: float) => float {
         a + b
@@ -46,5 +46,4 @@ func main() => int sync {
     println(tree_unzip(tree_map<func (a: int) {
         (a, a + 1)
     }>({ x: 1, y: (2, 3) }), { x: 0, y: (0, 0) }))
-    return 0
 }

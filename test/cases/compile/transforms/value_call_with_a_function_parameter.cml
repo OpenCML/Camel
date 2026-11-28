@@ -9,11 +9,10 @@ func square(z: float) => float {
     return z * z
 }
 
-func main() => int sync {
+func main() sync {
     let (value, pullback) = vjp(func (h: (z: float) => float, w: float) => float {
         h(w)
     })(square, 3.0)
     let cotangents = pullback(1.0)
     println('value={} cotangents={}'->format<value, cotangents>)
-    return 0
 }

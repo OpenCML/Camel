@@ -11,7 +11,6 @@ func helper() => int {
     return x + y
 }
 
-func main() => int sync {
+func main() sync {
     println('never printed')
-    return 0
 }

@@ -17,8 +17,7 @@ func small(n: int) => int {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(area(Shape::Empty))
     println(small(1))
-    return 0
 }

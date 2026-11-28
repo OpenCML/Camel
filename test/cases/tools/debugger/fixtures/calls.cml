@@ -7,11 +7,10 @@ func next(x: int) => int {
     return x + 1
 }
 
-func main() => int sync {
+func main() sync {
     let x = 3
     let a = double(x)
     let b = next(x)
     let c = a + b
     println(c)
-    return 0
 }

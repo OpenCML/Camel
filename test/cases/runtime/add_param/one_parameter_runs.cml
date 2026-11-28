@@ -25,7 +25,6 @@ func pair(a: int, b: int) => int {
     return a * 100 + b
 }
 
-func main() => int sync {
+func main() sync {
     println(`[add_param_run] pair=${pair(41, 1)}`)
-    return 0
 }

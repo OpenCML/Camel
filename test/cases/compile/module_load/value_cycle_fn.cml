@@ -5,7 +5,6 @@ func compute() => int {
     return total + 1
 }
 
-func main() => int sync {
+func main() sync {
     println(total)
-    return 0
 }

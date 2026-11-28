@@ -11,9 +11,8 @@ func f(x: float) => float {
     return loop s = 0.0 for i in [1, 2, 3, 4] do s + 1.0
 }
 
-func main() => int sync {
+func main() sync {
     let (value, tangent) = jvp(f)(3.0, 1.0)
     println(value)
     println(tangent)
-    return 0
 }

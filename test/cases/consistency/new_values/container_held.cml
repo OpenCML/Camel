@@ -19,7 +19,7 @@
 
 type Bag = { label: string, xs: int[] }
 
-func main() => int sync {
+func main() sync {
     let a: Bag = { label: 'a', xs: [1, 2] }
     var b = a
     b.xs[0] = 9
@@ -30,5 +30,4 @@ func main() => int sync {
     }>
     let grown = rows[1]->append<2>
     println(rows, grown)
-    return 0
 }

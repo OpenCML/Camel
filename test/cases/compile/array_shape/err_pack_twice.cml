@@ -3,6 +3,5 @@ func bad(x: f32[...a, ...b]) => int {
     return 0
 }
 
-func main() => int sync {
-    return 0
+func main() sync {
 }

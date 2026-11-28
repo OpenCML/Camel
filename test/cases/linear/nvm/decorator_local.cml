@@ -2,7 +2,7 @@
 func identity(f: (x: float) => float) => (x: float) => float {
     return f
 }
-func main() => int sync {
+func main() sync {
     println('before')
     let bias = 2.0
     @identity

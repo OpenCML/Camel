@@ -7,7 +7,7 @@
 
 import state
 
-func main() => int sync {
+func main() sync {
     let n = state::ref(0)
     let h = func () => int {
         state::get(n)
@@ -20,5 +20,4 @@ func main() => int sync {
     let box_many = state::ref(many)
     println(pair.0())
     println(many[0]())
-    return 0
 }

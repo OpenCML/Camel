@@ -13,7 +13,6 @@ func whole(x: int) => int {
     return x * 3 + x
 }
 
-func main() => int sync {
+func main() sync {
     println(scal(3.0), whole(4))
-    return 0
 }

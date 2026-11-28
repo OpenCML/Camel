@@ -71,7 +71,7 @@ func arm_mixed(ds: int[]) => Point {
     return loop p = start for d in ds do if d % 2 == 1 then { y: p.y + d, x: p.x + 1 } else p
 }
 
-func main() => int sync {
+func main() sync {
     let ds = [1, 2, 3]
     let a = both(ds)
     println(a.x, a.y)
@@ -89,5 +89,4 @@ func main() => int sync {
     println(g.x, g.y)
     let h = sync_value()
     println(h.x, h.y)
-    return 0
 }

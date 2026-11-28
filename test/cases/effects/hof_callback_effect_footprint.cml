@@ -19,9 +19,9 @@ func show(x: int) => int uses var console sync {
     return x
 }
 
-func main() => int uses var console sync {
+func main() uses var console sync {
     let xs = [1, 2, 3]
     let ys = xs->map<show>
     let zs = xs->map<inc>
-    return ys[0] - zs[0] + 1
+    ys[0] - zs[0] + 1
 }

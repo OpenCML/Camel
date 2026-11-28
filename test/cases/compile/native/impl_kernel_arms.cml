@@ -40,7 +40,7 @@ func flipped::<T>(a: T, b: T) => T {
     return a + b
 }
 
-func main() => int sync {
+func main() sync {
     let x: i32 = 19
     let y: i32 = 23
     // `i32` is the element type both conditions name: both calls are the kernels.
@@ -51,5 +51,4 @@ func main() => int sync {
     let body_flipped = flipped(19, 23)
     'armed={}/{}'->format<armed_add, armed_flipped>->println
     'body={}/{}'->format<body_add, body_flipped>->println
-    return 0
 }

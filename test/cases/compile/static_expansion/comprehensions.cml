@@ -41,7 +41,7 @@ func describeEmptyTuple(e: ()) => string {
     return 'empty tuple'
 }
 
-func main() => int sync {
+func main() sync {
     let d = doubled({ a: 1, b: 2 })
     println(d.a, d.b)
     let s = shifted((3, 4))
@@ -50,5 +50,4 @@ func main() => int sync {
     println(i.a, i.b)
     println(describeEmpty(noFields()))
     println(describeEmptyTuple(noElements()))
-    return 0
 }

@@ -25,7 +25,7 @@ func gen::<T>(x: T) => int {
     return n
 }
 
-func main() => int sync {
+func main() sync {
     // Both defaults.
     println(repeat(10))
     // Both overridden by position: 10 * 2.
@@ -47,5 +47,4 @@ func main() => int sync {
     // A generic declaration's default, through inference and through explicit types.
     println(gen(7))
     println(gen::<int>(7))
-    return 0
 }

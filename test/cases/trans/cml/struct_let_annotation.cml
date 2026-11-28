@@ -12,8 +12,7 @@ type Point = {
     y: int
 }
 
-func main() => int sync {
+func main() sync {
     let p: Point = { x: 1, y: 2 }
     println(p.x, p.y)
-    return 0
 }

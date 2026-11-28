@@ -11,7 +11,7 @@
 import { nan } from math
 import { max, min, reshape } from tensor
 
-func main() => int sync {
+func main() sync {
     let m: float[3, 2] = [[1.0, -2.0], [5.0, 0.0], [-3.0, 4.0]]
     println(max<0, false>(m))
     println(min<0, false>(m))
@@ -27,5 +27,4 @@ func main() => int sync {
     let withNan = reshape<[2, 2]>(flat)
     println(max<1, false>(withNan))
     println(min<0, false>(withNan))
-    return 0
 }

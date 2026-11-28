@@ -12,7 +12,7 @@ func sub(a: float, b: float) => float {
     return a - b
 }
 
-func main() => int sync {
+func main() sync {
     let pz = 0.0
     let nz = neg(0.0)
     // Infinity is reached at run time: `1.0e308 * 10.0` written with literals only is the
@@ -31,5 +31,5 @@ func main() => int sync {
     println(is_nan(min(1.0, nan)))
     println(max(3, 5))
     println(min(-2.5, 1.5))
-    return 0
+    0
 }

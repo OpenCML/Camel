@@ -4,7 +4,6 @@
 // range form is the candidate whose own `with` parameters are what does not fit).
 func keep(acc: int[], i: int) => int[] { return acc }
 
-func main() => int sync {
+func main() sync {
     println((0 .. 3)->reduce<keep, 0 .. 3>)
-    return 0
 }

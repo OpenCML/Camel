@@ -9,7 +9,6 @@ func meet() => int uses var rendezvous_point {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     println(meet())
-    return 0
 }

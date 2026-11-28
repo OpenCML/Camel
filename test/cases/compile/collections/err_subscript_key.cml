@@ -1,7 +1,6 @@
 // The subscript of a map takes a key of the key type.
-func main() => int sync {
+func main() sync {
     let m = [('a', 1)] as Map<string, int>
     println(m[1] ?? 0)
     println('never printed')
-    return 0
 }

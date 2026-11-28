@@ -23,11 +23,10 @@ func report(name: string, g: f32[...], x: f32[...]) => int sync {
     return 0
 }
 
-func main() => int sync {
+func main() sync {
     let x = reshape<[2, 3]>([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[]) as f32[2, 3]
     report('grad', grad(loss)<x>(), x)
     let (v, g) = with_grad(loss)<x>()
     report('with_grad', g, x)
     println('value {}'->format<v>)
-    return 0
 }

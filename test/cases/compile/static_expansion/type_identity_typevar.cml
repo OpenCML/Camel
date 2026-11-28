@@ -11,9 +11,8 @@ func same::<T, U>() => bool {
     }
 }
 
-func main() => int sync {
+func main() sync {
     println(same::<int, int>())
     println(same::<int, float>())
     println(same::<float, float>())
-    return 0
 }

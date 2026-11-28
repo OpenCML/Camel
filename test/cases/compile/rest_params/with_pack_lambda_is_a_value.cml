@@ -21,7 +21,7 @@ import { WithOf, ParamsOf, Gradient, is_same } from types
 
 type GradOf<F> = <...WithOf<F>>(...ParamsOf<F>) => float
 
-func main() => int sync {
+func main() sync {
     // One member: the pack is the single `with` parameter, and the call gives one value.
     let one: GradOf<<x: float>() => float> = func <w>() {
         w * w
@@ -38,5 +38,4 @@ func main() => int sync {
     let sameOne = is_same::<GradOf<<x: float>() => float>, <w: float>() => float>()
     let sameNone = is_same::<GradOf<() => float>, () => float>()
     println('with_pack_lambda same_one={} same_none={}'->format<sameOne, sameNone>)
-    return 0
 }

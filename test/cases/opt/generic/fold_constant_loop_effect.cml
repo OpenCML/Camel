@@ -9,7 +9,6 @@ func counted() => int sync {
     return v
 }
 
-func main() => int sync {
+func main() sync {
     println('counted', counted())
-    return 0
 }

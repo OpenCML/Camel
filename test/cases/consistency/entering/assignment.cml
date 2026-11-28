@@ -46,7 +46,7 @@ func improve(best: float?, x: float) => float {
     return if x > m then x else m
 }
 
-func main() => int sync {
+func main() sync {
     var best: float? = null
     let r1 = improve(best, 2.0)
     best = r1
@@ -60,5 +60,4 @@ func main() => int sync {
     println(clear() ?? -1)
     println(five() ?? -1)
     println(show(lifted(7)))
-    return 0
 }

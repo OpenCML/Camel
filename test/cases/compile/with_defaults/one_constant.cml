@@ -10,8 +10,7 @@ func bump(x: int) => int {
     return x + rounds
 }
 
-func main() => int sync {
+func main() sync {
     println(bump(1))
     println(bump(2))
-    return 0
 }

@@ -1,5 +1,4 @@
-func main() => int sync {
+func main() sync {
     let k = 0 .. 5000000
     println(len(k))
-    return 0
 }
