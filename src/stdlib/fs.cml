@@ -30,7 +30,6 @@ export func read_text(path: string) => string! {
 /// The whole content of a file, every byte preserved.
 /// @effect reads a file
 /// @fails error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the read; error value `IOError` when the path is a directory or the read fails for another reason
-/// @example-fragment the example builds its default `Bytes` with `encode` from the `bytes` module, which this page does not import
 /// @example 'pixels.bin'->read_bytes !! encode('')    // the bytes of the file
 export func read_bytes(path: string) => Bytes!
 
@@ -38,7 +37,6 @@ export func read_bytes(path: string) => Bytes!
 /// it. Reading a large file piece by piece is `read_chunk` with a growing offset.
 /// @effect reads a file
 /// @fails fault `InvalidArgument` when offset or size is negative; error value `NotFound`, `PermissionDenied` or `IOError` as for `read_bytes`
-/// @example-fragment the example builds its default `Bytes` with `encode` from the `bytes` module, which this page does not import
 /// @example 'notes.txt'->read_chunk<0, 16> !! encode('')    // the first 16 bytes
 #op('fs:read_chunk')
 with <offset: int, size: int>
@@ -61,7 +59,6 @@ export func write_text(content: string) => void! {
 /// `write_text`.
 /// @effect writes a file
 /// @fails error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason (no space left included)
-/// @example-fragment the example builds its `Bytes` with `encode` from the `bytes` module, which this page does not import
 /// @example encode('abc')->write_bytes<'payload.bin', atomic: true>
 with <path: string, atomic: bool = false>
 export func write_bytes(content: Bytes) => void!
@@ -78,7 +75,6 @@ export func append_text(content: string) => void! {
 /// Adds bytes to the end of the file at path; creating and errors as for `append_text`.
 /// @effect writes a file
 /// @fails error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason
-/// @example-fragment the example builds its `Bytes` with `encode` from the `bytes` module, which this page does not import
 /// @example encode('abc')->append_bytes<'payload.bin'>
 with <path: string>
 export func append_bytes(content: Bytes) => void!

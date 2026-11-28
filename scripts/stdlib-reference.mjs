@@ -3093,28 +3093,12 @@ const EXAMPLE_STOPS = {
     // is missing, so a member that enters this list says which example stopped and why, and one that
     // leaves says which example the marker no longer excuses.
     'a semantic error': {
-        'src/stdlib/fs.cml#append_bytes#1':
-            'the example hands `encode(\'abc\')` to an operator that takes `Bytes`, and `encode` is `bytes`\'s name, which this page does not import',
-        'src/stdlib/fs.cml#read_bytes#1':
-            'the example compares the read against `encode(\'\')`, which is `bytes`\'s name and not this module\'s',
-        'src/stdlib/fs.cml#read_chunk#1':
-            'the example compares the read against `encode(\'\')`, which is `bytes`\'s name and not this module\'s',
-        'src/stdlib/fs.cml#write_bytes#1':
-            'the example builds its `Bytes` with `encode(\'abc\')`, which is `bytes`\'s name',
         'src/stdlib/state.cml#set#1':
             'the example writes through `r`, a handle the surrounding program holds: an example program has no box to write',
         'src/stdlib/state.cml#update#1':
             'the example updates through `r`, a handle the surrounding program holds: an example program has no box to update',
         'src/stdlib/graph.cml#constant#1':
             '`n` is a node of the surrounding pass, and no example program has one',
-        'src/stdlib/graph.cml#erase#1':
-            '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
-        'src/stdlib/graph.cml#eval#1':
-            '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
-        'src/stdlib/graph.cml#replace#1':
-            '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
-        'src/stdlib/graph.cml#add_param#1':
-            '`t` is an open transaction and `like` a node of its graph: a doc example has neither',
         'src/stdlib/graph.cml#name#1':
             'the example reads the name of a graph, and reading it is a capability a declaration writes in its clause; an example program is a body with no declaration to write it in (design principles 9.5)',
         'src/stdlib/graph.cml#origin#1':
@@ -3123,14 +3107,6 @@ const EXAMPLE_STOPS = {
             'the example prints a node, which is its spelling: the reading needs the `spelling` capability, and an example program is a body with no declaration to write it in (design principles 9.5)',
         'src/stdlib/graph.cml#creation_id#1':
             'the example reads the creation number of a handle, which is its spelling: the reading needs the `spelling` capability, and an example program is a body with no declaration to write it in (design principles 9.5)',
-        'src/stdlib/graph.cml#outline#1':
-            '`t` is an open transaction and `ns` a group of its graph\'s nodes: a doc example has neither',
-        'src/stdlib/graph.cml#order#1':
-            '`t` is an open transaction and `a`, `b` are nodes of its graph: a doc example has neither',
-        'src/stdlib/graph.cml#inline#1':
-            '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
-        'src/stdlib/hash.cml#sha256#1':
-            'the example builds its `Bytes` value with `encode(\'abc\')`, which is `bytes`\'s name',
         'src/stdlib/prelude.cml#len#3':
             'the `Bytes` overload\'s example builds its value with `encode(\'h€\')`, which is `bytes`\'s name',
         'src/stdlib/prelude.cml#slice#3':
@@ -4143,9 +4119,11 @@ if (mode === '--write' || mode === '--verify-doc') {
     )
     const mismatched = exampleProblems(coverage)
     for (const problem of mismatched) console.log(problem)
+    // Both kinds are counted on the last lines, whichever there are: a closing line that named only
+    // the documentation problems read as "this is all", and the example problems printed above it
+    // went unread until the first kind was fixed.
     if (problems.length > 0) {
         console.log(`${problems.length} documentation problem(s) in ${checked} compiled example(s)`)
-        process.exit(1)
     }
     if (mismatched.length > 0) {
         // `mismatched` is one line per problem, and a problem is what a member did: it entered a
@@ -4157,8 +4135,8 @@ if (mode === '--write' || mode === '--verify-doc') {
             `${mismatched.length} example problem(s) between the run and the script's records: an example ` +
                 'that entered, one that left, or a marker that is stale -- each is named above',
         )
-        process.exit(1)
     }
+    if (problems.length > 0 || mismatched.length > 0) process.exit(1)
     console.log(
         `every declared name has a description and an @example: ${checked} example(s) checked, ` +
             `${fragments} entry(ies) marked a fragment were compiled too`,
