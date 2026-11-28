@@ -44,7 +44,7 @@ constexpr std::array<WrittenOperation, 6> kWrittenOperations{{
 /// reduction's name with the axis and the flag in angle brackets -- `mean<axis, keepdims>(xs)` --
 /// so their laws are filed under `mean` at one operand, and the name inside the URI says neither
 /// ( a reduction over an axis has one name).
-const std::array<RuleKeyException, 9> kRuleKeyExceptions{{
+const std::array<RuleKeyException, 10> kRuleKeyExceptions{{
     {":op/idx_arr",
      "index_into",
      2,
@@ -59,6 +59,13 @@ const std::array<RuleKeyException, 9> kRuleKeyExceptions{{
      "(`xs[.., 0]`), and its rule is filed under `index_into_axis(x, i, at)` -- a key of its own, "
      "because the two-operand law answers an element of the first dimension only and one law is "
      "filed under one key"},
+
+    {":op/idx_take",
+     "index_take",
+     2,
+     "`xs[positions]` is the same bracket form with an array of positions in its first word: it "
+     "answers a copy of the value with the first dimension read at those positions, and it has no "
+     "token either, so its rule is filed under the call `index_take(x, positions)`"},
 
     {"tensor:argmax_axis",
      "argmax",

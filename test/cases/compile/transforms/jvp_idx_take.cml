@@ -1,0 +1,52 @@
+// `xs[positions]` is `:op/idx_take`: a read of the positions the array names, answering a copy of
+// the value with the first dimension's extent set to the number of positions. It is the sibling of
+// the two single-position reads `jvp_idx_arr` and `jvp_idx_arr_axis` answer, and it was the one
+// member of the family with no forward law -- a lifted function containing it was refused by name
+// (`skip=rule uri=:op/idx_take reason=the operator has no forward rule bound at all`) while the same
+// read written one position at a time ran.
+//
+// The result's extent on the taken dimension is the number of positions, a fact about the array of
+// positions and not about the value's type, so the read answers `T[]` (open rank) and these
+// functions declare that: nothing narrows it back to the rank the argument had.
+//
+// What is pinned, in order:
+//   - `row(m) = m[[1]]` reads row 1 of a `float[2, 3]`: the value is `[[4.0, 5.0, 6.0]]` -- the rank
+//     is kept and its first extent is one -- and the tangent is row 1 of the tangent,
+//     `[[1.0, 2.0, 3.0]]`.
+//   - `rows(m) = m[[0, 1]]` is the same read at two positions in the order written, so the value is
+//     `[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]` and the tangent takes the same order:
+//     `[[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]]`.
+//   - `reversed(xs) = xs[[2, 0]]` is the read of a rank-1 array at two positions, `[3.0, 1.0]`, and
+//     its tangent is `[3.0, 1.0]` for the tangent `[1.0, 2.0, 3.0]`. The written order is what says
+//     the positions travel with the read into the tangent: a take that sorted them, or that answered
+//     the value's own order, would answer `[1.0, 3.0]`.
+import rulesets.jvp
+import { jvp } from transforms
+
+func row(m: float[2, 3]) => float[...] {
+    return m[[1]]
+}
+
+func rows(m: float[2, 3]) => float[...] {
+    return m[[0, 1]]
+}
+
+func reversed(xs: float[3]) => float[...] {
+    return xs[[2, 0]]
+}
+
+func main() sync {
+    let m: float[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+    let dm: float[2, 3] = [[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]]
+    let (rowValue, rowTangent) = jvp(row)(m, dm)
+    println(rowValue)
+    println(rowTangent)
+    let (rowsValue, rowsTangent) = jvp(rows)(m, dm)
+    println(rowsValue)
+    println(rowsTangent)
+    let xs: float[3] = [1.0, 2.0, 3.0]
+    let dxs: float[3] = [1.0, 2.0, 3.0]
+    let (reversedValue, reversedTangent) = jvp(reversed)(xs, dxs)
+    println(reversedValue)
+    println(reversedTangent)
+}

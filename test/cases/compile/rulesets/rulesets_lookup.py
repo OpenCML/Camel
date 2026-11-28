@@ -154,24 +154,26 @@ check(
 code, bound = run(["std::rulesets", "forward=true"])
 check(code == 0, f"the program exits 0 asking for the keys (got {code}):\n{bound}")
 
-# The count is nine: two whose reason is a spelling, and the six axis reductions, whose reason is
+# The count is ten: three whose reason is a spelling, and the six axis reductions, whose reason is
 # that a reduction over an axis has one name -- the whole reduction's -- with the axis and the flag in
 # `<>` (author's ruling, 2026-11-05). The pair went three -> two on 2026-11-03: `:op/ltod` was the
 # third earlier the same day (it was bound through the table to `float_of_int/1`, because `float` at
 # one operand is a spelling every conversion to a double shares), and it is derived now -- a
 # conversion's key is the destination's spelling the name ends in (`ltod` -> `float`, one operand),
 # and the family holds one rule per operand type under it, which the engine dispatches between.
-# The bracket form is the one URI with two entries (nine lines over eight URIs): `xs[i]` reads an
-# element and `xs[.., 0]` reads along the dimension its third word names, so the operator's *count* is
-# what tells its two keys apart, and both entries are listed here, one per count.
+# The bracket form is the one URI with three entries (ten lines over eight URIs): `xs[i]` reads an
+# element, `xs[.., 0]` reads along the dimension its third word names, and `xs[positions]` reads many
+# positions at once, so the operator's *count* is what tells its keys apart, and every entry is
+# listed here, one per count.
 exceptions = [line for line in bound.splitlines() if line.startswith("RULEKEY-EXCEPTION ")]
-check(len(exceptions) == 9, f"exactly nine entries have a key that cannot be derived: {exceptions}")
+check(len(exceptions) == 10, f"exactly ten entries have a key that cannot be derived: {exceptions}")
 keys = [(line.split()[1], line.split()[3]) for line in exceptions]
 check(
     keys
     == [
         (":op/idx_arr", "index_into/2"),
         (":op/idx_arr", "index_into_axis/3"),
+        (":op/idx_take", "index_take/2"),
         ("tensor:argmax_axis", "argmax/1"),
         ("tensor:argmin_axis", "argmin/1"),
         ("tensor:max_axis", "max/1"),
