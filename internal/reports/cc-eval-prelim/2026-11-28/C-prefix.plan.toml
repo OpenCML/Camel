@@ -1,0 +1,108 @@
+# Instrument, not a test: its entries are read once and pasted into the report beside it;
+# it belongs to no layer. One entry (semantic_fault.differs) carries an expectation the
+# injected fault contradicts on purpose, so it fails by design.
+id = "cc-eval-prelim.C-prefix"
+order = 997
+tier = "fast"
+tags = ["probe"]
+desc = "The half of the archive's prefix differential test that runs on this tip: one program, several pipeline prefixes, every prefix's output compared with the no-pass run's. Plus the archive's own stage spelling, which the current tip refuses, and a rewrite that changes the value without making the graph illegal. Instrument, not a test: it is read once and its verdicts are pasted into the report, it belongs to no layer."
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_origins", "normalize_paths"]
+
+[[tests]]
+name = "C_pfx.fold_subject.p00_none"
+case = "../../../../test/cases/opt/camel_passes/fold_subject.cml"
+args = ["${case}", "std::nvm"]
+
+[[tests]]
+name = "C_pfx.fold_subject.p01_fold"
+case = "../../../../test/cases/opt/camel_passes/fold_subject.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+compare_to = "C_pfx.fold_subject.p00_none"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "C_pfx.fold_subject.p02_cse"
+case = "../../../../test/cases/opt/camel_passes/fold_subject.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+compare_to = "C_pfx.fold_subject.p00_none"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "C_pfx.cse_subject.p00_none"
+case = "../../../../test/cases/opt/camel_passes/cse_subject.cml"
+args = ["${case}", "std::nvm"]
+
+[[tests]]
+name = "C_pfx.cse_subject.p01_fold"
+case = "../../../../test/cases/opt/camel_passes/cse_subject.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+compare_to = "C_pfx.cse_subject.p00_none"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "C_pfx.cse_subject.p02_cse"
+case = "../../../../test/cases/opt/camel_passes/cse_subject.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+compare_to = "C_pfx.cse_subject.p00_none"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "C_pfx.dce_subject.p00_none"
+case = "../../../../test/cases/opt/camel_passes/dce_subject.cml"
+args = ["${case}", "std::nvm"]
+
+[[tests]]
+name = "C_pfx.dce_subject.p01_fold"
+case = "../../../../test/cases/opt/camel_passes/dce_subject.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+compare_to = "C_pfx.dce_subject.p00_none"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "C_pfx.dce_subject.p02_dce"
+case = "../../../../test/cases/opt/camel_passes/dce_subject.cml"
+args = ["${case}", "opt::dce", "std::nvm"]
+compare_to = "C_pfx.dce_subject.p00_none"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "C_pfx.after_inline.p00_none"
+case = "../../../../test/cases/opt/camel_passes/cse_after_inline.cml"
+args = ["${case}", "std::nvm"]
+
+[[tests]]
+name = "C_pfx.after_inline.p01_fold"
+case = "../../../../test/cases/opt/camel_passes/cse_after_inline.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+compare_to = "C_pfx.after_inline.p00_none"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "C_pfx.after_inline.p02_cse"
+case = "../../../../test/cases/opt/camel_passes/cse_after_inline.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+compare_to = "C_pfx.after_inline.p00_none"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "C_pfx.semantic_fault.before"
+desc = "The program with no rewrite: what the differential comparison treats as the reference."
+case = "C-semantic-fault.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "6\n4\n"
+
+[[tests]]
+name = "C_pfx.semantic_fault.differs"
+desc = "The same program whose function is rewritten by a rule that turns the addition into a subtraction: the graph is legal, so nothing refuses it, and the value it prints is the second one."
+case = "C-semantic-fault.cml"
+args = ["${case}", "std::nvm"]
+compare_to = "C_pfx.semantic_fault.before"
+compare_fields = ["exit_code", "stdout_normalized"]
+expect_stdout_not_contains = ["6"]
+
+

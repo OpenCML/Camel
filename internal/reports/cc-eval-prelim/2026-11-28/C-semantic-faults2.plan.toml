@@ -1,0 +1,21 @@
+# Instrument, not a test: three entries read once, pasted into the stage-fault reading beside it.
+# It belongs to no layer. Each entry is a class-2 injection: the graph stays legal, so the reading is
+# the value that changes, not a refusal.
+id = "cc-eval-prelim.C-semantic-faults2"
+order = 994
+tier = "fast"
+tags = ["probe"]
+desc = "Two rewrites that change the value without making the graph illegal: a flipped comparison and a wrongly folded constant, plus the unmodified run they are read against."
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_origins", "normalize_paths"]
+
+[[tests]]
+name = "C_sem2.before_and_after"
+desc = "less(1, 3), dbl(5), the flipped less(1, 3), the mis-folded dbl(5): true, 10, false, 8. Nothing is refused and nothing diagnoses."
+case = "C-semantic-faults2.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "true\n10\nfalse\n8\n"

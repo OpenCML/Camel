@@ -1,0 +1,1813 @@
+# Instrument, not a test: generated programs and their reference outputs, read once into
+# the stage-fault reading beside it. It belongs to no layer.
+id = "cc-eval-prelim.C-gen-prefix"
+order = 996
+tier = "fast"
+tags = ["probe"]
+desc = "A generated program output under each pipeline prefix, against the reference output the model computes: the archive differential test, first half, on this tip."
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_origins", "normalize_paths"]
+
+[[tests]]
+name = "C_gen.s001.p00_none"
+case = "gen/prog_001.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L6 0 0\nnull\nL7 3 8\nL8 0 8\nL8 0 8\nL8 0 8\nL8 0 8\n"
+
+[[tests]]
+name = "C_gen.s001.p01_fold"
+case = "gen/prog_001.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L6 0 0\nnull\nL7 3 8\nL8 0 8\nL8 0 8\nL8 0 8\nL8 0 8\n"
+
+[[tests]]
+name = "C_gen.s001.p02_cse"
+case = "gen/prog_001.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L6 0 0\nnull\nL7 3 8\nL8 0 8\nL8 0 8\nL8 0 8\nL8 0 8\n"
+
+[[tests]]
+name = "C_gen.s002.p00_none"
+case = "gen/prog_002.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L2 0 a 5\nL2 0 a 5\nq40 5\nL1 10 10\nL3 11 true true\nq40 42\nL5 (46, 42, 30)\nL6 [1.5, 0.0, 0.0]\n"
+
+[[tests]]
+name = "C_gen.s002.p01_fold"
+case = "gen/prog_002.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L2 0 a 5\nL2 0 a 5\nq40 5\nL1 10 10\nL3 11 true true\nq40 42\nL5 (46, 42, 30)\nL6 [1.5, 0.0, 0.0]\n"
+
+[[tests]]
+name = "C_gen.s002.p02_cse"
+case = "gen/prog_002.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L2 0 a 5\nL2 0 a 5\nq40 5\nL1 10 10\nL3 11 true true\nq40 42\nL5 (46, 42, 30)\nL6 [1.5, 0.0, 0.0]\n"
+
+[[tests]]
+name = "C_gen.s003.p00_none"
+case = "gen/prog_003.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q47 1\nq47 12\nq47 5\nL3 4\nL4 false\nL5 true\nL6 r:false truek9r:false truer:false truer:false truek9k9k9xpqcd\n"
+
+[[tests]]
+name = "C_gen.s003.p01_fold"
+case = "gen/prog_003.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q47 1\nq47 12\nq47 5\nL3 4\nL4 false\nL5 true\nL6 r:false truek9r:false truer:false truer:false truek9k9k9xpqcd\n"
+
+[[tests]]
+name = "C_gen.s003.p02_cse"
+case = "gen/prog_003.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q47 1\nq47 12\nq47 5\nL3 4\nL4 false\nL5 true\nL6 r:false truek9r:false truer:false truer:false truek9k9k9xpqcd\n"
+
+[[tests]]
+name = "C_gen.s004.p00_none"
+case = "gen/prog_004.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q44 1\nL2 0 0\nL1 0 0\nL3 x\nL4 2\nL5 a\nL6 0\nL7 true\nL8 xcd\nL9 [true, true, false, true, true, true, false]\nL10 12\n"
+
+[[tests]]
+name = "C_gen.s004.p01_fold"
+case = "gen/prog_004.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q44 1\nL2 0 0\nL1 0 0\nL3 x\nL4 2\nL5 a\nL6 0\nL7 true\nL8 xcd\nL9 [true, true, false, true, true, true, false]\nL10 12\n"
+
+[[tests]]
+name = "C_gen.s004.p02_cse"
+case = "gen/prog_004.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q44 1\nL2 0 0\nL1 0 0\nL3 x\nL4 2\nL5 a\nL6 0\nL7 true\nL8 xcd\nL9 [true, true, false, true, true, true, false]\nL10 12\n"
+
+[[tests]]
+name = "C_gen.s005.p00_none"
+case = "gen/prog_005.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q42 -1\nq42 -1\nL5 0\nL6 a false a\nq42 1\nq42 -1\nL7 bbk9k9\n"
+
+[[tests]]
+name = "C_gen.s005.p01_fold"
+case = "gen/prog_005.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q42 -1\nq42 -1\nL5 0\nL6 a false a\nq42 1\nq42 -1\nL7 bbk9k9\n"
+
+[[tests]]
+name = "C_gen.s005.p02_cse"
+case = "gen/prog_005.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q42 -1\nq42 -1\nL5 0\nL6 a false a\nq42 1\nq42 -1\nL7 bbk9k9\n"
+
+[[tests]]
+name = "C_gen.s006.p00_none"
+case = "gen/prog_006.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q33 21\nq33 7\nq33 8\nq33 0\nq33 100\nq33 2\nL3 true ab\nL4 2.0 8 true\nL4 1.0 8 true\nL4 0.0 8 true\nL4 -0.5 8 true\nL4 2.0 8 true\nL4 0.25 8 true\nL4 2.0 8 true\nL4 0.0 8 true\nL4 0.5 8 true\nL5 -0.375 true true pq\nL5 0.25 true true pq\nL5 4.75 true true pq\nL5 -0.5 true true pq\nL6 true\nL7 (0.5, [-0.5, -0.5, -1.5])\n"
+
+[[tests]]
+name = "C_gen.s006.p01_fold"
+case = "gen/prog_006.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q33 21\nq33 7\nq33 8\nq33 0\nq33 100\nq33 2\nL3 true ab\nL4 2.0 8 true\nL4 1.0 8 true\nL4 0.0 8 true\nL4 -0.5 8 true\nL4 2.0 8 true\nL4 0.25 8 true\nL4 2.0 8 true\nL4 0.0 8 true\nL4 0.5 8 true\nL5 -0.375 true true pq\nL5 0.25 true true pq\nL5 4.75 true true pq\nL5 -0.5 true true pq\nL6 true\nL7 (0.5, [-0.5, -0.5, -1.5])\n"
+
+[[tests]]
+name = "C_gen.s006.p02_cse"
+case = "gen/prog_006.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q33 21\nq33 7\nq33 8\nq33 0\nq33 100\nq33 2\nL3 true ab\nL4 2.0 8 true\nL4 1.0 8 true\nL4 0.0 8 true\nL4 -0.5 8 true\nL4 2.0 8 true\nL4 0.25 8 true\nL4 2.0 8 true\nL4 0.0 8 true\nL4 0.5 8 true\nL5 -0.375 true true pq\nL5 0.25 true true pq\nL5 4.75 true true pq\nL5 -0.5 true true pq\nL6 true\nL7 (0.5, [-0.5, -0.5, -1.5])\n"
+
+[[tests]]
+name = "C_gen.s007.p00_none"
+case = "gen/prog_007.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q28 1\nq28 0\nq25 3\nL2 true v=0,false-3 x\nq28 2\nL3 3\nL4 1\nL5 true\nL6 true\nL7 true\nL8 (3, 0)\n"
+
+[[tests]]
+name = "C_gen.s007.p01_fold"
+case = "gen/prog_007.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q28 1\nq28 0\nq25 3\nL2 true v=0,false-3 x\nq28 2\nL3 3\nL4 1\nL5 true\nL6 true\nL7 true\nL8 (3, 0)\n"
+
+[[tests]]
+name = "C_gen.s007.p02_cse"
+case = "gen/prog_007.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q28 1\nq28 0\nq25 3\nL2 true v=0,false-3 x\nq28 2\nL3 3\nL4 1\nL5 true\nL6 true\nL7 true\nL8 (3, 0)\n"
+
+[[tests]]
+name = "C_gen.s008.p00_none"
+case = "gen/prog_008.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L1 -5 -5\nL4 -4 0 ab { n: 12, tag: a, w: 1.5 }\nL5 1.0\nL5 -1.5\nL5 2.5\nL6 1 -4 12\nq38 1\nL7 false false\nnull\nL8 ab 10.0\nL8 ab 10.0\nL8 pq 10.0\n"
+
+[[tests]]
+name = "C_gen.s008.p01_fold"
+case = "gen/prog_008.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L1 -5 -5\nL4 -4 0 ab { n: 12, tag: a, w: 1.5 }\nL5 1.0\nL5 -1.5\nL5 2.5\nL6 1 -4 12\nq38 1\nL7 false false\nnull\nL8 ab 10.0\nL8 ab 10.0\nL8 pq 10.0\n"
+
+[[tests]]
+name = "C_gen.s008.p02_cse"
+case = "gen/prog_008.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L1 -5 -5\nL4 -4 0 ab { n: 12, tag: a, w: 1.5 }\nL5 1.0\nL5 -1.5\nL5 2.5\nL6 1 -4 12\nq38 1\nL7 false false\nnull\nL8 ab 10.0\nL8 ab 10.0\nL8 pq 10.0\n"
+
+[[tests]]
+name = "C_gen.s009.p00_none"
+case = "gen/prog_009.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q34 2\nL3 a\nL4 (7, 22)\nq31 4\nL5 4\nL6 2\nL7 true\nL8 (67, 8, 25)\nL9 false\n"
+
+[[tests]]
+name = "C_gen.s009.p01_fold"
+case = "gen/prog_009.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q34 2\nL3 a\nL4 (7, 22)\nq31 4\nL5 4\nL6 2\nL7 true\nL8 (67, 8, 25)\nL9 false\n"
+
+[[tests]]
+name = "C_gen.s009.p02_cse"
+case = "gen/prog_009.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q34 2\nL3 a\nL4 (7, 22)\nq31 4\nL5 4\nL6 2\nL7 true\nL8 (67, 8, 25)\nL9 false\n"
+
+[[tests]]
+name = "C_gen.s010.p00_none"
+case = "gen/prog_010.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q46 3\nL2 1 v=yz 6 3.00  (3.0, [a, yz, v=yz 6 3.00 ])\nL3 yz true\nL4 3 3\nL4 7 7\nL4 3 3\nL5 yz 3\nq46 3\n"
+
+[[tests]]
+name = "C_gen.s010.p01_fold"
+case = "gen/prog_010.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q46 3\nL2 1 v=yz 6 3.00  (3.0, [a, yz, v=yz 6 3.00 ])\nL3 yz true\nL4 3 3\nL4 7 7\nL4 3 3\nL5 yz 3\nq46 3\n"
+
+[[tests]]
+name = "C_gen.s010.p02_cse"
+case = "gen/prog_010.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q46 3\nL2 1 v=yz 6 3.00  (3.0, [a, yz, v=yz 6 3.00 ])\nL3 yz true\nL4 3 3\nL4 7 7\nL4 3 3\nL5 yz 3\nq46 3\n"
+
+[[tests]]
+name = "C_gen.s011.p00_none"
+case = "gen/prog_011.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q60 2\nL6 0 cd\nL7 31\n"
+
+[[tests]]
+name = "C_gen.s011.p01_fold"
+case = "gen/prog_011.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q60 2\nL6 0 cd\nL7 31\n"
+
+[[tests]]
+name = "C_gen.s011.p02_cse"
+case = "gen/prog_011.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q60 2\nL6 0 cd\nL7 31\n"
+
+[[tests]]
+name = "C_gen.s012.p00_none"
+case = "gen/prog_012.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "4\nq37 8\nq37 100\nL4 8\nL5 4.75\nL6 false\nL7 <false x r:4>100,|\nL8 [35, ab, cd]\n"
+
+[[tests]]
+name = "C_gen.s012.p01_fold"
+case = "gen/prog_012.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "4\nq37 8\nq37 100\nL4 8\nL5 4.75\nL6 false\nL7 <false x r:4>100,|\nL8 [35, ab, cd]\n"
+
+[[tests]]
+name = "C_gen.s012.p02_cse"
+case = "gen/prog_012.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "4\nq37 8\nq37 100\nL4 8\nL5 4.75\nL6 false\nL7 <false x r:4>100,|\nL8 [35, ab, cd]\n"
+
+[[tests]]
+name = "C_gen.s013.p00_none"
+case = "gen/prog_013.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q68 -2\nL7 4\nL8 (false, pq)\nL9 4\n"
+
+[[tests]]
+name = "C_gen.s013.p01_fold"
+case = "gen/prog_013.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q68 -2\nL7 4\nL8 (false, pq)\nL9 4\n"
+
+[[tests]]
+name = "C_gen.s013.p02_cse"
+case = "gen/prog_013.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q68 -2\nL7 4\nL8 (false, pq)\nL9 4\n"
+
+[[tests]]
+name = "C_gen.s014.p00_none"
+case = "gen/prog_014.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q21 3\nq21 3\nL4 0 { n: 0, tag: a } 0\nq21 0\nnull\nq21 3\nL5 true\nL6 true\nL7 -4\nL8 true\nL9 0\n"
+
+[[tests]]
+name = "C_gen.s014.p01_fold"
+case = "gen/prog_014.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q21 3\nq21 3\nL4 0 { n: 0, tag: a } 0\nq21 0\nnull\nq21 3\nL5 true\nL6 true\nL7 -4\nL8 true\nL9 0\n"
+
+[[tests]]
+name = "C_gen.s014.p02_cse"
+case = "gen/prog_014.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q21 3\nq21 3\nL4 0 { n: 0, tag: a } 0\nq21 0\nnull\nq21 3\nL5 true\nL6 true\nL7 -4\nL8 true\nL9 0\n"
+
+[[tests]]
+name = "C_gen.s015.p00_none"
+case = "gen/prog_015.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q18 3\nL4 false 5\nL5 -1.5\n"
+
+[[tests]]
+name = "C_gen.s015.p01_fold"
+case = "gen/prog_015.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q18 3\nL4 false 5\nL5 -1.5\n"
+
+[[tests]]
+name = "C_gen.s015.p02_cse"
+case = "gen/prog_015.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q18 3\nL4 false 5\nL5 -1.5\n"
+
+[[tests]]
+name = "C_gen.s016.p00_none"
+case = "gen/prog_016.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L1 3 3\n\nq36 3\nL3 a\nL4 false\nL5 false\nL6 [{ x: 3, y: 6 }]\n"
+
+[[tests]]
+name = "C_gen.s016.p01_fold"
+case = "gen/prog_016.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L1 3 3\n\nq36 3\nL3 a\nL4 false\nL5 false\nL6 [{ x: 3, y: 6 }]\n"
+
+[[tests]]
+name = "C_gen.s016.p02_cse"
+case = "gen/prog_016.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L1 3 3\n\nq36 3\nL3 a\nL4 false\nL5 false\nL6 [{ x: 3, y: 6 }]\n"
+
+[[tests]]
+name = "C_gen.s017.p00_none"
+case = "gen/prog_017.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q48 6\nL5 v=6| cd\nL6 5 5\nL7 0\n"
+
+[[tests]]
+name = "C_gen.s017.p01_fold"
+case = "gen/prog_017.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q48 6\nL5 v=6| cd\nL6 5 5\nL7 0\n"
+
+[[tests]]
+name = "C_gen.s017.p02_cse"
+case = "gen/prog_017.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q48 6\nL5 v=6| cd\nL6 5 5\nL7 0\n"
+
+[[tests]]
+name = "C_gen.s018.p00_none"
+case = "gen/prog_018.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q24 3\nL1 -7 -15\nL1 -7 -15\nq24 10\nq24 2\nL2 ab\nL3 3\nL4 true\nL5 -14\nL6 -14\nL7 true\nL8 false\n"
+
+[[tests]]
+name = "C_gen.s018.p01_fold"
+case = "gen/prog_018.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q24 3\nL1 -7 -15\nL1 -7 -15\nq24 10\nq24 2\nL2 ab\nL3 3\nL4 true\nL5 -14\nL6 -14\nL7 true\nL8 false\n"
+
+[[tests]]
+name = "C_gen.s018.p02_cse"
+case = "gen/prog_018.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q24 3\nL1 -7 -15\nL1 -7 -15\nq24 10\nq24 2\nL2 ab\nL3 3\nL4 true\nL5 -14\nL6 -14\nL7 true\nL8 false\n"
+
+[[tests]]
+name = "C_gen.s019.p00_none"
+case = "gen/prog_019.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L4 1 0\nL5 11.0\nL6 5\nL7 false\n"
+
+[[tests]]
+name = "C_gen.s019.p01_fold"
+case = "gen/prog_019.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L4 1 0\nL5 11.0\nL6 5\nL7 false\n"
+
+[[tests]]
+name = "C_gen.s019.p02_cse"
+case = "gen/prog_019.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L4 1 0\nL5 11.0\nL6 5\nL7 false\n"
+
+[[tests]]
+name = "C_gen.s020.p00_none"
+case = "gen/prog_020.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q27 -2\nL3 8 8 cd\nq27 100\nL4 cd 3 3.0\nL4 cd 3 3.0\nL4 cd 3 3.0\nL4 cd 3 3.0\nL5 -2 true\nL5 -2 true\nL5 -2 true\nL5 -2 true\nL5 7 true\nq27 7\nq27 13\nq27 -8\nL6 -2\nL7 true\nL8 100\nL9 true\n"
+
+[[tests]]
+name = "C_gen.s020.p01_fold"
+case = "gen/prog_020.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q27 -2\nL3 8 8 cd\nq27 100\nL4 cd 3 3.0\nL4 cd 3 3.0\nL4 cd 3 3.0\nL4 cd 3 3.0\nL5 -2 true\nL5 -2 true\nL5 -2 true\nL5 -2 true\nL5 7 true\nq27 7\nq27 13\nq27 -8\nL6 -2\nL7 true\nL8 100\nL9 true\n"
+
+[[tests]]
+name = "C_gen.s020.p02_cse"
+case = "gen/prog_020.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q27 -2\nL3 8 8 cd\nq27 100\nL4 cd 3 3.0\nL4 cd 3 3.0\nL4 cd 3 3.0\nL4 cd 3 3.0\nL5 -2 true\nL5 -2 true\nL5 -2 true\nL5 -2 true\nL5 7 true\nq27 7\nq27 13\nq27 -8\nL6 -2\nL7 true\nL8 100\nL9 true\n"
+
+[[tests]]
+name = "C_gen.s021.p00_none"
+case = "gen/prog_021.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L2 5\nL2 5\nL2 5\nq21 3\nq21 2\nL3 2 2 x\nq21 5\nq21 2\nb\nL4 8\nL5 false\nL6 false\nL7 true\n"
+
+[[tests]]
+name = "C_gen.s021.p01_fold"
+case = "gen/prog_021.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L2 5\nL2 5\nL2 5\nq21 3\nq21 2\nL3 2 2 x\nq21 5\nq21 2\nb\nL4 8\nL5 false\nL6 false\nL7 true\n"
+
+[[tests]]
+name = "C_gen.s021.p02_cse"
+case = "gen/prog_021.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L2 5\nL2 5\nL2 5\nq21 3\nq21 2\nL3 2 2 x\nq21 5\nq21 2\nb\nL4 8\nL5 false\nL6 false\nL7 true\n"
+
+[[tests]]
+name = "C_gen.s022.p00_none"
+case = "gen/prog_022.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q32 4\nL8 true true 3\nq32 4\nL5 -7 4\nL6 4 4 4\n4\nL9 false cd,cd,pq,yz\nL10 1 (4, 13) 1\nL11 4 0.25\nL11 4 0.25\nL11 4 0.25\nL11 4 0.25\nL12 (4, 13) (4, 13)\nL13 (1, 4, 13) (1, 4, 13)\n"
+
+[[tests]]
+name = "C_gen.s022.p01_fold"
+case = "gen/prog_022.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q32 4\nL8 true true 3\nq32 4\nL5 -7 4\nL6 4 4 4\n4\nL9 false cd,cd,pq,yz\nL10 1 (4, 13) 1\nL11 4 0.25\nL11 4 0.25\nL11 4 0.25\nL11 4 0.25\nL12 (4, 13) (4, 13)\nL13 (1, 4, 13) (1, 4, 13)\n"
+
+[[tests]]
+name = "C_gen.s022.p02_cse"
+case = "gen/prog_022.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q32 4\nL8 true true 3\nq32 4\nL5 -7 4\nL6 4 4 4\n4\nL9 false cd,cd,pq,yz\nL10 1 (4, 13) 1\nL11 4 0.25\nL11 4 0.25\nL11 4 0.25\nL11 4 0.25\nL12 (4, 13) (4, 13)\nL13 (1, 4, 13) (1, 4, 13)\n"
+
+[[tests]]
+name = "C_gen.s023.p00_none"
+case = "gen/prog_023.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L3 a a\nL5 10 10\nL5 -1 -1\nL6 0\nL7 -1\nL8 -9.5\n"
+
+[[tests]]
+name = "C_gen.s023.p01_fold"
+case = "gen/prog_023.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L3 a a\nL5 10 10\nL5 -1 -1\nL6 0\nL7 -1\nL8 -9.5\n"
+
+[[tests]]
+name = "C_gen.s023.p02_cse"
+case = "gen/prog_023.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L3 a a\nL5 10 10\nL5 -1 -1\nL6 0\nL7 -1\nL8 -9.5\n"
+
+[[tests]]
+name = "C_gen.s024.p00_none"
+case = "gen/prog_024.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q29 31\nq29 4\nL2 pq\nL2 pq\nL2 pq\nL3 true 4 4\nq29 -7\nL4 yz (false, false, 2.5)\nL4 m (false, false, 2.5)\n(false, k9)\nL6 true\nL7 abcd\n"
+
+[[tests]]
+name = "C_gen.s024.p01_fold"
+case = "gen/prog_024.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q29 31\nq29 4\nL2 pq\nL2 pq\nL2 pq\nL3 true 4 4\nq29 -7\nL4 yz (false, false, 2.5)\nL4 m (false, false, 2.5)\n(false, k9)\nL6 true\nL7 abcd\n"
+
+[[tests]]
+name = "C_gen.s024.p02_cse"
+case = "gen/prog_024.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q29 31\nq29 4\nL2 pq\nL2 pq\nL2 pq\nL3 true 4 4\nq29 -7\nL4 yz (false, false, 2.5)\nL4 m (false, false, 2.5)\n(false, k9)\nL6 true\nL7 abcd\n"
+
+[[tests]]
+name = "C_gen.s025.p00_none"
+case = "gen/prog_025.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L3 2 2\nq32 4\nq32 2\nL4 a\nL5 false\nL6 false\nL7 false\n"
+
+[[tests]]
+name = "C_gen.s025.p01_fold"
+case = "gen/prog_025.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L3 2 2\nq32 4\nq32 2\nL4 a\nL5 false\nL6 false\nL7 false\n"
+
+[[tests]]
+name = "C_gen.s025.p02_cse"
+case = "gen/prog_025.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L3 2 2\nq32 4\nq32 2\nL4 a\nL5 false\nL6 false\nL7 false\n"
+
+[[tests]]
+name = "C_gen.s026.p00_none"
+case = "gen/prog_026.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q36 -3\nq36 4\nq36 4\nL3 true 0 10 []\nL3 true -100 10 []\nL3 true -100 10 []\nL3 true -100 10 []\nL4 true true\nL6 0\nL7 (0.5, false)\n"
+
+[[tests]]
+name = "C_gen.s026.p01_fold"
+case = "gen/prog_026.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q36 -3\nq36 4\nq36 4\nL3 true 0 10 []\nL3 true -100 10 []\nL3 true -100 10 []\nL3 true -100 10 []\nL4 true true\nL6 0\nL7 (0.5, false)\n"
+
+[[tests]]
+name = "C_gen.s026.p02_cse"
+case = "gen/prog_026.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q36 -3\nq36 4\nq36 4\nL3 true 0 10 []\nL3 true -100 10 []\nL3 true -100 10 []\nL3 true -100 10 []\nL4 true true\nL6 0\nL7 (0.5, false)\n"
+
+[[tests]]
+name = "C_gen.s027.p00_none"
+case = "gen/prog_027.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L2 4\nL3 false 4\nL9 31 4 4\n"
+
+[[tests]]
+name = "C_gen.s027.p01_fold"
+case = "gen/prog_027.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L2 4\nL3 false 4\nL9 31 4 4\n"
+
+[[tests]]
+name = "C_gen.s027.p02_cse"
+case = "gen/prog_027.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L2 4\nL3 false 4\nL9 31 4 4\n"
+
+[[tests]]
+name = "C_gen.s028.p00_none"
+case = "gen/prog_028.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L4 4 4 4 -3\nL5 4 4 [{ x: 4, y: 4 }, { x: -2, y: 4 }]\nq30 -3\nq30 -3\ntrue\nL7 false\nL7 false\n"
+
+[[tests]]
+name = "C_gen.s028.p01_fold"
+case = "gen/prog_028.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L4 4 4 4 -3\nL5 4 4 [{ x: 4, y: 4 }, { x: -2, y: 4 }]\nq30 -3\nq30 -3\ntrue\nL7 false\nL7 false\n"
+
+[[tests]]
+name = "C_gen.s028.p02_cse"
+case = "gen/prog_028.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L4 4 4 4 -3\nL5 4 4 [{ x: 4, y: 4 }, { x: -2, y: 4 }]\nq30 -3\nq30 -3\ntrue\nL7 false\nL7 false\n"
+
+[[tests]]
+name = "C_gen.s029.p00_none"
+case = "gen/prog_029.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q34 -7\nq34 1\nL4 3\nL5 10.0\nL6 (1, 4)\n"
+
+[[tests]]
+name = "C_gen.s029.p01_fold"
+case = "gen/prog_029.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q34 -7\nq34 1\nL4 3\nL5 10.0\nL6 (1, 4)\n"
+
+[[tests]]
+name = "C_gen.s029.p02_cse"
+case = "gen/prog_029.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q34 -7\nq34 1\nL4 3\nL5 10.0\nL6 (1, 4)\n"
+
+[[tests]]
+name = "C_gen.s030.p00_none"
+case = "gen/prog_030.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L4 1 1\nq61 0\n3.0\nL6 0\nL7 false\nL8 5\nL9 [{ x: -2, y: 1 }]\nL10 (1, 4)\n"
+
+[[tests]]
+name = "C_gen.s030.p01_fold"
+case = "gen/prog_030.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L4 1 1\nq61 0\n3.0\nL6 0\nL7 false\nL8 5\nL9 [{ x: -2, y: 1 }]\nL10 (1, 4)\n"
+
+[[tests]]
+name = "C_gen.s030.p02_cse"
+case = "gen/prog_030.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L4 1 1\nq61 0\n3.0\nL6 0\nL7 false\nL8 5\nL9 [{ x: -2, y: 1 }]\nL10 (1, 4)\n"
+
+[[tests]]
+name = "C_gen.s031.p00_none"
+case = "gen/prog_031.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q24 -1\nq24 13\nq24 3\nq27 4\nfalse\nq27 4000\nL3 -10\nL4 false\nL5 yzabx\nL6 false\nL7 [-10, 84, -2]\nL8 false\n"
+
+[[tests]]
+name = "C_gen.s031.p01_fold"
+case = "gen/prog_031.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q24 -1\nq24 13\nq24 3\nq27 4\nfalse\nq27 4000\nL3 -10\nL4 false\nL5 yzabx\nL6 false\nL7 [-10, 84, -2]\nL8 false\n"
+
+[[tests]]
+name = "C_gen.s031.p02_cse"
+case = "gen/prog_031.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q24 -1\nq24 13\nq24 3\nq27 4\nfalse\nq27 4000\nL3 -10\nL4 false\nL5 yzabx\nL6 false\nL7 [-10, 84, -2]\nL8 false\n"
+
+[[tests]]
+name = "C_gen.s032.p00_none"
+case = "gen/prog_032.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q48 4\nq48 4\nL4 4\nL5 3\nL6 4\n"
+
+[[tests]]
+name = "C_gen.s032.p01_fold"
+case = "gen/prog_032.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q48 4\nq48 4\nL4 4\nL5 3\nL6 4\n"
+
+[[tests]]
+name = "C_gen.s032.p02_cse"
+case = "gen/prog_032.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q48 4\nq48 4\nL4 4\nL5 3\nL6 4\n"
+
+[[tests]]
+name = "C_gen.s033.p00_none"
+case = "gen/prog_033.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L1 2 2\n3\n3\nL2 yz 2\nL2 cd 2\nq37 2\nq40 2\nq40 2\nL6 2 2\n3\nq37 2\nL7 false\n"
+
+[[tests]]
+name = "C_gen.s033.p01_fold"
+case = "gen/prog_033.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L1 2 2\n3\n3\nL2 yz 2\nL2 cd 2\nq37 2\nq40 2\nq40 2\nL6 2 2\n3\nq37 2\nL7 false\n"
+
+[[tests]]
+name = "C_gen.s033.p02_cse"
+case = "gen/prog_033.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L1 2 2\n3\n3\nL2 yz 2\nL2 cd 2\nq37 2\nq40 2\nq40 2\nL6 2 2\n3\nq37 2\nL7 false\n"
+
+[[tests]]
+name = "C_gen.s034.p00_none"
+case = "gen/prog_034.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q47 5\nL2 2\nL3 3\nL4 true\nL5 [3, 4, 3, 8, 4, 3]\nL6 2\n"
+
+[[tests]]
+name = "C_gen.s034.p01_fold"
+case = "gen/prog_034.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q47 5\nL2 2\nL3 3\nL4 true\nL5 [3, 4, 3, 8, 4, 3]\nL6 2\n"
+
+[[tests]]
+name = "C_gen.s034.p02_cse"
+case = "gen/prog_034.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q47 5\nL2 2\nL3 3\nL4 true\nL5 [3, 4, 3, 8, 4, 3]\nL6 2\n"
+
+[[tests]]
+name = "C_gen.s035.p00_none"
+case = "gen/prog_035.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L7 2.5 cd\nL7 2.5 cd\nL7 2.5 cd\nL7 5.25 cd\nq64 1\n[{ x: 0, y: 5 }, { x: 12, y: -2 }, { x: -2, y: -2 }, { x: -2, y: 4 }]\nL2 3.5 -3\nL2 3.5 -3\nL8 true 2 5\nL8 true 1 5\nL8 true 1 5\nL8 true 1 5\n[{ x: -10, y: 60 }, { x: 5, y: 60 }, { x: -10, y: 60 }]\nL2 2.0 -3\nL2 2.0 -3\nL9 -2\nL10 4.75\n"
+
+[[tests]]
+name = "C_gen.s035.p01_fold"
+case = "gen/prog_035.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L7 2.5 cd\nL7 2.5 cd\nL7 2.5 cd\nL7 5.25 cd\nq64 1\n[{ x: 0, y: 5 }, { x: 12, y: -2 }, { x: -2, y: -2 }, { x: -2, y: 4 }]\nL2 3.5 -3\nL2 3.5 -3\nL8 true 2 5\nL8 true 1 5\nL8 true 1 5\nL8 true 1 5\n[{ x: -10, y: 60 }, { x: 5, y: 60 }, { x: -10, y: 60 }]\nL2 2.0 -3\nL2 2.0 -3\nL9 -2\nL10 4.75\n"
+
+[[tests]]
+name = "C_gen.s035.p02_cse"
+case = "gen/prog_035.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L7 2.5 cd\nL7 2.5 cd\nL7 2.5 cd\nL7 5.25 cd\nq64 1\n[{ x: 0, y: 5 }, { x: 12, y: -2 }, { x: -2, y: -2 }, { x: -2, y: 4 }]\nL2 3.5 -3\nL2 3.5 -3\nL8 true 2 5\nL8 true 1 5\nL8 true 1 5\nL8 true 1 5\n[{ x: -10, y: 60 }, { x: 5, y: 60 }, { x: -10, y: 60 }]\nL2 2.0 -3\nL2 2.0 -3\nL9 -2\nL10 4.75\n"
+
+[[tests]]
+name = "C_gen.s036.p00_none"
+case = "gen/prog_036.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L2 { x: 100, y: 0 }\nL2 { x: 100, y: 0 }\nq21 0\nL3 0 0 2\nL4 false\nL4 false\nL4 false\nL1 0 0 0\nL1 -30 -90 -270\nL1 -30 -90 -270\nL1 -30 -90 -270\nL5 -1\nL5 -1\nL6 -2\nL7 (-29, -86, -63)\nL8 1\nL9 true\n"
+
+[[tests]]
+name = "C_gen.s036.p01_fold"
+case = "gen/prog_036.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L2 { x: 100, y: 0 }\nL2 { x: 100, y: 0 }\nq21 0\nL3 0 0 2\nL4 false\nL4 false\nL4 false\nL1 0 0 0\nL1 -30 -90 -270\nL1 -30 -90 -270\nL1 -30 -90 -270\nL5 -1\nL5 -1\nL6 -2\nL7 (-29, -86, -63)\nL8 1\nL9 true\n"
+
+[[tests]]
+name = "C_gen.s036.p02_cse"
+case = "gen/prog_036.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L2 { x: 100, y: 0 }\nL2 { x: 100, y: 0 }\nq21 0\nL3 0 0 2\nL4 false\nL4 false\nL4 false\nL1 0 0 0\nL1 -30 -90 -270\nL1 -30 -90 -270\nL1 -30 -90 -270\nL5 -1\nL5 -1\nL6 -2\nL7 (-29, -86, -63)\nL8 1\nL9 true\n"
+
+[[tests]]
+name = "C_gen.s037.p00_none"
+case = "gen/prog_037.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L4 -3 -4\n-4\nL7 cd\nL8 -1.5\nL9 true\nL10 -4\n"
+
+[[tests]]
+name = "C_gen.s037.p01_fold"
+case = "gen/prog_037.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L4 -3 -4\n-4\nL7 cd\nL8 -1.5\nL9 true\nL10 -4\n"
+
+[[tests]]
+name = "C_gen.s037.p02_cse"
+case = "gen/prog_037.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L4 -3 -4\n-4\nL7 cd\nL8 -1.5\nL9 true\nL10 -4\n"
+
+[[tests]]
+name = "C_gen.s038.p00_none"
+case = "gen/prog_038.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q27 -2\nq24 10\nq27 1\nL2 false\nL2 false\nL2 false\nL1 -3 -3\nq27 8\nq24 31\nL4 cd\nL5 8\nL6 true\nL7 false\nL8 true\nL9 -2.0\n"
+
+[[tests]]
+name = "C_gen.s038.p01_fold"
+case = "gen/prog_038.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q27 -2\nq24 10\nq27 1\nL2 false\nL2 false\nL2 false\nL1 -3 -3\nq27 8\nq24 31\nL4 cd\nL5 8\nL6 true\nL7 false\nL8 true\nL9 -2.0\n"
+
+[[tests]]
+name = "C_gen.s038.p02_cse"
+case = "gen/prog_038.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q27 -2\nq24 10\nq27 1\nL2 false\nL2 false\nL2 false\nL1 -3 -3\nq27 8\nq24 31\nL4 cd\nL5 8\nL6 true\nL7 false\nL8 true\nL9 -2.0\n"
+
+[[tests]]
+name = "C_gen.s039.p00_none"
+case = "gen/prog_039.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L3 0 1\nL4 5 -17 b\nL4 5 0 b\nL5 -5 cd-cd-cd-a cd-cd-cd-a m\nL5 -4 cd-cd-cd-a cd-cd-cd-a m\nL5 -1 cd-cd-cd-a cd-cd-cd-a m\nL5 -3 cd-cd-cd-a cd-cd-cd-a m\n0.25\nL6 0\nL7 1\n"
+
+[[tests]]
+name = "C_gen.s039.p01_fold"
+case = "gen/prog_039.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L3 0 1\nL4 5 -17 b\nL4 5 0 b\nL5 -5 cd-cd-cd-a cd-cd-cd-a m\nL5 -4 cd-cd-cd-a cd-cd-cd-a m\nL5 -1 cd-cd-cd-a cd-cd-cd-a m\nL5 -3 cd-cd-cd-a cd-cd-cd-a m\n0.25\nL6 0\nL7 1\n"
+
+[[tests]]
+name = "C_gen.s039.p02_cse"
+case = "gen/prog_039.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L3 0 1\nL4 5 -17 b\nL4 5 0 b\nL5 -5 cd-cd-cd-a cd-cd-cd-a m\nL5 -4 cd-cd-cd-a cd-cd-cd-a m\nL5 -1 cd-cd-cd-a cd-cd-cd-a m\nL5 -3 cd-cd-cd-a cd-cd-cd-a m\n0.25\nL6 0\nL7 1\n"
+
+[[tests]]
+name = "C_gen.s040.p00_none"
+case = "gen/prog_040.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q43 1\nL4 8 1.25\nL5 5\nL6 32.0\n"
+
+[[tests]]
+name = "C_gen.s040.p01_fold"
+case = "gen/prog_040.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q43 1\nL4 8 1.25\nL5 5\nL6 32.0\n"
+
+[[tests]]
+name = "C_gen.s040.p02_cse"
+case = "gen/prog_040.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q43 1\nL4 8 1.25\nL5 5\nL6 32.0\n"
+
+[[tests]]
+name = "C_gen.s041.p00_none"
+case = "gen/prog_041.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q25 3\nq25 3\nq25 0\nL4 true\nL5 [19.0, -7.0]\nL6 1\nL7 1.5\nL8 1.5\nL9 v=1xyz,\nL10 (4, 13)\nL11 10\n"
+
+[[tests]]
+name = "C_gen.s041.p01_fold"
+case = "gen/prog_041.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q25 3\nq25 3\nq25 0\nL4 true\nL5 [19.0, -7.0]\nL6 1\nL7 1.5\nL8 1.5\nL9 v=1xyz,\nL10 (4, 13)\nL11 10\n"
+
+[[tests]]
+name = "C_gen.s041.p02_cse"
+case = "gen/prog_041.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q25 3\nq25 3\nq25 0\nL4 true\nL5 [19.0, -7.0]\nL6 1\nL7 1.5\nL8 1.5\nL9 v=1xyz,\nL10 (4, 13)\nL11 10\n"
+
+[[tests]]
+name = "C_gen.s042.p00_none"
+case = "gen/prog_042.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q47 2\nq47 -3\nL3 yz\nL4 8\nL5 -13\nL6 true\nL7 false\nL8 1\nL9 true\n"
+
+[[tests]]
+name = "C_gen.s042.p01_fold"
+case = "gen/prog_042.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q47 2\nq47 -3\nL3 yz\nL4 8\nL5 -13\nL6 true\nL7 false\nL8 1\nL9 true\n"
+
+[[tests]]
+name = "C_gen.s042.p02_cse"
+case = "gen/prog_042.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q47 2\nq47 -3\nL3 yz\nL4 8\nL5 -13\nL6 true\nL7 false\nL8 1\nL9 true\n"
+
+[[tests]]
+name = "C_gen.s043.p00_none"
+case = "gen/prog_043.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q35 -20\nL1 (1, 4)\nq35 -20\nL1 (1, 4)\nq35 -20\nL1 (1, 4)\nq35 -20\nL1 (1, 4)\nq35 40\nL2 (2, -59)\nL3 0 8 -7\nm\nL4 [a, a]\nL5 (-20, -59, -79)\nL6 false\nL7 0\n"
+
+[[tests]]
+name = "C_gen.s043.p01_fold"
+case = "gen/prog_043.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q35 -20\nL1 (1, 4)\nq35 -20\nL1 (1, 4)\nq35 -20\nL1 (1, 4)\nq35 -20\nL1 (1, 4)\nq35 40\nL2 (2, -59)\nL3 0 8 -7\nm\nL4 [a, a]\nL5 (-20, -59, -79)\nL6 false\nL7 0\n"
+
+[[tests]]
+name = "C_gen.s043.p02_cse"
+case = "gen/prog_043.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q35 -20\nL1 (1, 4)\nq35 -20\nL1 (1, 4)\nq35 -20\nL1 (1, 4)\nq35 -20\nL1 (1, 4)\nq35 40\nL2 (2, -59)\nL3 0 8 -7\nm\nL4 [a, a]\nL5 (-20, -59, -79)\nL6 false\nL7 0\n"
+
+[[tests]]
+name = "C_gen.s044.p00_none"
+case = "gen/prog_044.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q43 0\nq43 1\nq43 2\nL7 false\nL8 false\n"
+
+[[tests]]
+name = "C_gen.s044.p01_fold"
+case = "gen/prog_044.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q43 0\nq43 1\nq43 2\nL7 false\nL8 false\n"
+
+[[tests]]
+name = "C_gen.s044.p02_cse"
+case = "gen/prog_044.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q43 0\nq43 1\nq43 2\nL7 false\nL8 false\n"
+
+[[tests]]
+name = "C_gen.s045.p00_none"
+case = "gen/prog_045.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q37 31\nL3 3 3 3\nL3 3 3 3\nL4 2\nL5 [1]\nL6 true\nL7 4\n"
+
+[[tests]]
+name = "C_gen.s045.p01_fold"
+case = "gen/prog_045.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q37 31\nL3 3 3 3\nL3 3 3 3\nL4 2\nL5 [1]\nL6 true\nL7 4\n"
+
+[[tests]]
+name = "C_gen.s045.p02_cse"
+case = "gen/prog_045.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q37 31\nL3 3 3 3\nL3 3 3 3\nL4 2\nL5 [1]\nL6 true\nL7 4\n"
+
+[[tests]]
+name = "C_gen.s046.p00_none"
+case = "gen/prog_046.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q44 2\nL9 a true { n: -7, tag: a }\nL9 a true { n: -7, tag: a }\nL9 a true { n: -7, tag: a }\nL9 a true { n: -7, tag: a }\n0.0\nq44 2\nL11 true cd mam\nq44 34\nL12 3\nL13 true\nL14 2.0\n"
+
+[[tests]]
+name = "C_gen.s046.p01_fold"
+case = "gen/prog_046.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q44 2\nL9 a true { n: -7, tag: a }\nL9 a true { n: -7, tag: a }\nL9 a true { n: -7, tag: a }\nL9 a true { n: -7, tag: a }\n0.0\nq44 2\nL11 true cd mam\nq44 34\nL12 3\nL13 true\nL14 2.0\n"
+
+[[tests]]
+name = "C_gen.s046.p02_cse"
+case = "gen/prog_046.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q44 2\nL9 a true { n: -7, tag: a }\nL9 a true { n: -7, tag: a }\nL9 a true { n: -7, tag: a }\nL9 a true { n: -7, tag: a }\n0.0\nq44 2\nL11 true cd mam\nq44 34\nL12 3\nL13 true\nL14 2.0\n"
+
+[[tests]]
+name = "C_gen.s047.p00_none"
+case = "gen/prog_047.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L5 1 1 0.25\nL6 2 [] 1\nL7 1 1 []\nq46 100\n-3\n-3\n-3\n-3\n-3\nL9 false\nL10 false\n"
+
+[[tests]]
+name = "C_gen.s047.p01_fold"
+case = "gen/prog_047.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L5 1 1 0.25\nL6 2 [] 1\nL7 1 1 []\nq46 100\n-3\n-3\n-3\n-3\n-3\nL9 false\nL10 false\n"
+
+[[tests]]
+name = "C_gen.s047.p02_cse"
+case = "gen/prog_047.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L5 1 1 0.25\nL6 2 [] 1\nL7 1 1 []\nq46 100\n-3\n-3\n-3\n-3\n-3\nL9 false\nL10 false\n"
+
+[[tests]]
+name = "C_gen.s048.p00_none"
+case = "gen/prog_048.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L4 ab 8\nab\nL6 -1 8 (1.0, true, 8)\nL6 10 8 (1.0, true, 8)\nL6 8 8 (1.0, true, 8)\nL7 30 true\nL7 30 false\nL3 (ab, true) (ab, true)\nL3 (ab, true) (ab, true)\nq64 30\nL8 [{ x: 8, y: -7 }, { x: 4, y: 30 }, { x: 10, y: 8 }, { x: -3, y: 0 }]\nL9 aa\nL10 false\n"
+
+[[tests]]
+name = "C_gen.s048.p01_fold"
+case = "gen/prog_048.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L4 ab 8\nab\nL6 -1 8 (1.0, true, 8)\nL6 10 8 (1.0, true, 8)\nL6 8 8 (1.0, true, 8)\nL7 30 true\nL7 30 false\nL3 (ab, true) (ab, true)\nL3 (ab, true) (ab, true)\nq64 30\nL8 [{ x: 8, y: -7 }, { x: 4, y: 30 }, { x: 10, y: 8 }, { x: -3, y: 0 }]\nL9 aa\nL10 false\n"
+
+[[tests]]
+name = "C_gen.s048.p02_cse"
+case = "gen/prog_048.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L4 ab 8\nab\nL6 -1 8 (1.0, true, 8)\nL6 10 8 (1.0, true, 8)\nL6 8 8 (1.0, true, 8)\nL7 30 true\nL7 30 false\nL3 (ab, true) (ab, true)\nL3 (ab, true) (ab, true)\nq64 30\nL8 [{ x: 8, y: -7 }, { x: 4, y: 30 }, { x: 10, y: 8 }, { x: -3, y: 0 }]\nL9 aa\nL10 false\n"
+
+[[tests]]
+name = "C_gen.s049.p00_none"
+case = "gen/prog_049.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L2 0 ab v=31>-1\nL2 0 ab v=31>-1\nL1 4 4\nL3 0 [true, false]\nL4 5 ab\nL4 5 ab\n"
+
+[[tests]]
+name = "C_gen.s049.p01_fold"
+case = "gen/prog_049.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L2 0 ab v=31>-1\nL2 0 ab v=31>-1\nL1 4 4\nL3 0 [true, false]\nL4 5 ab\nL4 5 ab\n"
+
+[[tests]]
+name = "C_gen.s049.p02_cse"
+case = "gen/prog_049.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L2 0 ab v=31>-1\nL2 0 ab v=31>-1\nL1 4 4\nL3 0 [true, false]\nL4 5 ab\nL4 5 ab\n"
+
+[[tests]]
+name = "C_gen.s050.p00_none"
+case = "gen/prog_050.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q32 1\nq32 3\nq32 3\nq32 3\nL3 1\nL4 false\nL5 [-0.5, 10.0, -1.5, 3.0]\nL6 false\n"
+
+[[tests]]
+name = "C_gen.s050.p01_fold"
+case = "gen/prog_050.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q32 1\nq32 3\nq32 3\nq32 3\nL3 1\nL4 false\nL5 [-0.5, 10.0, -1.5, 3.0]\nL6 false\n"
+
+[[tests]]
+name = "C_gen.s050.p02_cse"
+case = "gen/prog_050.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q32 1\nq32 3\nq32 3\nq32 3\nL3 1\nL4 false\nL5 [-0.5, 10.0, -1.5, 3.0]\nL6 false\n"
+
+[[tests]]
+name = "C_gen.s051.p00_none"
+case = "gen/prog_051.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L3 yz yz b\nq42 4\nq42 100\nq42 8\nL4 false b\nL2 -1 -1\nL5 true\nL6 0\nL7 0\n"
+
+[[tests]]
+name = "C_gen.s051.p01_fold"
+case = "gen/prog_051.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L3 yz yz b\nq42 4\nq42 100\nq42 8\nL4 false b\nL2 -1 -1\nL5 true\nL6 0\nL7 0\n"
+
+[[tests]]
+name = "C_gen.s051.p02_cse"
+case = "gen/prog_051.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L3 yz yz b\nq42 4\nq42 100\nq42 8\nL4 false b\nL2 -1 -1\nL5 true\nL6 0\nL7 0\n"
+
+[[tests]]
+name = "C_gen.s052.p00_none"
+case = "gen/prog_052.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q53 10\nq53 10\nL4 true 2\nq53 4\nq53 3\nL5 8\nL6 ab\nL7 true\nL8 false\nL9 false\n"
+
+[[tests]]
+name = "C_gen.s052.p01_fold"
+case = "gen/prog_052.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q53 10\nq53 10\nL4 true 2\nq53 4\nq53 3\nL5 8\nL6 ab\nL7 true\nL8 false\nL9 false\n"
+
+[[tests]]
+name = "C_gen.s052.p02_cse"
+case = "gen/prog_052.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q53 10\nq53 10\nL4 true 2\nq53 4\nq53 3\nL5 8\nL6 ab\nL7 true\nL8 false\nL9 false\n"
+
+[[tests]]
+name = "C_gen.s053.p00_none"
+case = "gen/prog_053.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q47 3\nL1 -102 -102\n3\nL3 yz yz\nL4 -101 yz\nL4 -101 yz\nL1 -204 -204\nL5 yz\nL6 5.375\nL7 true\n"
+
+[[tests]]
+name = "C_gen.s053.p01_fold"
+case = "gen/prog_053.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q47 3\nL1 -102 -102\n3\nL3 yz yz\nL4 -101 yz\nL4 -101 yz\nL1 -204 -204\nL5 yz\nL6 5.375\nL7 true\n"
+
+[[tests]]
+name = "C_gen.s053.p02_cse"
+case = "gen/prog_053.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q47 3\nL1 -102 -102\n3\nL3 yz yz\nL4 -101 yz\nL4 -101 yz\nL1 -204 -204\nL5 yz\nL6 5.375\nL7 true\n"
+
+[[tests]]
+name = "C_gen.s054.p00_none"
+case = "gen/prog_054.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q29 3\nL2 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL4 2\nL5 v=true,-2>7|\n"
+
+[[tests]]
+name = "C_gen.s054.p01_fold"
+case = "gen/prog_054.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q29 3\nL2 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL4 2\nL5 v=true,-2>7|\n"
+
+[[tests]]
+name = "C_gen.s054.p02_cse"
+case = "gen/prog_054.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q29 3\nL2 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL3 [2, 7, 2, -2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] true\nL4 2\nL5 v=true,-2>7|\n"
+
+[[tests]]
+name = "C_gen.s055.p00_none"
+case = "gen/prog_055.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q37 8\nL1 2 2 2\nL2 4 true\nL2 4 true\nL1 2 2 2\nL1 2 2 2\nL3 1\nL4 ab\nL5 1\nL6 falseyz\nL7 1\nL8 1\n"
+
+[[tests]]
+name = "C_gen.s055.p01_fold"
+case = "gen/prog_055.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q37 8\nL1 2 2 2\nL2 4 true\nL2 4 true\nL1 2 2 2\nL1 2 2 2\nL3 1\nL4 ab\nL5 1\nL6 falseyz\nL7 1\nL8 1\n"
+
+[[tests]]
+name = "C_gen.s055.p02_cse"
+case = "gen/prog_055.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q37 8\nL1 2 2 2\nL2 4 true\nL2 4 true\nL1 2 2 2\nL1 2 2 2\nL3 1\nL4 ab\nL5 1\nL6 falseyz\nL7 1\nL8 1\n"
+
+[[tests]]
+name = "C_gen.s056.p00_none"
+case = "gen/prog_056.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q34 9\nq34 1\nL2 9\nL3 5\nL4 true\nL5 [10, -7, 5, 1, -2]\nL6 false\n"
+
+[[tests]]
+name = "C_gen.s056.p01_fold"
+case = "gen/prog_056.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q34 9\nq34 1\nL2 9\nL3 5\nL4 true\nL5 [10, -7, 5, 1, -2]\nL6 false\n"
+
+[[tests]]
+name = "C_gen.s056.p02_cse"
+case = "gen/prog_056.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q34 9\nq34 1\nL2 9\nL3 5\nL4 true\nL5 [10, -7, 5, 1, -2]\nL6 false\n"
+
+[[tests]]
+name = "C_gen.s057.p00_none"
+case = "gen/prog_057.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L1 r:x  m r:x \nL1 r:x  r:x r:x  r:x \nL1 r:x  r:x  r:x \nL4 1\nL5 true\nL6 [(1.5, b), (-1.5, a)]\nL7 -2.0\nL8 -2.0\n"
+
+[[tests]]
+name = "C_gen.s057.p01_fold"
+case = "gen/prog_057.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L1 r:x  m r:x \nL1 r:x  r:x r:x  r:x \nL1 r:x  r:x  r:x \nL4 1\nL5 true\nL6 [(1.5, b), (-1.5, a)]\nL7 -2.0\nL8 -2.0\n"
+
+[[tests]]
+name = "C_gen.s057.p02_cse"
+case = "gen/prog_057.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L1 r:x  m r:x \nL1 r:x  r:x r:x  r:x \nL1 r:x  r:x  r:x \nL4 1\nL5 true\nL6 [(1.5, b), (-1.5, a)]\nL7 -2.0\nL8 -2.0\n"
+
+[[tests]]
+name = "C_gen.s058.p00_none"
+case = "gen/prog_058.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L6 yz (7, 22, 67)\nL7 4 1\nL7 4 4\nL7 4 2\nL7 4 22\nL9 (7, 22, 67) [31, 4]\n1\n1\n1\nL11 (7, 22, 67)\nL11 (7, 22, 67)\nL11 (7, 22, 67)\nL11 (7, 22, 67)\nL12 true true\n"
+
+[[tests]]
+name = "C_gen.s058.p01_fold"
+case = "gen/prog_058.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L6 yz (7, 22, 67)\nL7 4 1\nL7 4 4\nL7 4 2\nL7 4 22\nL9 (7, 22, 67) [31, 4]\n1\n1\n1\nL11 (7, 22, 67)\nL11 (7, 22, 67)\nL11 (7, 22, 67)\nL11 (7, 22, 67)\nL12 true true\n"
+
+[[tests]]
+name = "C_gen.s058.p02_cse"
+case = "gen/prog_058.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L6 yz (7, 22, 67)\nL7 4 1\nL7 4 4\nL7 4 2\nL7 4 22\nL9 (7, 22, 67) [31, 4]\n1\n1\n1\nL11 (7, 22, 67)\nL11 (7, 22, 67)\nL11 (7, 22, 67)\nL11 (7, 22, 67)\nL12 true true\n"
+
+[[tests]]
+name = "C_gen.s059.p00_none"
+case = "gen/prog_059.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L2 8 cd\nq54 -7\nL5 -8\nL6 (false, [yz, cd])\n"
+
+[[tests]]
+name = "C_gen.s059.p01_fold"
+case = "gen/prog_059.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L2 8 cd\nq54 -7\nL5 -8\nL6 (false, [yz, cd])\n"
+
+[[tests]]
+name = "C_gen.s059.p02_cse"
+case = "gen/prog_059.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L2 8 cd\nq54 -7\nL5 -8\nL6 (false, [yz, cd])\n"
+
+[[tests]]
+name = "C_gen.s060.p00_none"
+case = "gen/prog_060.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L6 (true, true)\nL7 (true, true) cd (true, true)\nL5 21 cd\nL5 0 cd\nL5 31 cd\nL5 31 cd\nL5 20181 cd\nL9 21 20181 21\nL10 20181 0\nL10 20181 0\nL10 20181 0\nL10 20181 0\nL10 20181 0\nL10 20181 0\nL10 20181 0\nL10 20181 0\n0\n"
+
+[[tests]]
+name = "C_gen.s060.p01_fold"
+case = "gen/prog_060.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L6 (true, true)\nL7 (true, true) cd (true, true)\nL5 21 cd\nL5 0 cd\nL5 31 cd\nL5 31 cd\nL5 20181 cd\nL9 21 20181 21\nL10 20181 0\nL10 20181 0\nL10 20181 0\nL10 20181 0\nL10 20181 0\nL10 20181 0\nL10 20181 0\nL10 20181 0\n0\n"
+
+[[tests]]
+name = "C_gen.s060.p02_cse"
+case = "gen/prog_060.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L6 (true, true)\nL7 (true, true) cd (true, true)\nL5 21 cd\nL5 0 cd\nL5 31 cd\nL5 31 cd\nL5 20181 cd\nL9 21 20181 21\nL10 20181 0\nL10 20181 0\nL10 20181 0\nL10 20181 0\nL10 20181 0\nL10 20181 0\nL10 20181 0\nL10 20181 0\n0\n"
+
+[[tests]]
+name = "C_gen.s061.p00_none"
+case = "gen/prog_061.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L4 0 0\nL4 0 0\nL4 0 0\nL4 0 0\nq38 2\nL2 -2 -1\nL5 0 0\nL2 2 -5\nL1 0 0\nq38 0\nq38 0\nq38 0\nq38 0\nL6 0\n"
+
+[[tests]]
+name = "C_gen.s061.p01_fold"
+case = "gen/prog_061.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L4 0 0\nL4 0 0\nL4 0 0\nL4 0 0\nq38 2\nL2 -2 -1\nL5 0 0\nL2 2 -5\nL1 0 0\nq38 0\nq38 0\nq38 0\nq38 0\nL6 0\n"
+
+[[tests]]
+name = "C_gen.s061.p02_cse"
+case = "gen/prog_061.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L4 0 0\nL4 0 0\nL4 0 0\nL4 0 0\nq38 2\nL2 -2 -1\nL5 0 0\nL2 2 -5\nL1 0 0\nq38 0\nq38 0\nq38 0\nq38 0\nL6 0\n"
+
+[[tests]]
+name = "C_gen.s062.p00_none"
+case = "gen/prog_062.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L1 -2 -2\nq32 -3\nL3 8\nL4 cd\nL5 cd0\nL6 (true, 16.0)\nL7 false\nL8 ([(false, true), (false, true), (false, false), (true, false)], m)\n"
+
+[[tests]]
+name = "C_gen.s062.p01_fold"
+case = "gen/prog_062.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L1 -2 -2\nq32 -3\nL3 8\nL4 cd\nL5 cd0\nL6 (true, 16.0)\nL7 false\nL8 ([(false, true), (false, true), (false, false), (true, false)], m)\n"
+
+[[tests]]
+name = "C_gen.s062.p02_cse"
+case = "gen/prog_062.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L1 -2 -2\nq32 -3\nL3 8\nL4 cd\nL5 cd0\nL6 (true, 16.0)\nL7 false\nL8 ([(false, true), (false, true), (false, false), (true, false)], m)\n"
+
+[[tests]]
+name = "C_gen.s063.p00_none"
+case = "gen/prog_063.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L3 b b\nq34 5\nL6 -32 -32\n"
+
+[[tests]]
+name = "C_gen.s063.p01_fold"
+case = "gen/prog_063.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L3 b b\nq34 5\nL6 -32 -32\n"
+
+[[tests]]
+name = "C_gen.s063.p02_cse"
+case = "gen/prog_063.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L3 b b\nq34 5\nL6 -32 -32\n"
+
+[[tests]]
+name = "C_gen.s064.p00_none"
+case = "gen/prog_064.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L5 b true\nL6 -1.5 x -1.5\nL6 0.0 x 0.0\nL6 0.5 x 0.5\nq57 30\nL7 ab true\nL8 { n: 31, tag: b }\n"
+
+[[tests]]
+name = "C_gen.s064.p01_fold"
+case = "gen/prog_064.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L5 b true\nL6 -1.5 x -1.5\nL6 0.0 x 0.0\nL6 0.5 x 0.5\nq57 30\nL7 ab true\nL8 { n: 31, tag: b }\n"
+
+[[tests]]
+name = "C_gen.s064.p02_cse"
+case = "gen/prog_064.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L5 b true\nL6 -1.5 x -1.5\nL6 0.0 x 0.0\nL6 0.5 x 0.5\nq57 30\nL7 ab true\nL8 { n: 31, tag: b }\n"
+
+[[tests]]
+name = "C_gen.s065.p00_none"
+case = "gen/prog_065.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q33 -1\nL1 0 0\nL2 5\nL3 0.5\nL4 -1\nL5 1\nL6 0.75\n"
+
+[[tests]]
+name = "C_gen.s065.p01_fold"
+case = "gen/prog_065.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q33 -1\nL1 0 0\nL2 5\nL3 0.5\nL4 -1\nL5 1\nL6 0.75\n"
+
+[[tests]]
+name = "C_gen.s065.p02_cse"
+case = "gen/prog_065.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q33 -1\nL1 0 0\nL2 5\nL3 0.5\nL4 -1\nL5 1\nL6 0.75\n"
+
+[[tests]]
+name = "C_gen.s066.p00_none"
+case = "gen/prog_066.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q43 1\nq43 3\nL2 x 4\nL5 [false, false]\nL5 [false, false]\nL5 [false, false]\nL6 { x: 6, y: 20 }\nL7 []\n"
+
+[[tests]]
+name = "C_gen.s066.p01_fold"
+case = "gen/prog_066.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q43 1\nq43 3\nL2 x 4\nL5 [false, false]\nL5 [false, false]\nL5 [false, false]\nL6 { x: 6, y: 20 }\nL7 []\n"
+
+[[tests]]
+name = "C_gen.s066.p02_cse"
+case = "gen/prog_066.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q43 1\nq43 3\nL2 x 4\nL5 [false, false]\nL5 [false, false]\nL5 [false, false]\nL6 { x: 6, y: 20 }\nL7 []\n"
+
+[[tests]]
+name = "C_gen.s067.p00_none"
+case = "gen/prog_067.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "mcd\nL1 0 0\nq45 -2\nL4 2\nL5 (-2, -2.0)\nL6 false\nL7 20\n"
+
+[[tests]]
+name = "C_gen.s067.p01_fold"
+case = "gen/prog_067.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "mcd\nL1 0 0\nq45 -2\nL4 2\nL5 (-2, -2.0)\nL6 false\nL7 20\n"
+
+[[tests]]
+name = "C_gen.s067.p02_cse"
+case = "gen/prog_067.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "mcd\nL1 0 0\nq45 -2\nL4 2\nL5 (-2, -2.0)\nL6 false\nL7 20\n"
+
+[[tests]]
+name = "C_gen.s068.p00_none"
+case = "gen/prog_068.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L3 1 [1, 3, 1, 5, 2, 3, 4, 5]\nL1 7 7\nq26 1\nq26 5\nq26 1\nL5 1\nL6 5\nL7 false\nL8 -3\nL9 false\n"
+
+[[tests]]
+name = "C_gen.s068.p01_fold"
+case = "gen/prog_068.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L3 1 [1, 3, 1, 5, 2, 3, 4, 5]\nL1 7 7\nq26 1\nq26 5\nq26 1\nL5 1\nL6 5\nL7 false\nL8 -3\nL9 false\n"
+
+[[tests]]
+name = "C_gen.s068.p02_cse"
+case = "gen/prog_068.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L3 1 [1, 3, 1, 5, 2, 3, 4, 5]\nL1 7 7\nq26 1\nq26 5\nq26 1\nL5 1\nL6 5\nL7 false\nL8 -3\nL9 false\n"
+
+[[tests]]
+name = "C_gen.s069.p00_none"
+case = "gen/prog_069.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q37 12\nL3 0 bk9\nL4 true\nL5 0 [(0.5, m), (2.5, m), (10.0, k9), (1.5, pq), (3.0, pq), (2.0, ab), (1.0, ab), (4.75, ab), (10.0, b), (10.0, b)] 0\nL3 1 bk9\nL4 true\nL5 0 [(0.5, m), (2.5, m), (10.0, k9), (1.5, pq), (3.0, pq), (2.0, ab), (1.0, ab), (4.75, ab), (10.0, b), (10.0, b)] 0\nL3 2 bk9\nL4 true\nL5 0 [(0.5, m), (2.5, m), (10.0, k9), (1.5, pq), (3.0, pq), (2.0, ab), (1.0, ab), (4.75, ab), (10.0, b), (10.0, b)] 0\nq37 5\n"
+
+[[tests]]
+name = "C_gen.s069.p01_fold"
+case = "gen/prog_069.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q37 12\nL3 0 bk9\nL4 true\nL5 0 [(0.5, m), (2.5, m), (10.0, k9), (1.5, pq), (3.0, pq), (2.0, ab), (1.0, ab), (4.75, ab), (10.0, b), (10.0, b)] 0\nL3 1 bk9\nL4 true\nL5 0 [(0.5, m), (2.5, m), (10.0, k9), (1.5, pq), (3.0, pq), (2.0, ab), (1.0, ab), (4.75, ab), (10.0, b), (10.0, b)] 0\nL3 2 bk9\nL4 true\nL5 0 [(0.5, m), (2.5, m), (10.0, k9), (1.5, pq), (3.0, pq), (2.0, ab), (1.0, ab), (4.75, ab), (10.0, b), (10.0, b)] 0\nq37 5\n"
+
+[[tests]]
+name = "C_gen.s069.p02_cse"
+case = "gen/prog_069.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q37 12\nL3 0 bk9\nL4 true\nL5 0 [(0.5, m), (2.5, m), (10.0, k9), (1.5, pq), (3.0, pq), (2.0, ab), (1.0, ab), (4.75, ab), (10.0, b), (10.0, b)] 0\nL3 1 bk9\nL4 true\nL5 0 [(0.5, m), (2.5, m), (10.0, k9), (1.5, pq), (3.0, pq), (2.0, ab), (1.0, ab), (4.75, ab), (10.0, b), (10.0, b)] 0\nL3 2 bk9\nL4 true\nL5 0 [(0.5, m), (2.5, m), (10.0, k9), (1.5, pq), (3.0, pq), (2.0, ab), (1.0, ab), (4.75, ab), (10.0, b), (10.0, b)] 0\nq37 5\n"
+
+[[tests]]
+name = "C_gen.s070.p00_none"
+case = "gen/prog_070.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q29 -2\nL1 [(cd, false), (cd, false), (cd, false)] false\nq29 2\nL2 0\nL3 ab\nL4 false\n"
+
+[[tests]]
+name = "C_gen.s070.p01_fold"
+case = "gen/prog_070.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q29 -2\nL1 [(cd, false), (cd, false), (cd, false)] false\nq29 2\nL2 0\nL3 ab\nL4 false\n"
+
+[[tests]]
+name = "C_gen.s070.p02_cse"
+case = "gen/prog_070.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q29 -2\nL1 [(cd, false), (cd, false), (cd, false)] false\nq29 2\nL2 0\nL3 ab\nL4 false\n"
+
+[[tests]]
+name = "C_gen.s071.p00_none"
+case = "gen/prog_071.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L4 (10, 31) 2\nq32 0\nq32 2\nq32 4\nq32 -2\nL5 3\nL6 true\nL7 (7, 22, 67)\nL8 [2, -3]\nL9 true\nL10 false\n"
+
+[[tests]]
+name = "C_gen.s071.p01_fold"
+case = "gen/prog_071.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L4 (10, 31) 2\nq32 0\nq32 2\nq32 4\nq32 -2\nL5 3\nL6 true\nL7 (7, 22, 67)\nL8 [2, -3]\nL9 true\nL10 false\n"
+
+[[tests]]
+name = "C_gen.s071.p02_cse"
+case = "gen/prog_071.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L4 (10, 31) 2\nq32 0\nq32 2\nq32 4\nq32 -2\nL5 3\nL6 true\nL7 (7, 22, 67)\nL8 [2, -3]\nL9 true\nL10 false\n"
+
+[[tests]]
+name = "C_gen.s072.p00_none"
+case = "gen/prog_072.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L2 8 0\nq31 0\nL4 b\nL5 true\nL6 [(b, 1.0), (m, 0.5)]\nL7 false\n"
+
+[[tests]]
+name = "C_gen.s072.p01_fold"
+case = "gen/prog_072.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L2 8 0\nq31 0\nL4 b\nL5 true\nL6 [(b, 1.0), (m, 0.5)]\nL7 false\n"
+
+[[tests]]
+name = "C_gen.s072.p02_cse"
+case = "gen/prog_072.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L2 8 0\nq31 0\nL4 b\nL5 true\nL6 [(b, 1.0), (m, 0.5)]\nL7 false\n"
+
+[[tests]]
+name = "C_gen.s073.p00_none"
+case = "gen/prog_073.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L6 3\nL6 3\nL6 3\nL7 3 3 3\nL7 ab ab ab\nL8 false\n"
+
+[[tests]]
+name = "C_gen.s073.p01_fold"
+case = "gen/prog_073.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L6 3\nL6 3\nL6 3\nL7 3 3 3\nL7 ab ab ab\nL8 false\n"
+
+[[tests]]
+name = "C_gen.s073.p02_cse"
+case = "gen/prog_073.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L6 3\nL6 3\nL6 3\nL7 3 3 3\nL7 ab ab ab\nL8 false\n"
+
+[[tests]]
+name = "C_gen.s074.p00_none"
+case = "gen/prog_074.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q64 4\nq64 5\nq64 1\nL6 x\nL7 3\nL8 false\n"
+
+[[tests]]
+name = "C_gen.s074.p01_fold"
+case = "gen/prog_074.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q64 4\nq64 5\nq64 1\nL6 x\nL7 3\nL8 false\n"
+
+[[tests]]
+name = "C_gen.s074.p02_cse"
+case = "gen/prog_074.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q64 4\nq64 5\nq64 1\nL6 x\nL7 3\nL8 false\n"
+
+[[tests]]
+name = "C_gen.s075.p00_none"
+case = "gen/prog_075.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q32 0\nq32 0\nq32 0\nq32 0\nL4 27 3\nL3 [3.0, 4.75, 0.25] [3.0, 4.75, 0.25]\nq32 7\nL5 3\nL6 true\nL7 v=b 98,cd,m,x,a,\nL8 true\nL9 true\n"
+
+[[tests]]
+name = "C_gen.s075.p01_fold"
+case = "gen/prog_075.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q32 0\nq32 0\nq32 0\nq32 0\nL4 27 3\nL3 [3.0, 4.75, 0.25] [3.0, 4.75, 0.25]\nq32 7\nL5 3\nL6 true\nL7 v=b 98,cd,m,x,a,\nL8 true\nL9 true\n"
+
+[[tests]]
+name = "C_gen.s075.p02_cse"
+case = "gen/prog_075.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q32 0\nq32 0\nq32 0\nq32 0\nL4 27 3\nL3 [3.0, 4.75, 0.25] [3.0, 4.75, 0.25]\nq32 7\nL5 3\nL6 true\nL7 v=b 98,cd,m,x,a,\nL8 true\nL9 true\n"
+
+[[tests]]
+name = "C_gen.s076.p00_none"
+case = "gen/prog_076.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L5 4 4\nq50 4\nL6 13.25 4 4\nL6 13.25 4 4\nL7 4 1.0,k9pq true\nq50 0\nL8 0\nL9 true\n"
+
+[[tests]]
+name = "C_gen.s076.p01_fold"
+case = "gen/prog_076.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L5 4 4\nq50 4\nL6 13.25 4 4\nL6 13.25 4 4\nL7 4 1.0,k9pq true\nq50 0\nL8 0\nL9 true\n"
+
+[[tests]]
+name = "C_gen.s076.p02_cse"
+case = "gen/prog_076.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L5 4 4\nq50 4\nL6 13.25 4 4\nL6 13.25 4 4\nL7 4 1.0,k9pq true\nq50 0\nL8 0\nL9 true\n"
+
+[[tests]]
+name = "C_gen.s077.p00_none"
+case = "gen/prog_077.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L5 1 true\nq27 2\nq27 2\nfalse\nL6 false x\n"
+
+[[tests]]
+name = "C_gen.s077.p01_fold"
+case = "gen/prog_077.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L5 1 true\nq27 2\nq27 2\nfalse\nL6 false x\n"
+
+[[tests]]
+name = "C_gen.s077.p02_cse"
+case = "gen/prog_077.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L5 1 true\nq27 2\nq27 2\nfalse\nL6 false x\n"
+
+[[tests]]
+name = "C_gen.s078.p00_none"
+case = "gen/prog_078.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q44 12\nnull\nq44 5\nL6 yz\nL7 false\nL8 (4, 13)\nL9 [4, 4, 4, 4]\nL10 false\n"
+
+[[tests]]
+name = "C_gen.s078.p01_fold"
+case = "gen/prog_078.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q44 12\nnull\nq44 5\nL6 yz\nL7 false\nL8 (4, 13)\nL9 [4, 4, 4, 4]\nL10 false\n"
+
+[[tests]]
+name = "C_gen.s078.p02_cse"
+case = "gen/prog_078.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q44 12\nnull\nq44 5\nL6 yz\nL7 false\nL8 (4, 13)\nL9 [4, 4, 4, 4]\nL10 false\n"
+
+[[tests]]
+name = "C_gen.s079.p00_none"
+case = "gen/prog_079.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L1 true\nL2 (5, [x, , pq])\nL3 (yz|, yz) (yz|, yz)\nq27 2\nL4 cd 1 cd\nL4 x 1 x\nL4 <-2.00|100| 1 <-2.00|100|\nq27 2\n0\n1\nL6 1 <-2.00|100| <-2.00|100|\nL7 false\nL8 false\n"
+
+[[tests]]
+name = "C_gen.s079.p01_fold"
+case = "gen/prog_079.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L1 true\nL2 (5, [x, , pq])\nL3 (yz|, yz) (yz|, yz)\nq27 2\nL4 cd 1 cd\nL4 x 1 x\nL4 <-2.00|100| 1 <-2.00|100|\nq27 2\n0\n1\nL6 1 <-2.00|100| <-2.00|100|\nL7 false\nL8 false\n"
+
+[[tests]]
+name = "C_gen.s079.p02_cse"
+case = "gen/prog_079.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L1 true\nL2 (5, [x, , pq])\nL3 (yz|, yz) (yz|, yz)\nq27 2\nL4 cd 1 cd\nL4 x 1 x\nL4 <-2.00|100| 1 <-2.00|100|\nq27 2\n0\n1\nL6 1 <-2.00|100| <-2.00|100|\nL7 false\nL8 false\n"
+
+[[tests]]
+name = "C_gen.s080.p00_none"
+case = "gen/prog_080.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q32 0\nL2 5 5 [{ x: 100, y: 5 }]\nL3 -3 2\nL3 1.0>k9  2\nL3 1.0>k9  2\nL3 1.0>k9  2\nL3 1.0>k9  2\nL4 5 2 1.0>k9 \nL5 k9 -3 0\nL5 k9 -3 5\nL5 k9 -3 14\nL6 -3 -3\nL6 -3 -3\nL7 -1\n"
+
+[[tests]]
+name = "C_gen.s080.p01_fold"
+case = "gen/prog_080.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q32 0\nL2 5 5 [{ x: 100, y: 5 }]\nL3 -3 2\nL3 1.0>k9  2\nL3 1.0>k9  2\nL3 1.0>k9  2\nL3 1.0>k9  2\nL4 5 2 1.0>k9 \nL5 k9 -3 0\nL5 k9 -3 5\nL5 k9 -3 14\nL6 -3 -3\nL6 -3 -3\nL7 -1\n"
+
+[[tests]]
+name = "C_gen.s080.p02_cse"
+case = "gen/prog_080.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q32 0\nL2 5 5 [{ x: 100, y: 5 }]\nL3 -3 2\nL3 1.0>k9  2\nL3 1.0>k9  2\nL3 1.0>k9  2\nL3 1.0>k9  2\nL4 5 2 1.0>k9 \nL5 k9 -3 0\nL5 k9 -3 5\nL5 k9 -3 14\nL6 -3 -3\nL6 -3 -3\nL7 -1\n"
+
+[[tests]]
+name = "C_gen.s081.p00_none"
+case = "gen/prog_081.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L4 yz\nq29 7\nL6 2\nq29 2\nL7 cd\nL8 true\n"
+
+[[tests]]
+name = "C_gen.s081.p01_fold"
+case = "gen/prog_081.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L4 yz\nq29 7\nL6 2\nq29 2\nL7 cd\nL8 true\n"
+
+[[tests]]
+name = "C_gen.s081.p02_cse"
+case = "gen/prog_081.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L4 yz\nq29 7\nL6 2\nq29 2\nL7 cd\nL8 true\n"
+
+[[tests]]
+name = "C_gen.s082.p00_none"
+case = "gen/prog_082.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L2 x 0 b\nq47 0\nq47 0\nL3 false false true\nL4 0 false\nxx\nq47 0\nxx\nq47 0\nL5 ({ x: 10, y: 0 }, 2)\nL6 true\n"
+
+[[tests]]
+name = "C_gen.s082.p01_fold"
+case = "gen/prog_082.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L2 x 0 b\nq47 0\nq47 0\nL3 false false true\nL4 0 false\nxx\nq47 0\nxx\nq47 0\nL5 ({ x: 10, y: 0 }, 2)\nL6 true\n"
+
+[[tests]]
+name = "C_gen.s082.p02_cse"
+case = "gen/prog_082.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L2 x 0 b\nq47 0\nq47 0\nL3 false false true\nL4 0 false\nxx\nq47 0\nxx\nq47 0\nL5 ({ x: 10, y: 0 }, 2)\nL6 true\n"
+
+[[tests]]
+name = "C_gen.s083.p00_none"
+case = "gen/prog_083.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L1 12 12\nq29 1\nL4 (true, yzb) 0\nL4 (true, yzb) 7\nq26 0\nL5 0\nL6 true\nL7 (3, 7)\n"
+
+[[tests]]
+name = "C_gen.s083.p01_fold"
+case = "gen/prog_083.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L1 12 12\nq29 1\nL4 (true, yzb) 0\nL4 (true, yzb) 7\nq26 0\nL5 0\nL6 true\nL7 (3, 7)\n"
+
+[[tests]]
+name = "C_gen.s083.p02_cse"
+case = "gen/prog_083.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L1 12 12\nq29 1\nL4 (true, yzb) 0\nL4 (true, yzb) 7\nq26 0\nL5 0\nL6 true\nL7 (3, 7)\n"
+
+[[tests]]
+name = "C_gen.s084.p00_none"
+case = "gen/prog_084.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L2 5 5 5 5\nq35 2\nq35 -1\nq35 10\nL3 3\nL4 false\nL5 10\n"
+
+[[tests]]
+name = "C_gen.s084.p01_fold"
+case = "gen/prog_084.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L2 5 5 5 5\nq35 2\nq35 -1\nq35 10\nL3 3\nL4 false\nL5 10\n"
+
+[[tests]]
+name = "C_gen.s084.p02_cse"
+case = "gen/prog_084.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L2 5 5 5 5\nq35 2\nq35 -1\nq35 10\nL3 3\nL4 false\nL5 10\n"
+
+[[tests]]
+name = "C_gen.s085.p00_none"
+case = "gen/prog_085.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L3 5 yzb\nq37 1\nq37 5\nL5 (0, -0.5)\n"
+
+[[tests]]
+name = "C_gen.s085.p01_fold"
+case = "gen/prog_085.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L3 5 yzb\nq37 1\nq37 5\nL5 (0, -0.5)\n"
+
+[[tests]]
+name = "C_gen.s085.p02_cse"
+case = "gen/prog_085.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L3 5 yzb\nq37 1\nq37 5\nL5 (0, -0.5)\n"
+
+[[tests]]
+name = "C_gen.s086.p00_none"
+case = "gen/prog_086.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q45 0\nL1 -1 2\nL1 -1 2\nL1 -1 2\nq45 1\nq45 0\nq45 7\nL1 -1 2\nL5 3\nL6 (-7.0, 0)\nL7 4\nL8 3\nL9 false\nL10 [(a, -3), (a, -3)]\nL11 3\nL12 true\nL13 false\nL14 true\nL15 3\n"
+
+[[tests]]
+name = "C_gen.s086.p01_fold"
+case = "gen/prog_086.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q45 0\nL1 -1 2\nL1 -1 2\nL1 -1 2\nq45 1\nq45 0\nq45 7\nL1 -1 2\nL5 3\nL6 (-7.0, 0)\nL7 4\nL8 3\nL9 false\nL10 [(a, -3), (a, -3)]\nL11 3\nL12 true\nL13 false\nL14 true\nL15 3\n"
+
+[[tests]]
+name = "C_gen.s086.p02_cse"
+case = "gen/prog_086.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q45 0\nL1 -1 2\nL1 -1 2\nL1 -1 2\nq45 1\nq45 0\nq45 7\nL1 -1 2\nL5 3\nL6 (-7.0, 0)\nL7 4\nL8 3\nL9 false\nL10 [(a, -3), (a, -3)]\nL11 3\nL12 true\nL13 false\nL14 true\nL15 3\n"
+
+[[tests]]
+name = "C_gen.s087.p00_none"
+case = "gen/prog_087.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q46 22\nq46 5\nq46 9\nq46 5\nq46 9\nq46 5\nq46 9\nq46 5\nL1 -1 -1\nq46 0\nL5 x\nL6 10.0\nL7 40.0\nL8 0\n"
+
+[[tests]]
+name = "C_gen.s087.p01_fold"
+case = "gen/prog_087.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q46 22\nq46 5\nq46 9\nq46 5\nq46 9\nq46 5\nq46 9\nq46 5\nL1 -1 -1\nq46 0\nL5 x\nL6 10.0\nL7 40.0\nL8 0\n"
+
+[[tests]]
+name = "C_gen.s087.p02_cse"
+case = "gen/prog_087.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q46 22\nq46 5\nq46 9\nq46 5\nq46 9\nq46 5\nq46 9\nq46 5\nL1 -1 -1\nq46 0\nL5 x\nL6 10.0\nL7 40.0\nL8 0\n"
+
+[[tests]]
+name = "C_gen.s088.p00_none"
+case = "gen/prog_088.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q56 -7\nL1 false 2 (2, 2)\n"
+
+[[tests]]
+name = "C_gen.s088.p01_fold"
+case = "gen/prog_088.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q56 -7\nL1 false 2 (2, 2)\n"
+
+[[tests]]
+name = "C_gen.s088.p02_cse"
+case = "gen/prog_088.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q56 -7\nL1 false 2 (2, 2)\n"
+
+[[tests]]
+name = "C_gen.s089.p00_none"
+case = "gen/prog_089.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q33 -7\nq33 0\nL1 1 1 100\nL2 false -1\nL3 true 100\nL2 true 100\nL3 true 100\nL2 false 100\nL3 true 100\nL4 cd (false, 100)\nL5 false cd\nL5 false cd\nL5 false cd\nL5 false cd\nq33 3\nL7 ab\nL8 5\nL9 false\nL10 [1, 1, 1]\n"
+
+[[tests]]
+name = "C_gen.s089.p01_fold"
+case = "gen/prog_089.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q33 -7\nq33 0\nL1 1 1 100\nL2 false -1\nL3 true 100\nL2 true 100\nL3 true 100\nL2 false 100\nL3 true 100\nL4 cd (false, 100)\nL5 false cd\nL5 false cd\nL5 false cd\nL5 false cd\nq33 3\nL7 ab\nL8 5\nL9 false\nL10 [1, 1, 1]\n"
+
+[[tests]]
+name = "C_gen.s089.p02_cse"
+case = "gen/prog_089.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q33 -7\nq33 0\nL1 1 1 100\nL2 false -1\nL3 true 100\nL2 true 100\nL3 true 100\nL2 false 100\nL3 true 100\nL4 cd (false, 100)\nL5 false cd\nL5 false cd\nL5 false cd\nL5 false cd\nq33 3\nL7 ab\nL8 5\nL9 false\nL10 [1, 1, 1]\n"
+
+[[tests]]
+name = "C_gen.s090.p00_none"
+case = "gen/prog_090.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q63 8\nL3 yz\nq63 3\nL5 yz 8\nL5 yz 8\nL5 yz 8\nL5 yz 8\nL4 false\nq63 3\nL6 8\nL7 false\nL8 3\nL9 4\n"
+
+[[tests]]
+name = "C_gen.s090.p01_fold"
+case = "gen/prog_090.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q63 8\nL3 yz\nq63 3\nL5 yz 8\nL5 yz 8\nL5 yz 8\nL5 yz 8\nL4 false\nq63 3\nL6 8\nL7 false\nL8 3\nL9 4\n"
+
+[[tests]]
+name = "C_gen.s090.p02_cse"
+case = "gen/prog_090.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q63 8\nL3 yz\nq63 3\nL5 yz 8\nL5 yz 8\nL5 yz 8\nL5 yz 8\nL4 false\nq63 3\nL6 8\nL7 false\nL8 3\nL9 4\n"
+
+[[tests]]
+name = "C_gen.s091.p00_none"
+case = "gen/prog_091.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q28 0\nL2 x\nL3 3 3 3\nL4 1 1 1 -3\nq28 0\nq28 0\nL6 false false false 7\nL7 true\nL8 false\nL9 -19.25\n"
+
+[[tests]]
+name = "C_gen.s091.p01_fold"
+case = "gen/prog_091.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q28 0\nL2 x\nL3 3 3 3\nL4 1 1 1 -3\nq28 0\nq28 0\nL6 false false false 7\nL7 true\nL8 false\nL9 -19.25\n"
+
+[[tests]]
+name = "C_gen.s091.p02_cse"
+case = "gen/prog_091.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q28 0\nL2 x\nL3 3 3 3\nL4 1 1 1 -3\nq28 0\nq28 0\nL6 false false false 7\nL7 true\nL8 false\nL9 -19.25\n"
+
+[[tests]]
+name = "C_gen.s092.p00_none"
+case = "gen/prog_092.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q43 2\nq43 12\nq43 0\nL3 ab ab\nL3 ab cdab\nL3 ab cdab\nq43 1\nL5 [{ x: 3, y: 31 }, { x: 3, y: 100 }]\nL6 true\nL7 true\n"
+
+[[tests]]
+name = "C_gen.s092.p01_fold"
+case = "gen/prog_092.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q43 2\nq43 12\nq43 0\nL3 ab ab\nL3 ab cdab\nL3 ab cdab\nq43 1\nL5 [{ x: 3, y: 31 }, { x: 3, y: 100 }]\nL6 true\nL7 true\n"
+
+[[tests]]
+name = "C_gen.s092.p02_cse"
+case = "gen/prog_092.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q43 2\nq43 12\nq43 0\nL3 ab ab\nL3 ab cdab\nL3 ab cdab\nq43 1\nL5 [{ x: 3, y: 31 }, { x: 3, y: 100 }]\nL6 true\nL7 true\n"
+
+[[tests]]
+name = "C_gen.s093.p00_none"
+case = "gen/prog_093.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q37 2\nq37 0\nL2 4\nL3 3\nL4 12\nL5 ab\nL6 0\nL7 true\nL8 { n: 4, tag: ab }\n"
+
+[[tests]]
+name = "C_gen.s093.p01_fold"
+case = "gen/prog_093.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q37 2\nq37 0\nL2 4\nL3 3\nL4 12\nL5 ab\nL6 0\nL7 true\nL8 { n: 4, tag: ab }\n"
+
+[[tests]]
+name = "C_gen.s093.p02_cse"
+case = "gen/prog_093.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q37 2\nq37 0\nL2 4\nL3 3\nL4 12\nL5 ab\nL6 0\nL7 true\nL8 { n: 4, tag: ab }\n"
+
+[[tests]]
+name = "C_gen.s094.p00_none"
+case = "gen/prog_094.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L5 cd\nL6 4 4 cd\nL7 cd 0 0\nq31 0\nq31 0\nL1 -2 0\nL9 <bk9|4|0>\n"
+
+[[tests]]
+name = "C_gen.s094.p01_fold"
+case = "gen/prog_094.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L5 cd\nL6 4 4 cd\nL7 cd 0 0\nq31 0\nq31 0\nL1 -2 0\nL9 <bk9|4|0>\n"
+
+[[tests]]
+name = "C_gen.s094.p02_cse"
+case = "gen/prog_094.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L5 cd\nL6 4 4 cd\nL7 cd 0 0\nq31 0\nq31 0\nL1 -2 0\nL9 <bk9|4|0>\n"
+
+[[tests]]
+name = "C_gen.s095.p00_none"
+case = "gen/prog_095.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L3 false -3 [-3, 131, 100, 46]\nL3 false 131 [-3, 131, 100, 46, 38]\nL3 false 100 [-3, 131, 100, 46, 38, 40]\nL3 false 46 [-3, 131, 100, 46, 38, 40, 42]\nL4 -2 -2\nq55 10\nq52 3\nL6 8\nL7 false\nL8 true\n"
+
+[[tests]]
+name = "C_gen.s095.p01_fold"
+case = "gen/prog_095.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L3 false -3 [-3, 131, 100, 46]\nL3 false 131 [-3, 131, 100, 46, 38]\nL3 false 100 [-3, 131, 100, 46, 38, 40]\nL3 false 46 [-3, 131, 100, 46, 38, 40, 42]\nL4 -2 -2\nq55 10\nq52 3\nL6 8\nL7 false\nL8 true\n"
+
+[[tests]]
+name = "C_gen.s095.p02_cse"
+case = "gen/prog_095.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L3 false -3 [-3, 131, 100, 46]\nL3 false 131 [-3, 131, 100, 46, 38]\nL3 false 100 [-3, 131, 100, 46, 38, 40]\nL3 false 46 [-3, 131, 100, 46, 38, 40, 42]\nL4 -2 -2\nq55 10\nq52 3\nL6 8\nL7 false\nL8 true\n"
+
+[[tests]]
+name = "C_gen.s096.p00_none"
+case = "gen/prog_096.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "5\nq34 15\nL9 <5 \nL10 true\n"
+
+[[tests]]
+name = "C_gen.s096.p01_fold"
+case = "gen/prog_096.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "5\nq34 15\nL9 <5 \nL10 true\n"
+
+[[tests]]
+name = "C_gen.s096.p02_cse"
+case = "gen/prog_096.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "5\nq34 15\nL9 <5 \nL10 true\n"
+
+[[tests]]
+name = "C_gen.s097.p00_none"
+case = "gen/prog_097.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q29 2\nL2 3 false\nL3 3 false acd\nL4 2 2\nL5 8\nL6 3\nL7 aaa\nL8 b\n"
+
+[[tests]]
+name = "C_gen.s097.p01_fold"
+case = "gen/prog_097.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q29 2\nL2 3 false\nL3 3 false acd\nL4 2 2\nL5 8\nL6 3\nL7 aaa\nL8 b\n"
+
+[[tests]]
+name = "C_gen.s097.p02_cse"
+case = "gen/prog_097.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q29 2\nL2 3 false\nL3 3 false acd\nL4 2 2\nL5 8\nL6 3\nL7 aaa\nL8 b\n"
+
+[[tests]]
+name = "C_gen.s098.p00_none"
+case = "gen/prog_098.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "q42 4\nL3 bb 4 bb\nL3 bb 4 bb\nL3 bb 4 bb\nL3 bb 4 bb\nq39 8\nL4 4 true bpq\nq39 0\nq42 3\nL5 (-2, -5) v=2,4,5\nL5 (-2, -5) v=2,4,5\nL5 (-2, -5) v=2,4,5\nL5 (-2, -5) v=2,4,5\nq42 4\nL6 b true\nL7 true\n"
+
+[[tests]]
+name = "C_gen.s098.p01_fold"
+case = "gen/prog_098.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "q42 4\nL3 bb 4 bb\nL3 bb 4 bb\nL3 bb 4 bb\nL3 bb 4 bb\nq39 8\nL4 4 true bpq\nq39 0\nq42 3\nL5 (-2, -5) v=2,4,5\nL5 (-2, -5) v=2,4,5\nL5 (-2, -5) v=2,4,5\nL5 (-2, -5) v=2,4,5\nq42 4\nL6 b true\nL7 true\n"
+
+[[tests]]
+name = "C_gen.s098.p02_cse"
+case = "gen/prog_098.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "q42 4\nL3 bb 4 bb\nL3 bb 4 bb\nL3 bb 4 bb\nL3 bb 4 bb\nq39 8\nL4 4 true bpq\nq39 0\nq42 3\nL5 (-2, -5) v=2,4,5\nL5 (-2, -5) v=2,4,5\nL5 (-2, -5) v=2,4,5\nL5 (-2, -5) v=2,4,5\nq42 4\nL6 b true\nL7 true\n"
+
+[[tests]]
+name = "C_gen.s099.p00_none"
+case = "gen/prog_099.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "L1 (, 10.0)\n2\nL6 b b b\nL7 b b [b, b, m, b]\nL8 b 2\nq58 -2\n"
+
+[[tests]]
+name = "C_gen.s099.p01_fold"
+case = "gen/prog_099.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "L1 (, 10.0)\n2\nL6 b b b\nL7 b b [b, b, m, b]\nL8 b 2\nq58 -2\n"
+
+[[tests]]
+name = "C_gen.s099.p02_cse"
+case = "gen/prog_099.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "L1 (, 10.0)\n2\nL6 b b b\nL7 b b [b, b, m, b]\nL8 b 2\nq58 -2\n"
+
+[[tests]]
+name = "C_gen.s100.p00_none"
+case = "gen/prog_100.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "4\nL11 0 { n: 0, tag: m }\nL13 (16, 49, 51)\nL14 51 2\nL14 49 2\nL14 49 2\nL14 49 2\nL1 0 0\nL2 [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)]\nL3 [(10.0, 2.5), (-0.5, 0.0)] 0\nL1 0 0\nL2 [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)]\nL3 [(10.0, 2.5), (-0.5, 0.0)] 0\nL1 0 0\nL2 [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)]\nL3 [(10.0, 2.5), (-0.5, 0.0)] 0\nL1 0 0\nL2 [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)]\nL3 [(10.0, 2.5), (-0.5, 0.0)] 0\nL15 (r:0.25, r:0.25)\n"
+
+[[tests]]
+name = "C_gen.s100.p01_fold"
+case = "gen/prog_100.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_stdout_exact = "4\nL11 0 { n: 0, tag: m }\nL13 (16, 49, 51)\nL14 51 2\nL14 49 2\nL14 49 2\nL14 49 2\nL1 0 0\nL2 [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)]\nL3 [(10.0, 2.5), (-0.5, 0.0)] 0\nL1 0 0\nL2 [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)]\nL3 [(10.0, 2.5), (-0.5, 0.0)] 0\nL1 0 0\nL2 [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)]\nL3 [(10.0, 2.5), (-0.5, 0.0)] 0\nL1 0 0\nL2 [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)]\nL3 [(10.0, 2.5), (-0.5, 0.0)] 0\nL15 (r:0.25, r:0.25)\n"
+
+[[tests]]
+name = "C_gen.s100.p02_cse"
+case = "gen/prog_100.cml"
+args = ["${case}", "opt::cse", "std::nvm"]
+expect_stdout_exact = "4\nL11 0 { n: 0, tag: m }\nL13 (16, 49, 51)\nL14 51 2\nL14 49 2\nL14 49 2\nL14 49 2\nL1 0 0\nL2 [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)]\nL3 [(10.0, 2.5), (-0.5, 0.0)] 0\nL1 0 0\nL2 [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)]\nL3 [(10.0, 2.5), (-0.5, 0.0)] 0\nL1 0 0\nL2 [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)]\nL3 [(10.0, 2.5), (-0.5, 0.0)] 0\nL1 0 0\nL2 [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)] [(10.0, 2.5), (-0.5, 0.0)]\nL3 [(10.0, 2.5), (-0.5, 0.0)] 0\nL15 (r:0.25, r:0.25)\n"
