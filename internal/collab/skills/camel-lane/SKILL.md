@@ -55,6 +55,12 @@ description: Camel 项目里一条实现车道（子代理）要遵守的一切�
   `[Environment]::CurrentDirectory = (Get-Location).Path`。这样即便某处漏了绝对路径，相对路径也落在**自己的树**里，
   而不是车道 shell 的起点（`D:\Projects\Camel`，负责人的主检出）。写完立刻在本树核 `git -C <树> diff --numstat`：
   **"git 说 clean" 可能是"你写到了别的树"**，diff 为空而 `Get-Content` 看得到内容时，先怀疑写错了树。
+· **泄漏检测（一条命令，每写完一批就跑）**：`git -C D:\Projects\Camel status --porcelain` 必须是**空**。
+  它一旦非空，就是有车道的写落进了负责人的主检出（2026-11-28 已发生两次，都是相对路径按**进程 cwd** 解析到主检出）。
+  看到非空：先与**本树** `git -C <树> status --porcelain` 对照，内容对得上就
+  `git -C D:\Projects\Camel checkout -- <绝对路径>` 复原，对不上**不动**、报协调者。
+· **批处理/替换脚本**：脚本里 `Set-Location`、`ProcessStartInfo.WorkingDirectory`、`cd()` 也要显式给出**绝对树路径**；
+  只改外层 shell 的 cwd **不会**改子进程的 cwd —— 2026-11-28 的第二次泄漏就是这条。
 ```
 
 ## 2. 改语义之前
