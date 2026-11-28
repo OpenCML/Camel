@@ -3,15 +3,13 @@ import json
 import subprocess
 import sys
 
-# Deliberately exits 1: a failing entry's stdout is what the runner echoes back, and this probe
-# has no assertion to make -- its reading IS its output. The driver names its own hash so the
-# reading says which copy ran on the host, not which copy was on the lane's disk.
+# Deliberately exits 1: a failing entry's stdout is echoed back, and this probe's reading IS its
+# output. `std::stats` runs BEFORE the dot-printing pass, so its counts describe the graph that
+# is printed; its line is then removed from the dot text, so the bytes are the dot alone.
 print("driver.self_sha256=%s" % hashlib.sha256(open(__file__, "rb").read()).hexdigest())
 exe = sys.argv[1]
 case = sys.argv[2]
 stage = sys.argv[3]
-TAIL = ["std::gir", "std::nop"]
-
 ROUTES = {
     "before": [("camel", [])],
     "inline": [("camel", ["opt::inline"]), ("cpp", ["std::cxx::inline"])],
@@ -21,9 +19,13 @@ ROUTES = {
         ("cpp", ["std::cxx::inline", "opt::cse", "opt::algebra"]),
     ],
 }
+NO_STATS = stage.endswith("_nostats")
+if NO_STATS:
+    stage = stage[: -len("_nostats")]
 
 def measure(passes):
-    cmd = [exe, case] + passes + TAIL + ["std::stats"]
+    tail = ["std::gir", "std::nop"] if NO_STATS else ["std::stats", "std::gir", "std::nop"]
+    cmd = [exe, case] + passes + tail
     p = subprocess.run(cmd, capture_output=True, text=True)
     dot, stats = [], None
     for line in p.stdout.splitlines():
@@ -45,7 +47,7 @@ def measure(passes):
         "sha256": hashlib.sha256(text.encode()).hexdigest(),
         "counts": counts,
         "text": text,
-        "err": (p.stderr.splitlines()[:2] if p.returncode != 0 else []),
+        "stderr": (p.stderr.splitlines()[:2] if p.returncode != 0 else []),
     }
 
 seen = {}
@@ -55,8 +57,8 @@ for route, passes in ROUTES[stage]:
     seen[route] = m["text"]
     print("cmd[%s]=%s" % (route, m["cmd"]))
     print("route=%s rc=%d bytes=%d sha256=%s %s" % (route, m["rc"], m["bytes"], m["sha256"], m["counts"]))
-    if m["err"]:
-        print("route=%s stderr=%s" % (route, m["err"]))
+    if m["stderr"]:
+        print("route=%s stderr=%s" % (route, m["stderr"]))
 if len(seen) == 2:
     print("identical=%s" % (seen["camel"] == seen["cpp"]))
 sys.exit(1)
