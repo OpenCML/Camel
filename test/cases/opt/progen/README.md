@@ -491,6 +491,11 @@ does not run cse.
   name another instance of it (`w34$spec3` -> `r1$spec16`). Not reduced:
   `python test/tools/progen/progen.py show --seed 25` prints the program.
 
+Neither of the two is new, and neither was hidden by the exclusion table `progen.py` used to carry:
+that table was already empty when it was removed, and the batch's 35 red cells are the same set with
+and without it -- the two runs' `seed N [cell]` lists compare equal (same md5), at 161.35 s of CPU on
+the base tree and 163.90 s / 167.42 s after the table was gone.
+
 To look at a seed: `python test/tools/progen/progen.py show --seed 716` prints the program and
 its reference output (batches B, C and D need their `--features`, as in the table above).
 
