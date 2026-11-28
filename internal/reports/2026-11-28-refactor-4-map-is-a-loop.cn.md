@@ -132,10 +132,17 @@
 
 同节第 496 行：**lambda 的形参要写括号**：`func (x) { e }`；没有 `x => e` 的写法。
 
-### 7.1 先记一条新事实：算子声明同时是导出声明
+### 7.1 算子声明同时是导出声明？**待量，不能算事实**
 
-上一轮的对照坏了，坏得有用：把 `prelude.cml` 里 `map` 的 `#op(':mark/map_arr')` 去掉、只留函数体后，`xs->map<…>` 与 `xs->map<…>` 两条手写调用都死在同一条 `SemanticDiag::ImportNameNotExported`（`Reference 'map' is declared as imported but is not exported by its module.`）⇒ **`map` 的导出是挂在 `#op` 声明上的**。所以"给 `map` 加体、去掉 `#op`"这条路改的是导出面，不能拿它试 lambda 定型。
+上一轮的对照坏了，坏得有用：把 `prelude.cml` 里 `map` 的 `#op(':mark/map_arr')` 去掉、只留函数体后，`xs->map<…>` 的手写调用死在 `SemanticDiag::ImportNameNotExported`（`Reference 'map' is declared as imported but is not exported by its module.`）。
 
+**但"算子声明同时是导出声明"这个读法是错的**：`export` 才是导出声明，带函数体的 `export func` 本来就该被导出（决策者 `D-1128-195`）。量过（两个模块，`CAMEL_PACKAGES=D:\Temp\bench8\mods`）：
+
+- 模块 `mylib/mylib.cml`：`export func twice(x: int) => int { x * 2 }`（**带函数体、不是算子、没有 `#op`**）
+- 程序 `app/main.cml`：`import { twice } from mylib` + `println(twice(3))`
+- 结果：**能**，`std::fvm` 打印 `6`（`app/main.cml` SHA-256-16 `4879012B4D353838`）。
+
+⇒ **带函数体的 `export func` 在普通模块里导出正常**，所以 7.1 原先那句不成立；`map` 去掉 `#op` 后不导出的原因**另有原因、待查**（不排除是 prelude/stdlib 那一路导出只认算子声明，那是缺陷而不是设计事实）。本页不再把它当事实用。
 ### 7.2 换成普通泛型函数（不是算子、不写 `#op`、正常导出）
 
 `internal/tools/probe-generic-lambda.ps1`，探针在 `D:\Temp\bench7`，驱动的头几行自报五个程序的 SHA-256-16；`std::fvm`，本次 `[load] 11%`，构建 `3e2c8c0898 (clean)`。
