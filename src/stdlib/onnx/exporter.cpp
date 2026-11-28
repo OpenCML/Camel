@@ -4787,6 +4787,17 @@ Value Evaluator::evalFill(
         }
         return closure;
     }
+    if (targetType->code() == TypeCode::Function && closuresWanted_ == 0) {
+        // A closure the aggregate *captures* while nothing on the export path calls it -- the same
+        // shape the element deferral above handles (a branch arm's (value, pullback) tuple whose
+        // pullback is never called on the exported path). It has no ONNX representation and emits
+        // nothing, so it is deferred instead of failing the aggregate that carries it: a value is
+        // materialised only if something reads it back. `closuresWanted_` is raised exactly where a
+        // value is about to be called or probed (`linearBody`, `probeSpecialClosure`,
+        // `evalEagerBranch`, `evalIndirectCall`, `applyClosure`), so 0 here means this path does
+        // not call it, and there is no value to materialise.
+        return Value::constant(NullSlot, targetType);
+    }
     if (!source.isConstant() || !allConst) {
         unsupported(
             act,
