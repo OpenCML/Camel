@@ -1885,6 +1885,9 @@ $run = @{
     pid             = $PID
     worktree        = $name
     path            = $Path
+    # The branch the tree has checked out: a tree is lent from lane to lane, so its name says where
+    # a run happens and this says whose work it is.
+    branch          = $branch
     commit          = $commit
     detached        = $detached
     remote          = $remoteName

@@ -381,3 +381,20 @@ expect_exit = 1
 # the exit code carries the refusal itself.
 expect_stdout_contains = ["published effects external", "true", "draft effects external"]
 expect_stderr_contains = ["the effects of a draft are not computed: a draft has no published graph to walk"]
+
+# A pin, not a red->green: a fact recorded on a graph no commit changed was already found after a
+# further commit on the tree before the `Anchor` change, measured with a probe run of `test::facts`
+# (`FACTS probe_two_commits_f valid ; FACTS probe_old_program_f valid ; FACTS probe_same_program_f
+# valid`). The reason is written where the lines are printed
+# (facts.cpp): a commit copies a graph keeping its GraphId and its revision, and a stamp is the
+# closure hash of those ids and revisions. So this entry says what taking the Program out of an
+# anchor's identity must not lose; it was green before that change and must stay green after it.
+[[tests]]
+name = "two_commits_keep_a_fact"
+desc = "A fact recorded on `f` is still readable after one more commit, which changed `main` and not `f`: the commit kept `f`'s GraphId and its revision, and the fact is found both through the program after the commit (`valid`) and through the program that recorded it (`valid`). A pin for the reading an `Anchor` keeps when it stops naming a Program -- it was green before that change, so it is not the reading that shows the change working."
+kind = "behavior"
+case = "../../../cases/facts/two_functions.cml"
+args = ["${case}", "test::facts"]
+expect_exit = 0
+expect_stdout_contains = ["FACTS two_commits_f_id kept", "FACTS two_commits_f_revision kept", "FACTS two_commits_main_revision new", "FACTS two_commits_f valid", "FACTS two_commits_same_program_f valid"]
+timeout_ms = 30000
