@@ -44,8 +44,10 @@ import { shape as array_shape } from array
 /// @example is_same::<Lift<int>, (int, ())>()    // true
 export type Lift<T> = (T, Tangent<T>)
 
-/// `x` lifted: the value, and the zero tangent of its type -- the empty tuple for a type that has
-/// no tangent, a tensor of zeros for a tensor, and each member's own zero for a tuple or a struct.
+/// `x` lifted: the value, and the zero tangent of its type -- the zero of a number or a `bool`
+/// (which are their own tangent space), a tensor of zeros for a tensor, and each member's own zero
+/// for a tuple or a struct whose members all have one. A `string` and a function have no tangent
+/// space, and the empty tuple stands for it: a value that carries no data and that a rule ignores.
 /// @example lift(3.0)    // (3.0, 0.0)
 export func lift::<T>(x: T) => Lift<T> {
     return (x, zero_tangent(x))
@@ -67,6 +69,8 @@ func zero_tangent::<T>(x: T) => Tangent<T> {
         case bf16[...] => bf16(zeros_like(x))
         case f32[?] => f32(zeros_like(x))
         case f64[?] => float(zeros_like(x))
+        case int => 0
+        case bool => false
         case _ => ()
     }
 }
