@@ -6,6 +6,16 @@ Camel 的程序是图，图上的节点只要数据到齐就能执行；与外�
 
 设计原则第 3 节给出规则（资源、句柄、`uses`、`pure`、推断、同步块）；这里讲这些规则背后的框架，以及各个资源修饰词从哪里来。
 
+本组文档：
+
+- 本页：四条等式与资源修饰词。
+- [`derived-properties.cn.md`](derived-properties.cn.md)：足迹从哪里来、资源怎样取键，以及"纯、会不会故障、可摆、能否先算、能否上设备"怎样由足迹回答。
+- [`analysis.cn.md`](analysis.cn.md)：唯一的效应分析。
+- [`edges.cn.md`](edges.cn.md)：图上的三种边。
+- [`liveness-fills.cn.md`](liveness-fills.cn.md)：存活与填充。
+- [`plan.cn.md`](plan.cn.md)：资源与效应的施工计划。
+- 与重复的关系：[`../repetition/README.cn.md`](../repetition/README.cn.md)。
+
 ## 四条等式
 
 对一次访问，遍能做的变换归结为它满足的四条等式：
