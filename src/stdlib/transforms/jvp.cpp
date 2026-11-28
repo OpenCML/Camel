@@ -1676,6 +1676,20 @@ bool liftGraph(
                 return tangentOf[input];
             }
             if (emptyTangent == rt::kInvalidNodeRef) {
+                // A discrete value is its own tangent space, and its cotangent is the zero of that
+                // type (design principles 9.9 and 7.18, decision D-1128-104): the machinery keeps
+                // no place to accumulate in for such a value, which is its own choice, but the
+                // answer it hands to a reader is a zero, not a refusal and not a value with no
+                // data. Only a type with no tangent space at all -- a `string`, a function -- gets
+                // the empty tuple.
+                Type *const valueType = in != nullptr ? in->dataType() : nullptr;
+                if (const std::optional<slot_t> discreteZero =
+                        camel::core::discreteZeroSlot(valueType)) {
+                    return draft.materializeStaticValue(
+                        *discreteZero,
+                        valueType,
+                        rt::kGCNodeFlagConstant);
+                }
                 emptyTangent = draft.materializeStaticValue(
                     camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(
                         ::Tuple::create(0, mm::autoSpace())),
