@@ -1,0 +1,8 @@
+import std
+
+// A pass is a function value (stdlib/std.cml, `namespace cxx`): naming it here reads the
+// declaration, and nothing runs it. Taking the value and never calling it is silent.
+func main() => int sync {
+    let f = std::cxx::cse
+    return 0
+}

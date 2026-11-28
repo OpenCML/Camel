@@ -34,6 +34,7 @@
 #include "camel/core/oper_id.h"
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -130,6 +131,17 @@ class PassArgs {
 using PassMaker = std::function<std::unique_ptr<GraphIRPass>(
     const camel::core::context::context_ptr_t &, const PassArgs &)>;
 
+/// A parameter value the declaration's type accepted and the pass itself refuses: which parameter,
+/// the value as written, what it should have been, and the sentence. The pipeline turns it into a
+/// diagnostic at the word that carried the value (`parameterDiagnostic`), so the rule is the
+/// pass's and the position is the pipeline's.
+struct ParamRefusal {
+    std::string name;
+    std::string text;
+    std::string expected;
+    std::string reason;
+};
+
 /// What a pass contributes to the pipeline: how to make it. Its name, documentation and
 /// parameters are the standard library's declaration, not a second declaration in C++.
 struct PassDescriptor {
@@ -143,6 +155,10 @@ struct PassDescriptor {
     /// `read_by` names it. `registerModulePass` registers such a pass in the tag reader
     /// registry, which the `TagHasNoReader` warning consults (camel/core/tags.h).
     bool readsTags = false;
+    /// The values the declaration's type let through and the pass cannot use, checked while the
+    /// pipeline is read: the pass says what its own parameters mean, and the refusal carries the
+    /// word that wrote the value. Null when the pass has no such rule.
+    std::function<std::optional<ParamRefusal>(const PassArgs &)> checkParams;
 };
 
 /// Wraps a factory of a pass without parameters.

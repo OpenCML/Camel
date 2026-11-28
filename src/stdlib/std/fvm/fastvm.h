@@ -191,6 +191,9 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
   private:
     // Calls that may be open at once without being tail calls (camel/execute/limits.h).
     size_t maxRecursionDepth_;
+    /// Whether this run already reported that the build has no native code generator for `std::jit`
+    /// (see apply): once per pass object, and the sentence names the pass, so it is not repeated.
+    bool saidNoCodeGenerator_ = false;
 
     void populateDirectCallFrame(
         ctx::Frame *callerFrame, ctx::Frame *calleeFrame, data_arr_t srcArgs, data_arr_t dstSlots);

@@ -24,6 +24,25 @@ void registerPassKernel(const std::string &path, PassMaker make, std::vector<Pas
     registerModulePass(path, std::move(descriptor));
 }
 
+void registerPassKernel(
+    const std::string &path, PassMaker make,
+    std::function<std::optional<ParamRefusal>(const PassArgs &)> checkParams) {
+    PassDescriptor descriptor;
+    descriptor.make        = std::move(make);
+    descriptor.checkParams = std::move(checkParams);
+    registerModulePass(path, std::move(descriptor));
+}
+
+void registerPassKernel(
+    const std::string &path, PassMaker make,
+    std::function<std::optional<ParamRefusal>(const PassArgs &)> checkParams, bool readsTags) {
+    PassDescriptor descriptor;
+    descriptor.make        = std::move(make);
+    descriptor.checkParams = std::move(checkParams);
+    descriptor.readsTags   = readsTags;
+    registerModulePass(path, std::move(descriptor));
+}
+
 std::string pathArgument(const PassArgs &args, const std::string &name) {
     return args.isNull(name) ? std::string() : args.getString(name);
 }

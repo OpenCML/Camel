@@ -578,6 +578,32 @@ FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
     (void)os;
     GUARD(program->root() != nullptr, "FastVM requires a non-null runtime root graph.");
 
+#if !ENABLE_FASTVM_JIT
+    // `std::jit` in a build whose JIT has no code generator for this processor: the pass is
+    // accepted and runs the bytecode interpreter. The pass says so itself, at the moment it runs,
+    // and not from a table of names in the pipeline: the sentence is a warning the run reports,
+    // and it names the pass, not a back end the pipeline picked.
+    if (config_.jitMode != FastVMConfig::JitMode::Off && !saidNoCodeGenerator_) {
+        saidNoCodeGenerator_ = true;
+        if (context_) {
+            auto warning  = camel::core::error::DiagnosticBuilder::of(
+                                camel::core::error::RuntimeDiag::JitWithoutCodeGenerator)
+                                .commit();
+            warning.stage = "pass:std::jit";
+            auto sink     = context_->runtimeDiagSink();
+            if (sink) {
+                try {
+                    sink->add(std::move(warning));
+                } catch (const camel::core::error::DiagnosticsLimitExceededBaseException &) {
+                    // The run's sink already holds an error; its own report is the one that
+                    // matters.
+                }
+                sink->dump(std::cerr, false);
+            }
+        }
+    }
+#endif
+
     if (config_.reportConfig) {
         reportConfig(std::cerr);
     }

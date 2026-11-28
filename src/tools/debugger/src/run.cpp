@@ -273,7 +273,7 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
     };
 
     try {
-        static const std::vector<std::string> defaultFallback{"std::run"};
+        static const std::vector<std::string> defaultFallback{::runPassName()};
         st.ctx->clearProcessExitCode();
 
         requireKnownPasses(passes, st.ctx);

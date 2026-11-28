@@ -8,7 +8,7 @@
 namespace ctx = camel::core::context;
 
 /**
- * JitRmirDumpPass (std::fastvm::jit_rmir): MIR translated directly from bytecode, based on
+ * JitRmirDumpPass (std::fvm::jit_rmir): MIR translated directly from bytecode, based on
  * virtual registers and not yet optimized.
  */
 class JitRmirDumpPass : public RuntimeGraphTranslatePass {
@@ -20,7 +20,7 @@ class JitRmirDumpPass : public RuntimeGraphTranslatePass {
 };
 
 /**
- * JitMirDumpPass (std::fastvm::jit_mir): final optimized vreg MIR after multiple passes
+ * JitMirDumpPass (std::fvm::jit_mir): final optimized vreg MIR after multiple passes
  * (optimization entry point: runMirOptimizationPasses).
  */
 class JitMirDumpPass : public RuntimeGraphTranslatePass {

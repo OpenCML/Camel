@@ -1,0 +1,8 @@
+import std
+
+// A name the module does not export is still refused, whatever a pass declaration says:
+// `std::cxx::nope` is not one of the passes `namespace cxx` declares.
+func main() => int sync {
+    let f = std::cxx::nope
+    return 0
+}
