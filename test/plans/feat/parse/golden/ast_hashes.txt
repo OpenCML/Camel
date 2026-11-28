@@ -3522,7 +3522,7 @@ afb0c34249d6d7f9 ok test/cases/modules/rules/check_reduced_element_type.cml
 eef2fb2127a32f87 ok test/cases/modules/rules/check_rejected_softmax.cml
 be3e9f0506a7fbea ok test/cases/modules/rules/check_rules.cml
 5fa3945d84e0f94c ok test/cases/modules/rules/check_type_cannot_be_made.cml
-04da6afbfee73759 ok test/cases/modules/rules/check_when.cml
+4835f1d1525daa8d ok test/cases/modules/rules/check_when.cml
 0bd837d3ac63dd31 ok test/cases/modules/rules/commit_during_rewrite.cml
 1aebadc958d9f47e ok test/cases/modules/rules/condition_commit.cml
 4c4902d82ff1a434 ok test/cases/modules/rules/condition_generic_commit.cml
@@ -3690,6 +3690,7 @@ f41b91c5f2bd19b8 ok test/cases/modules/std/re/basic.cml
 9d789dca02468e21 ok test/cases/modules/std/this/basic.cml
 0a284dfeaa578570 ok test/cases/modules/std/time/basic.cml
 0d69607104a8915d ok test/cases/modules/std/time/utc_text.cml
+95809a11543748ec ok test/cases/modules/stdlib/abs_smallest_int.cml
 ed1726e1cc27dfee ok test/cases/modules/stdlib/array_basic.cml
 8aa2ce86048e342e ok test/cases/modules/stdlib/array_hof.cml
 3b2136544b21bbec ok test/cases/modules/stdlib/array_kernels_read_back.cml

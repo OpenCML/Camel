@@ -234,3 +234,49 @@ case = "../../../cases/modules/stdlib/utf8_string.cml"
 golden = "golden/stdlib/utf8_string.txt"
 backends = false
 args = ["${case}", "std::cxx::inline", "std::opt", "std::fvm"]
+
+# The smallest `i32` is the one value `abs` cannot answer positively: the sign is cleared in two's
+# complement, so the negation wraps and the value comes back as itself. The readings are the value
+# and the equality, and every back end has to print both -- the interpreters through the operator's
+# kernel, and the program `std::cpp` writes through the wrap in the generated file (`rt::intAbs`),
+# because `std::abs` of the smallest value is undefined behaviour and a build of it answered a
+# positive number. The second entry is the translation side of the same claim: it reads the four
+# cells -- `std::nvm`, `std::fvm`, `std::cpp` (written, built and run) and `std::jit` -- byte for
+# byte, so a kernel that answers one thing and a writer that answers another is the red.
+
+[[tests]]
+name = "stdlib.math.abs_smallest_int.nvm"
+desc = "`abs` of the smallest `i32` answers the value itself -- the negation wraps, so `abs(-2147483648)` is `-2147483648` and the equality holds -- and the interpreter's kernel is where the wrap has to be: `std::abs` of that value is undefined behaviour, and a build of it answered a positive number."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/abs_smallest_int.cml"
+backends = false
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["-2147483648", "0", "-9223372036854775808"]
+
+[[tests]]
+name = "stdlib.math.abs_smallest_int.fvm"
+desc = "The same program on std::fvm: the bytecode VM reaches the same operator kernel, so the value and the equality are the same two lines."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/abs_smallest_int.cml"
+backends = false
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_contains = ["-2147483648", "0", "-9223372036854775808"]
+
+[[tests]]
+name = "stdlib.math.abs_smallest_int.standalone"
+desc = "The third reading of that program: `std::cpp` writes it and it is built and run, so `abs` of the smallest `i32` is the wrap `rt::intAbs` writes in the generated file rather than `std::abs`; the four cells are compared byte for byte, and each prints `-2147483648` and `true`."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/run.py"
+backends = false
+args = ["${case}", "--four-backends", "test/cases/modules/stdlib/abs_smallest_int.cml"]
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
+expect_exit = 0
+expect_stdout_contains = ["PASS: 1 of 1 programs say the same thing on four back ends", "-2147483648 0 -9223372036854775808 0"]
+expect_output_not_contains = ["differs", "not run on", "does not build"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 300000
+# Slow layer: it writes and builds a C++ program and runs four back ends over it.
+tier = "slow"

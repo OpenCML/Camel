@@ -1,0 +1,28 @@
+/**
+ * `math:abs` of the smallest integer of its width: the sign is cleared in two's complement, so the
+ * negation wraps and the value comes back as itself. `abs(INT_MIN)` is `INT_MIN`, not a positive
+ * number: `std::abs` on the smallest value is undefined behaviour, and a build of it answered
+ * `2147483648` for the 64-bit one -- which is how `stdlib/math.cml`'s `gcd`, whose refusal is
+ * `abs(a) < 0`, would stop recognising that integer.
+ *
+ * Both widths are written, because the two answer the same rule from different code: `i32` is
+ * `math:abs_i` and `int` is `math:abs_l`. The readings are the value and the difference the wrap
+ * leaves (`abs(x) - x`, zero), and every scheduling and translation back end has to print the same
+ * four lines: the interpreters through the operator's kernel, and the program `std::cpp` writes
+ * through `rt::intAbs` (the wrap, in the generated file).
+ *
+ * `main` declares no return type: design principles 9.8 makes what `main` returns an output effect
+ * of the driver, so a declared return type has the interpreters print one more line than the
+ * standalone program compiles to, and the lines this case is about are the four it prints itself.
+ */
+
+import { abs } from math
+
+func main() sync {
+    let smallest_i: i32 = -2147483647 - 1
+    println(abs(smallest_i))
+    println(abs(smallest_i) - smallest_i)
+    let smallest_l: int = -9223372036854775807 - 1
+    println(abs(smallest_l))
+    println(abs(smallest_l) - smallest_l)
+}

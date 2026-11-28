@@ -288,14 +288,21 @@ store decision 5). For each rule: `samples` random instances of the two sides (r
 for the `const` parameters, random values for the others, with the special values of floats that
 the rule's permissions do not rule out: NaN, infinities, signed zero) must agree: bit for bit
 when the rule needs no permission, within `64 (steps + 1) eps (|a| + |b| + scale)` when it does
-(a bound on the rounding of the steps; it catches a wrong equation, not a subtle rounding). Then
-the engine applies the rule to its own left side with random constants (up to eight times): it
-must fire, and the rewritten function must agree too. The report has a line per rule: `ok name:
-n samples agree, fired k of m`, or `FAIL name: ...` with the arguments where it fails
-(`x + 0.0 => x` fails at `-0.0`). A rule with a condition cannot use the sampled values (the tool
-cannot ask a condition about them), so its line is `ok name: the condition selects the instances,
-fired k of m` and only the engine path runs; a condition that rejects every generated instance
-reports `never fired`.
+(a bound on the rounding of the steps; it catches a wrong equation, not a subtle rounding). That
+sampled comparison is the one a rule without a condition gets: a rule with a condition is not
+sampled on both sides (the loop runs `!conditional`), and its condition is asked of the engine's
+samples below. Then the engine applies the rule to its own left side with drawn values (eight
+times, and sixty-four times when the rule has a condition), every scalar parameter standing for its
+value in the graph: it must fire, and the rewritten function must agree too. A conditional rule's
+condition is asked about that value, on the node the sample has in the graph, so a sample the
+condition rejects is not an instance of the law and nothing is compared on it. The report has a
+line per rule: `sampled name: samples n, fired k of m`, or `refuted name: ...` with the arguments
+where it fails (`x + 0.0 => x` fails at `-0.0`). A conditional line is `sampled name: ... fired k
+of m admitted`, m counting the samples the condition admitted, so a rejected sample is not counted
+against the rule. A condition that rejects every drawn instance is `sampled` with the reason `the
+condition never held on any of the 64 samples`; a condition that held on samples the engine then
+did not rewrite is `refuted` with `the condition held on X of the Y samples and the rule was not
+rewritten there`.
 
 ## 5. The standard rules
 
@@ -405,8 +412,12 @@ libcamel function the module calls is exported without a hand edit; `rewrite` li
 - `const` parameters match a *constant writing*, while `graph::is_constant` asks whether the
   matched *node* is a constant; a condition that needs the value of a `const` parameter should use
   the literal or `graph::constant` on the node that is the literal.
-- `check` cannot exercise a condition that depends on a non-constant parameter's value (it
-  materialises only the `const` ones); such a rule reports `never fired`.
+- `check` exercises a condition that depends on an ordinary scalar parameter's value: every scalar
+  parameter stands for its drawn value in the graph, so the condition is asked on that node. A
+  tensor parameter keeps its port (its argument is an Array the call makes), so a condition that
+  reads a tensor has no value to read and falls back to false; a rule whose condition rejects every
+  instance is `sampled` with the reason `the condition never held on any of the 64 samples`, never
+  `refuted`.
 - The tolerance of the check for rules that need a permission is a bound on the rounding, not the
   declared numeric contract of each operator.
 - The condition is a function of the rule's parameters, not of the whole matched pattern: in
