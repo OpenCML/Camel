@@ -1,0 +1,17 @@
+/**
+ * A `[1]` parameter on a `[2, 1, 1]` value. The length 1 fits axes 1 and 2 by value, but an
+ * extent of 1 is a lane every axis can take (`kernels/shape_rules.h`, `ambiguousRankOneAxes`),
+ * so the parameter names no ambiguous axis and the call runs. The statistics are the ones axis 1
+ * gives: (1 - 0) / sqrt(1) = 1 on every element, and with gamma 1 and beta 1 that is 2; the sum
+ * over the tensor's two elements is 4.
+ */
+import { batch_norm } from nn
+import { ones, zeros, sum } from tensor
+
+func main() sync {
+    let x = ones::<f32>([2, 1, 1])
+    let p = ones::<f32>([1])
+    let z = zeros::<f32>([1])
+    let y = batch_norm(x, z, p, p, p, 0.0)
+    'bn_rankone_one_axis sum={}'->format<float(sum(y))>->println
+}

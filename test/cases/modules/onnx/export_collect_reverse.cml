@@ -1,0 +1,45 @@
+/**
+ * A collecting loop (the body only appends into an array, so the compiler gives the LOOP node a
+ * collection slot) exported through its gradient. The forward is a Loop with a scan output; the
+ * reverse is where the exporter stops: it has no lowering that keeps an array the reverse grows
+ * every round, and the refusal names that instead of saying "no lowering at this opset", which
+ * would send the reader after a lowering that cannot exist.
+ */
+import { with_grad } from autodiff
+import { get_env } from env
+import { export_model } from onnx
+import { sum } from tensor
+
+type P = { w: f32[...] }
+
+with <m: P>
+func build(x: f32[?]) => f32[] {
+    return loop acc = [] as f32[] for v in x do acc->append<v * m.w[0]>
+}
+
+with <m: P>
+func loss(x: f32[?]) => float {
+    return float(sum(build<m>(x)))
+}
+
+func model(w: f32[...], x: f32[?]) => f32[...] {
+    let m = { w: w }
+    let g = with_grad(loss)<m>(x)
+    return g.1.w
+}
+
+func main() => string! sync {
+    let x = [0.5, 1.5, 2.5] as f32[?]
+    let w = [2.0] as f32[]
+    let m = { w: w }
+    let g = with_grad(loss)<m>(x)
+    'collect_reverse value={}'->format<float(g.0)>->println
+    return match export_model<out: get_env('ONNX_OUT') ?? '', dynamic_axes: [0]>(func (w: f32[...], x: f32[?]) => f32[...] {
+        model(w, x)
+    }, (w, x)) {
+        case error e => {
+            return e
+        }
+        case v => 'exported'
+    }
+}
