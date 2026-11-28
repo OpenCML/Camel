@@ -126,13 +126,13 @@ L259: compare_to = "camel_passes.fold_fault.by_cpp"
 每条一次 CLI：camel <case> <遍按计划原文> std::jgir canonical=true，两侧 rc 0
 
 对 13  fold.same_text（opt::fold）  vs  fold.by_cpp（std::cxx::fold）   case fold_subject.cml
-      18613 / 18613 字节    sha256 4cc0ebb7c2a7… / ff84e9cdc468…
+      18613 / 18613 字节    sha256 A `4cc0ebb7c2a79040b70a39fe45766247b2cf5ea121f4b799178a60059c36fe3a` / B `ff84e9cdc468ebe5f5f2ba8e8d0f5b20041689d6df7e54ec32363f39b21e3622`
       第一处差异 offset 15639（84% 处）
         A(opt::fold)  .."exit": "n7",  "flags": 0,  "id": "g4"..
         B(cxx::fold)  .."exit": "n7",  "flags": 2,  "id": "g4"..
 
 对 17  cse.after_inline.by_camel（opt::cse） vs .by_cpp（std::cxx::cse）  case cse_after_inline.cml
-      8250 / 8250 字节       sha256 a360c3664029… / e8d3f32e4161…
+      8250 / 8250 字节       sha256 A `a360c366402944763eb42c094eb46c1f01bdf80d73ade95134fb841cb3c59b45` / B `e8d3f32e416103e283d2208c1feb13f5469f8d0552b4f057d463fa960cedafb7`
       第一处差异 offset 4192
         A(opt::cse)   .."exit": "n2",  "flags": 0,  "id": "g2"..
         B(cxx::cse)   .."exit": "n2",  "flags": 2,  "id": "g2"..
@@ -159,8 +159,9 @@ A graph without it is looked at by the first commit that reaches it; a graph wit
 
 Lead 的方向（CLI 重定向到文件，绕开 runner 的消息通道）是对的，但 `camel-remote.ps1` **没有直跑 CLI 的入口**：
 `-Check` 是**固定名单的检查器**（`$checkers`，只认 `planStage`/`namedOnly` 里那几个名字），不是任意命令。
-所以要落地"38 条 CLI + `fc /b`"，需要给这个脚本加一个直跑参数（例如 `-Run <argv>`，把命令在 host 上执行并把
-stdout/stderr 落盘后取回），或者由有 host 直连的人按下面的模板跑一次：
+**事实补充（以免以后误以为要改工具才能取这条）**：协调者侧**有 host 直连**，所以这条读数**已经能取、且已取到**（上节那四条 CLI）。
+`-Run <argv>` 之类的直跑入口**不是这条活的前置**，只对"车道自己重跑"有用 —— 要不要加它归决策者（元层），不在本页判断。
+模板如下（有 host 直连时）：
 
 ```
 # 每对两侧各一次，遍名与参数照计划原文
@@ -180,4 +181,5 @@ fc /b 13.base.gir 13.other.gir          # 或 cmp -l
 - "有 2 对图不同" —— 那会误导成渲染或结构差异，实际节点、边、区域、`id` 全同、长度逐对相等；
 - "逐字节相同" —— 这 2 对不是（偏移 15639 / 4192 处各差一个字节值）。
 
-**待补**：Lead 的 `sha256` 只到前 12 位；页里若要全长，向 Lead 要。本页先按 12 位记。
+**命令（case 相对仓库根，可复算）**：`camel test/cases/opt/camel_passes/fold_subject.cml opt::fold std::gir std::jgir canonical=true std::nop`
+等四条；`sha256` 为全长 64 位，与先前的 12 位前缀逐字相符（`4cc0ebb7c2a7` / `ff84e9cdc468` / `a360c3664029` / `e8d3f32e4161`）。
