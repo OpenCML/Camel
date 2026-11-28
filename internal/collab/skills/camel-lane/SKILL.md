@@ -554,3 +554,14 @@ git checkout HEAD -- <那一个文件>          # 恢复，git status --porcelai
 · **`docs/design/**` 与 `docs/design-principles*` 写的是目标设计，不是现状**：文档对照代码时若发现两者不一致，**报给决策者，不把设计页改成现状**。现状写在 `docs/technical/**`、代码注释与提交正文里；设计页那句若与今天的代码不同，多半是"还没做到"，不是"写错了"（`D-1128-47`：有人把设计页第 90 行的 `Draft<F>` 按今天的 `commit_of(d, f)` 改了回来，方向恰好相反）。
 · **改签名、改调用解析、改类型检查的车道，读数至少覆盖 `feat/compile` 与 `feat/modules` 两个目录**：只跑自己关心的计划集不够（`cc-loop-forward` 两次都栽在这：它的读数覆盖 `type_packs` + `feat/compile`，而 `feat/modules/graph_inline` 的 `a_call_through_a_value_reaches_what_its_type_declares` 被它弄红，第二次进合并批时才被合并位用单枝探针抓出来）。判据：两组目录各自贴 `[SUMMARY]` 与红名逐名，对 `newestRedTable()` 比，**任何新名逐个报**。
 · **文档里引用符号要写 `path#Symbol`，不写 `path:line`**：`check-doc-links.mjs --citations` 把 `path:123` 算作"只给了行/行简写"并逐条报错（一次 36 条）。状态标注要指到**符号**（`src/stdlib/graph.cml#graph_of`、`src/stdlib/opt.cml#merge_hits`），行号一条都留不住 —— 行号还会随代码漂移。
+
+· **ASAN 在构建机上能跑，配方必须写全（`-fPIC` 与运行期库路径）**（`lane-arrangeable`，2026-11-28，前三次失败的根因）：单独配一个诊断构建目录（不碰 `out/latest`、验收读数仍走 `camel-remote.ps1`）：
+  ```
+  $CM -S . -B /tmp/asan-<卡号> -G "Ninja Multi-Config" -DCMAKE_MAKE_PROGRAM=<ninja> \
+    -DCMAKE_TOOLCHAIN_FILE=$PWD/build/conan_toolchain.cmake -DCMAKE_C_COMPILER=<clang> -DCMAKE_CXX_COMPILER=<clang++> \
+    -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g -fPIC" \
+    -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g -fPIC" \
+    -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address -DCMAKE_SHARED_LINKER_FLAGS=-fsanitize=address
+  ```
+  **`-fPIC` 三个字必须显式写**：用 `CMAKE_CXX_FLAGS` 覆盖时会把 CMake 原本追加的 PIC 冲掉，链接期报 `relocation R_X86_64_32S` —— 这被误当成"这台机器不能建 ASAN"三次。运行还需 `LD_LIBRARY_PATH=<工具链 lib>:<asan 构建的 Release 目录>`（否则 `GLIBCXX_3.4.36 not found`），`ASAN_OPTIONS=detect_stack_use_after_return=1:detect_leaks=0`。
+· **ASAN 二进制下每一条 `camel …` 都可能先撞 CLI 的既有 UAF，别把它记成被测模块的账**（同一天）：`clipp::group` 先析构、`parsing_result` 还引用它去数未映射参数（`third_party/clipp/clipp.h:2750` / `config.cpp:1062`），`--version` 也崩 ⇒ 撞到它时先修 CLI（`config.cpp` 的生命期），再谈被测模块；判断口径是"**换一条与被测模块无关的命令是否同样崩**"。
