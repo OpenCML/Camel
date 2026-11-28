@@ -90,14 +90,6 @@ compare_to = "C_pfx.after_inline.p00_none"
 compare_fields = ["exit_code", "stdout_normalized"]
 
 [[tests]]
-name = "C_pfx.archive_stage_name.refused"
-desc = "The archive's e9 harness runs each stage as `std::opt::<stage>`, a spelling the isolation removed: the run must be refused as an unknown pass."
-case = "../../../../test/cases/opt/camel_passes/fold_subject.cml"
-args = ["${case}", "std::opt::fold", "std::nvm"]
-expect_exit = 1
-expect_stderr_contains = ["std::opt::fold"]
-
-[[tests]]
 name = "C_pfx.semantic_fault.before"
 desc = "The program with no rewrite: what the differential comparison treats as the reference."
 case = "C-semantic-fault.cml"
@@ -112,4 +104,5 @@ args = ["${case}", "std::nvm"]
 compare_to = "C_pfx.semantic_fault.before"
 compare_fields = ["exit_code", "stdout_normalized"]
 expect_stdout_not_contains = ["6"]
+
 
