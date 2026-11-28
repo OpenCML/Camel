@@ -129,3 +129,44 @@ const camel::execute::PassKernel
 - `settle_runs: int` 的下限（`pass.cpp:678`）：`PassParam` 今天只有类型（`params.h:59` 四个字段，没有范围），要把下限写进声明就得给 `with` 的参数语法加范围（例如 `settle_runs: int >= 1`），同样是语言表面。
 - 调试器把 `std::jit`/`std::prl` 替换成 `std::fvm` 这件事，除了上面那个性质，还牵着"替代成哪个"的取值，也要在声明里写。
 - `pass.cpp:91` 的标签读者名单：Camel 遍有 `#reads` 这条路，C++ 遍还没有对应的声明事实，同上。
+
+### 拼写草稿 A：`pass.cpp:91` 的标签读者名单（待裁，不实现）
+
+**要改什么**：`pass.cpp:82-95` 今天把"哪些遍读标签事实"写成一张名字表，逐个 `tag::declareReader(reader)`：
+
+```cpp
+for (auto reader : {"std::stats", "std::gir", "std::rgir", "std::jgir",
+                    "std::agir", "std::argir", "std::opt", "std::cxx"}) {
+    camel::core::tag::declareReader(reader);
+}
+```
+
+改成"扫声明"：C++ 遍在 `std.cml` 的声明上写它读哪些标签（与 Camel 遍同名同义的 `#reads(...)`），遍层收集读者，
+不再有名单。`pass.cpp:2567 declaredReadersOf` 已经是 Camel 遍按 `#reads` 收集的实现，C++ 遍接进同一条路。
+
+**会连带**：
+- `src/stdlib/std.cml`：上面八个声明各加 `#reads(<tag>...)`（各自的标签事实不同，要逐条核，不是同一个值）。
+- `src/parse/src/pass_declarations.cpp`：读取器要读 `#reads(...)` 的参数（`TagUse` 的 `Data` 列表，与 `#op` 同一读法），存进声明。
+- `src/kernel/execute/pass_declarations.h`：`PassDeclaration` 加"读了哪些标签"（`std::vector<std::string>`），跨解析层与内核的结构体。
+- `src/kernel/execute/pass.cpp`：`declareReaders` 的调用点改成扫声明；`:2567` 那段不再只对 Camel 遍。
+- `test/tools/check-pass-declarations.mjs`：可能要加一条"声明写的 `#reads` 与它所在的遍一致"的守卫。
+- **风险**：漏写一条 ⇒ 标签警告少报（沉默的漏报）。要么加守卫，要么先保留名单与声明并存一个过渡期。
+
+### 拼写草稿 B：`settle_runs >= 1` 的下限（待裁，不实现）
+
+**要改什么**：`pass.cpp:670-689 valueProblem` 今天按名字判：
+
+```cpp
+if (name == "std::opt" && args.given("settle_runs") && args.getInt("settle_runs") < 1) { … OutOfRange … }
+```
+
+改成按声明判：`std::opt` 的声明写 `settle_runs: int >= 1`（或 `settle_runs: int{1..}`），范围随参数类型一起读到，
+`valueProblem` 只看该参数声明的范围，不再看遍名；诊断仍是 `ParamProblemKind::OutOfRange` 与同一句文案。
+
+**会连带**：
+- `src/kernel/include/camel/execute/pass/params.h`：`PassParam` 加范围字段（今天只有 `type/required/nullable/default`，`params.h:59`）。
+- `src/parse/src/pass_declarations.cpp`：`readPassParams` 要解析 `>= N` / `{N..M}`（今天只读类型名与 `?`）。
+- `src/stdlib/std.cml`：`std::opt` 声明的那一行加范围。
+- `test/plans/feat/opt/pass_params.plan.toml`：`settle_runs=0` 的用例断言不变（文案不变），可加一条"下限来自声明"的用例；
+  `docs/cli.md` 的 "Pass parameters" 要补这个语法。
+- **风险**：`PassParam` 是内核与解析层共享结构，改它要同时动两个目标；范围语法本身是语言表面，拼写由决策者定。
