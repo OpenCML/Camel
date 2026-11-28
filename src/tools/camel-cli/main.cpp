@@ -403,12 +403,12 @@ int runCommand(int argc, char *argv[]) {
     };
 
     try {
-        // `std::profile` reports the phase split of the compilation, which starts before any pass
-        // runs: the recorder has to be recording before the first module is parsed. The report
-        // is taken by the pass's report at the end of the run, so no phase file is written.
-        if (selectedCommand == Command::Run && pipelineNamesProfile(Run::resolvedPassList)) {
-            phase::enableRecording();
-        }
+        // The phase split of the compilation is recorded from here on, always: it starts before
+        // any pass runs, and `std::profile` is the reader of what is already being recorded (the
+        // overhead of recording is a clock read at each phase boundary, and phases are whole
+        // steps -- a module, a pass -- never a loop over nodes). A run that names no profile pass
+        // pays that and nothing more; no phase file is written unless a reader asks for one.
+        phase::enableRecording();
         std::optional<phase::Scope> parsePhase(std::in_place, "parse", entryModuleName);
         const bool parsedOk = parser->parse(*input);
         parsePhase.reset();
@@ -791,13 +791,6 @@ int runCommand(int argc, char *argv[]) {
             for (auto &unread : tagsNeverReadWarnings(Run::resolvedPassList, ctx)) {
                 if (applyWarningPolicy(unread)) {
                     commandLineWarnings.push_back(std::move(unread));
-                }
-            }
-            // `std::jit` in a build whose JIT has no code generator for this processor: the pass
-            // is accepted, and what it does here is run the bytecode interpreter.
-            if (auto noJit = jitWithoutCodeGeneratorWarning(Run::resolvedPassList, ctx)) {
-                if (applyWarningPolicy(*noJit)) {
-                    commandLineWarnings.push_back(std::move(*noJit));
                 }
             }
         }

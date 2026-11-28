@@ -45,6 +45,45 @@ ast::node_ptr_t funcDataOf(const ast::node_ptr_t &declare) {
     return nullptr;
 }
 
+/// The URI a declaration writes in `#op('module:name')`, when it writes one: the tag's first
+/// argument, as the text it is. Nothing here derives a URI -- a declaration with no `#op` has none,
+/// and the pipeline names that declaration's operator by its own `module:name`.
+std::optional<std::string> operatorUriOf(const ast::node_ptr_t &declaration) {
+    for (size_t i = 0; i < declaration->size(); ++i) {
+        const ast::node_ptr_t &child = declaration->at(i);
+        if (child == nullptr || child->type() != ast::LoadType::Repeated ||
+            child->loadAs<ast::RepeatedLoad>()->nodeName() != "TagUse") {
+            continue;
+        }
+        for (const ast::node_ptr_t &useAst : *child) {
+            const auto use = useAst->loadAs<ast::TagUseLoad>();
+            if (use == nullptr || use->name().toString() != "op") {
+                continue;
+            }
+            // A use's arguments are a list of `Data` lists, one per use (the GCT builder reads
+            // them the same way).
+            for (size_t a = 0; a < useAst->size(); ++a) {
+                const ast::node_ptr_t &dataList = useAst->at(a);
+                for (const ast::node_ptr_t &argument : *dataList) {
+                    if (argument->type() != ast::LoadType::Data) {
+                        continue;
+                    }
+                    const auto literal =
+                        std::dynamic_pointer_cast<ast::LiteralLoad>(argument->load());
+                    if (literal == nullptr || literal->value().type() != LiteralType::String) {
+                        continue;
+                    }
+                    const std::string &text = literal->value().data();
+                    if (!text.empty()) {
+                        return text;
+                    }
+                }
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 /// Whether the type of a body-less declaration is the shape of a pass, `(f: F): F!` (design
 /// principles 9.1): one ordinary parameter written as a name and the failable form of that name as
 /// the result. A declaration of another shape that is conditioned on `is_function` declares an
@@ -92,6 +131,10 @@ void collectDeclarations(
             }
             declaration.doc  = stmt->doc();
             declaration.when = data->whenText();
+            // `#op('module:name')`: the URI of the operator this declaration stands for, when the
+            // name written here is not that URI (design principles 6.2). The declaration is where
+            // a source name and an operator meet; the pipeline reads both from this record.
+            declaration.operatorUri = operatorUriOf(node);
             // A pass declares when it applies (`when is_function::<F>()`). An ordinary body-less
             // declaration of the module (`func argsort(...)`) has no such condition and is not a
             // pass: the pipeline resolves it through the module's own exports.

@@ -543,7 +543,7 @@ eee0557e2c6bfe61 ok src/stdlib/random.cml
 27fc4f4fd00b5fb6 ok src/stdlib/sim.cml
 c850078b6b50daf1 ok src/stdlib/state.cml
 e065061c9e91b782 ok src/stdlib/statistics.cml
-97bdd428fd3cdac0 ok src/stdlib/std.cml
+8c62870bcfac9542 ok src/stdlib/std.cml
 1e853ee4b632ef01 ok src/stdlib/str.cml
 46747b8669c63121 ok src/stdlib/stream.cml
 ed77c186d082145e ok src/stdlib/tensor.cml
@@ -3042,7 +3042,7 @@ f7bc0c6372879328 ok test/cases/modules/graph_function.cml
 edac82af5852c2ac ok test/cases/modules/graph_handles_compare.cml
 228b26d9862a6cdd ok test/cases/modules/graph_kinds.cml
 05ca41658bc5b49a ok test/cases/modules/graph_read.cml
-8834137bc1ccbf58 ok test/cases/modules/graph_types.cml
+c837dac7499ecff0 ok test/cases/modules/graph_types.cml
 2ebb813bdc6d00c4 ok test/cases/modules/operator_faults.cml
 0869c6a75d9aa6e9 ok test/cases/modules/struct_predicates.cml
 2ef1fcd476951da3 ok test/cases/modules/tree_library.cml
@@ -3489,6 +3489,8 @@ a45e497f0bee295a ok test/cases/modules/optim/pass_imported_name.cml
 dff8026a6da83c18 ok test/cases/modules/optim/unknown_optimizer.cml
 4b7cd39eaf2cbe2d ok test/cases/modules/optim/unknown_optimizer_update.cml
 1f958c984acfc3a1 ok test/cases/modules/optim/written_dtype_exact.cml
+c513f4d9ce862327 ok test/cases/modules/pass_as_value/take_cse.cml
+8c07ed2ce3f365a5 ok test/cases/modules/pass_as_value/unknown_name.cml
 1e4f99c4ca6956b0 ok test/cases/modules/pass_not_found/declares_not_exported.cml
 54e31248650957ab ok test/cases/modules/pass_not_found/main.cml
 de0a0cce45a81301 ok test/cases/modules/pass_not_found/no_pass.cml

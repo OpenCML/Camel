@@ -11,7 +11,15 @@ func main() spelling sync {
     println(first == ns[1])
     println(id(first))
     println(id(ns[1]))
-    println(creation_id(graph_of(p)))
+    // The number a graph was created with is a counter, so the case reads the order of two graphs
+    // and never the counter's value at this point of the program: a change that builds more graphs
+    // earlier moves both numbers and leaves this `true` (agents/refactor.md: a test does not measure
+    // a count that changes for reasons unrelated to the reading).
+    println(creation_id(graph_of(later)) > creation_id(graph_of(p)))
     let k: NodeKind = NodeKind::Oper
     println(k)
+}
+
+func later() => int {
+    return 7
 }

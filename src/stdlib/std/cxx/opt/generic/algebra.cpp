@@ -320,13 +320,14 @@ class RulesAlgebraPass final : public GraphIRPass {
 };
 
 const PassKernel algebraKernel(
-    "std::cxx::algebra",
+    "std:cxx::algebra",
     [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
         if (args.getBool("neutral_only")) {
             return std::unique_ptr<GraphIRPass>(std::make_unique<AlgebraPass>(ctx, true));
         }
         return std::unique_ptr<GraphIRPass>(
             std::make_unique<RulesAlgebraPass>(ctx, args.getBool("safe_fp")));
-    });
+    },
+    true);
 
 } // namespace

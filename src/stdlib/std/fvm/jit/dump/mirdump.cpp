@@ -136,7 +136,7 @@ namespace {
 using camel::execute::makePass;
 using camel::execute::PassKernel;
 
-const PassKernel jitRmirDumpKernel("std::fastvm::jit_rmir", makePass<JitRmirDumpPass>());
-const PassKernel jitMirDumpKernel("std::fastvm::jit_mir", makePass<JitMirDumpPass>());
+const PassKernel jitRmirDumpKernel("std::fvm::jit_rmir", makePass<JitRmirDumpPass>());
+const PassKernel jitMirDumpKernel("std::fvm::jit_mir", makePass<JitMirDumpPass>());
 
 } // namespace
