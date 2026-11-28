@@ -198,6 +198,17 @@ void Builder::registerBuiltBody(const compile_graph_ptr_t &graph) {
 
 namespace {
 
+/// The name of parameter `index` of `type`, or the spelling its position gives it when the
+/// signature records none. A signature the transform built may record no names (`hasArgNames()`
+/// false; `argNameAt` guards on it), and a place that needs a spelling -- a diagnostic naming the
+/// parameter, a lookup of the binding a body writes -- must still produce one rather than ask for a
+/// name the type does not have.
+std::string argNameOrPosition(const FunctionType *type, size_t index) {
+    return type->hasArgNames() && index < type->argNamesCount()
+               ? std::string(type->argNameAt(index))
+               : std::format("arg{}", index);
+}
+
 /// The control regions a node runs with, outermost first: the arms and the parts of a loop. The
 /// regions that only record where code came from -- an inlined body, a tagged block -- are looked
 /// through: they hold no execution of their own (docs/design/effects/edges.cn.md 5.8), so they
@@ -1225,14 +1236,14 @@ FunctionType *Builder::completeLambdaSignature(
     // the value of a declared type, or the result of a function whose result type is a function
     // type.
     if (expected == nullptr) {
-        const std::string name(funcType->argNameAt(holes[0].index));
+        const std::string name(argNameOrPosition(funcType, holes[0].index));
         diags_->of(SemanticDiag::LambdaParameterWithoutType)
             .atOrigin(holes[0].origin)
             .commit(name, "nothing here expects a function type");
         throw BuildAbortException();
     }
     if (expected->code() != TypeCode::Function) {
-        const std::string name(funcType->argNameAt(holes[0].index));
+        const std::string name(argNameOrPosition(funcType, holes[0].index));
         diags_->of(SemanticDiag::LambdaParameterWithoutType)
             .atOrigin(holes[0].origin)
             .commit(
@@ -1247,7 +1258,7 @@ FunctionType *Builder::completeLambdaSignature(
     const size_t total       = withCount + funcType->normTypesCount();
     const auto report        = [&](const GCT::Tree::UnwrittenParam &param,
                                    const std::string &reason) -> void {
-        const std::string name(funcType->argNameAt(param.index));
+        const std::string name(argNameOrPosition(funcType, param.index));
         diags_->of(SemanticDiag::LambdaParameterWithoutType)
             .atOrigin(param.origin)
             .commit(name, reason);
@@ -1604,7 +1615,7 @@ void Builder::buildFuncBody(
                     if (!param.rest) {
                         continue;
                     }
-                    const std::string restName(written->argNameAt(param.index));
+                    const std::string restName(argNameOrPosition(written, param.index));
                     if (!graphNamesValue(gct->at(1), restName)) {
                         break;
                     }
@@ -1669,7 +1680,7 @@ void Builder::buildFuncBody(
         // the `with` ports the completion expanded the pack into (`ws_0`, `ws_1`, ...).
         if (written != nullptr && name.empty() && written->hasWithRest()) {
             const size_t packIndex = written->withTypesCount() - 1;
-            const std::string packName(written->argNameAt(packIndex));
+            const std::string packName(argNameOrPosition(written, packIndex));
             if (graphNamesValue(gct->at(1), packName)) {
                 const auto withPorts = graph->view().withPorts();
                 std::vector<Type *> parts;
@@ -1700,7 +1711,7 @@ void Builder::buildFuncBody(
         // value, so nothing about the call changes; only the names of the body do.
         if (const auto *tuples = GCT::Tree::of(gct)->tupleParamsOf(gct)) {
             for (const auto &tupleParam : *tuples) {
-                const std::string paramName(funcType->argNameAt(tupleParam.index));
+                const std::string paramName(argNameOrPosition(funcType, tupleParam.index));
                 const bool isWith = tupleParam.index < funcType->withTypesCount();
                 Type *paramType =
                     isWith ? funcType->withTypeAt(tupleParam.index)
