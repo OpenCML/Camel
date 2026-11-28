@@ -97,6 +97,12 @@ Builder::CallResolutionInputs Builder::takeCallResolutionInputs(
 
 std::vector<camel::core::type::FunctionType *>
 Builder::callCandidateSignatures(node_handle_t target) const {
+    // The order of this list is the order a call reads its entries in, and it is a rule rather
+    // than whatever a container happens to hold: the group's rules first, in the order the group
+    // registers them, then the functions the built-in layer declares with a body, then its
+    // generic templates, each in the order they were gathered. `operatorOverloads_` is an
+    // unordered map, but it is indexed by the call's node and is never walked to order
+    // candidates.
     std::vector<camel::core::type::FunctionType *> entries;
     if (target == nullptr || !nodeIsKind(target, runtime::GCNodeKind::Dref)) {
         return entries;
