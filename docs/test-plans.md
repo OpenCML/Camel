@@ -344,6 +344,13 @@ test is marked instead of being dropped:
   test alone: no other test runs while it does.
 - `kind = "benchmark"` tests run alone unless they say `parallel = true`, because the machine's
   load is part of what they measure.
+- `processes = N` on a `[[tests]]` entry (or in `[defaults]`, for every test of the plan) says the
+  test keeps N programs running at once -- a gc-stress case that runs the program under several
+  collector settings together, a driver that fans out. The test holds N of the run's slots, never
+  more than `--jobs`, so `--jobs` and the host's tokens count processes and not tests. The number
+  is measured, not guessed: the runner does not count a test's children, so a test that declares
+  fewer than it starts still overloads the host. A test that runs alone (`parallel = false`, a
+  benchmark) holds every slot whatever it declares.
 
 Use `parallel = false` only when a test shares something outside `${test_tmp}`: a compiler
 cache or a build directory, a port, a global counter file. A fixed output path under `tmp/test`
