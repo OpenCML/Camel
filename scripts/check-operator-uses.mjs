@@ -108,12 +108,16 @@ if (!rows.length) {
 // a line that differs. It judges nothing.
 if (process.argv.includes('--dump')) {
   const key = (row) => `${row.module}\u0000${row.uri}\u0000${row.name}\u0000${row.signature}`
+  const lines = []
   for (const row of [...rows].sort((a, b) => key(a).localeCompare(key(b)))) {
     const ordered = Object.fromEntries(Object.keys(row).sort().map((field) => [field, row[field]]))
-    console.log(`OPERATOR ${JSON.stringify(ordered)}`)
+    lines.push(`OPERATOR ${JSON.stringify(ordered)}`)
   }
   // The count is a line of the reading, not a log line: camel-remote drops lines that open with `[`.
-  console.log(`${NAME}: ${rows.length} operator row(s) from ${PROGRAM}`)
+  lines.push(`${NAME}: ${rows.length} operator row(s) from ${PROGRAM}`)
+  // Written in one piece and waited for: on a pipe, stdout is asynchronous, and an exit before it
+  // drains cuts the table short -- the count line, and whatever rows had not gone out yet.
+  await new Promise((resolve) => process.stdout.write(`${lines.join('\n')}\n`, resolve))
   process.exit(0)
 }
 
@@ -179,6 +183,9 @@ if (disagreed.length) {
   console.log(
     `[${NAME}] check-operator-uses: ${disagreed.length} operator(s) whose declaration and record disagree`,
   )
-  process.exit(3)
+  process.exitCode = 3
+} else {
+  // The exit code is set and the script ends on its own: an exit called while stdout still drains
+  // into a pipe cuts the list and the summary line short.
+  process.exitCode = sorted.length ? 1 : 0
 }
-process.exit(sorted.length ? 1 : 0)
