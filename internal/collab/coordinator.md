@@ -553,3 +553,15 @@ git worktree add --detach <旧提交>
 
 **16. 别用字符串替换去改 `verify_*` 的 JS 行。**
 同一手法连坏三次（引号、反引号模板串、转义），每次都只坏"断言那一行"而读数本身是对的，浪费三轮。改法：**整块重写那个 `[[tests]]` 条目**，写完先单跑该用例再提交。
+
+**17. 台账树的本地提交：不许 `reset --hard` 去对齐尖端，用 `rebase`。**
+我把 `docs/backlog-sync` 上**未推**的台账提交（`53826b8f37`，三课）用 `git reset -q --hard origin/integration` 对齐尖端，那一笔就掉出了分支 —— 只能靠 `git reflog` 找回（`HEAD@{5}` 那条 `commit:`）再 `cherry-pick` 回来。**定法**：对齐尖端一律 `git rebase origin/integration`；真要 reset，先 `git log --oneline origin/integration..HEAD` 确认**没有**未推提交。恢复手法也记下：`git reflog` 找 `commit:` 那一行 → `git cat-file -t <sha>` 确认对象还在 → `git cherry-pick <sha>`。
+
+**18. 判晋级死活：看 `oversight_readings` 的 `panel.running`，不看 `.log` 的 mtime。**
+晋级 69 的远端 stdout 日志按块缓冲，`promo69-*.log` 曾连续 8 分钟停在 1749 行，而 `panel.running` 里一直有 `{worktree: promote, phase: plan, startedAt 08:19:01}`。我先拿日志 mtime 判"卡住"、又拿 `camel-gate-state\test-state.json` 的 mtime 判"活着"（那个文件是**令牌池**，别人跑也会更新它，**不证明这一轮在跑**）。⇒ 唯一可信的是 `panel.running` 里有没有这条 run、`phase` 是什么。日志只用来读 `[SUMMARY]`/`[PASS]` 原文。
+
+**19. `git cherry` 的普查必须在换底之外、对完整 HEAD 做；`-AstOnly` 必须逗号一次传。**
+`lane-ssa-residue` 在 rebase 进行中跑 `git cherry b250a0659b HEAD`，只数到已重放的 10 笔（`plus=10`），abort 之后才对完整 HEAD 得到 `plus=25 minus=0` —— 两个数会得出相反结论。另一条来自 `lane-enter-shape`：`-UpdateAstHashes -AstOnly 'a.cml,b.cml'` 的 `-AstOnly` 要**一次逗号传完**，重复传参会绑定失败。
+
+**20. 一行级工具错误的例外用法（铁律 18 的实操）。**
+`benchmarks/tools/grad_referee.py` 把计划给的 `--block-limit` 原样转给 camel，而 camel 只认 `--spaces block_mb=`（`src/tools/camel-cli/config.cpp:650/:823/:1239`）⇒ `unknown option`、4 条 slow 用例全红。改法唯一（目标写法由 CLI 自己规定），按铁律 18 例外我先改后报：`cmd += ["--spaces", f"block_mb={_block_limit_mb}"]`，当轮 `oversight_tell` 写明"改了哪一行、为什么只能这样改、不同意就回退"。**两笔缺一不可**：计划侧传裁判的参数名（`--block-limit`）与脚本侧传 camel 的参数名（`--spaces block_mb=`）是两个不同的接口，别把两笔当成重复。
