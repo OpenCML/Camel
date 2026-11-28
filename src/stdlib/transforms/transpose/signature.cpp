@@ -464,4 +464,20 @@ std::optional<size_t> unstatedParameterBehind(
     return std::nullopt;
 }
 
+std::vector<size_t> portParametersOf(const camel::core::type::FunctionType *function) {
+    std::vector<size_t> ports;
+    if (function == nullptr) {
+        return ports;
+    }
+    const size_t count = function->normTypesCount();
+    ports.reserve(count);
+    for (size_t at = 0; at < count; ++at) {
+        if (isUnitType(function->normTypeAt(at))) {
+            continue;
+        }
+        ports.push_back(at);
+    }
+    return ports;
+}
+
 } // namespace camel::transforms

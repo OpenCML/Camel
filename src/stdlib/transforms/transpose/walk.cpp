@@ -291,35 +291,24 @@ bool buildTransposeMember(
     std::vector<uint32_t> armRegionsBuilt;
     // Which parameter a normal port of this function stands for, and which port a parameter asks
     // for.
-    // **One walk, and every reader below asks it**: `normPorts()` position `i` is
+    // **One walk, and every reader below asks it**, and the walk itself asks the one function that
+    // owns the rule (`signature.h#portParametersOf`): `normPorts()` position `i` is
     // `portParameter[i]`, and a parameter asks `portOfParameter[at]`. A `()` place is an answer and
-    // not a parameter, so it is the one thing skipped: a graph that declares a port for every other
-    // parameter -- a plain function, an `int` included -- degenerates to the identity, while a
-    // half's graph declares a port only for a parameter that has a tangent space
-    // (`buildSplitGraph`: "a () slot is an answer this half gives, never an argument it takes") and
-    // its type keeps the place as
-    // `()`, so its port `i` is the parameter index among the non-`()` places and **not** the `i`-th
-    // parameter: `f(n: int, xs: float[])`'s backward half is `((), float[])` with one port, `dxs`,
-    // which is parameter 1. Reading a port index as a parameter index is the arithmetic this
-    // replaces, and it is wrong exactly when a `()` place stands before a parameter with a port.
-    std::vector<size_t> portParameter;
+    // not a parameter, so it is the one thing with no port; every other parameter has one -- a
+    // plain function, whose every parameter is an argument, degenerates to the identity, and a
+    // half's graph declares a port for a parameter by the same list (`buildSplitGraph` reads it
+    // too: "a () slot is an answer this half gives, never an argument it takes").
+    //
+    // A discrete place is an argument like any other: its type is its own tangent space (design
+    // principles 9.9), so the half declares it as `int` and the caller passes the zero of that
+    // type. Reading it as "no port" -- the older rule -- made a port's position and its parameter's
+    // position differ by one wherever a discrete place stood before a parameter with a port:
+    // `f(n: int, xs: float[])`'s backward half is `(int, float[])` with ports `dn` and `dxs`, which
+    // are parameters 0 and 1, and the walk read `dn`'s cotangent into `dxs`'s member.
+    const std::vector<size_t> portParameter = portParametersOf(function->funcType());
     std::vector<size_t> portOfParameter(paramCount, paramCount);
-    for (size_t at = 0; at < paramCount; ++at) {
-        Type *const parameterType = function->funcType()->normTypeAt(at);
-        if (isUnitType(parameterType)) {
-            continue;
-        }
-        // A **discrete** place takes no port either: its answer member is the zero of its own type
-        // (the exit below writes it), and nothing is passed for a value that is always zero. "a
-        // space with no reader is still a space" -- the space is in the answer, the port is not in
-        // the interface. The signature reads the same two facts, so the graph's ports and the
-        // declared parameters stay one list; a port here without a member or a member without a
-        // port is what left the built pullback one place longer than the declared one.
-        if (camel::core::discreteZeroSlot(parameterType).has_value()) {
-            continue;
-        }
-        portOfParameter[at] = portParameter.size();
-        portParameter.push_back(at);
+    for (size_t port = 0; port < portParameter.size(); ++port) {
+        portOfParameter[portParameter[port]] = port;
     }
     // Nothing records "this member wants a value": there is no channel for a parameter's index per
     // member, handed to the call site so it could forward the value from the closure; a rule that
