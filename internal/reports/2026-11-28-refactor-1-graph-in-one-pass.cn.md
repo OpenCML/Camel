@@ -171,15 +171,6 @@ $camel = "out/migrate/old/bin/camel"   # 第二轮换成 new
 
 `std::jgir canonical=true` 是现有遍（`src/stdlib/std.cml:335` 的注释原文就是"with `std::jgir canonical=true` and compared byte for byte"），**不新造工具**。
 
-### 3.3 逐字节 diff
-
-```powershell
-Get-ChildItem out/migrate/graphs/old/*.jgir | ForEach-Object {
-    $n = $_.Name
-    if (Compare-Object (Get-Content $_.FullName) (Get-Content "out/migrate/graphs/new/$n")) { $n }
-} | Set-Content out/migrate/differing.txt
-```
-
 ### 3.3a 比对前归一（**只有这一条**）
 
 **只把输出里出现的"源文件绝对路径前缀"换成一个固定串**（`文件名 + 行:列` 保留），例如把 `D:\Projects\Camel-wt\<树>\test\cases\compile\x.cml:11:21` 归成 `<src>/x.cml:11:21`：
@@ -190,6 +181,15 @@ $raw = Get-Content $_.FullName -Raw
 ```
 
 **判据：归一规则只有这一条。** 其余**一个字节都不许归一** —— 多归一一样（空白、顺序、数字）就会把真正的差异洗掉，比不归一更坏。归一之后的 hash 才算比对用的 hash。
+
+### 3.3 逐字节 diff
+
+```powershell
+Get-ChildItem out/migrate/graphs/old/*.jgir | ForEach-Object {
+    $n = $_.Name
+    if (Compare-Object (Get-Content $_.FullName) (Get-Content "out/migrate/graphs/new/$n")) { $n }
+} | Set-Content out/migrate/differing.txt
+```
 
 ### 3.4 归因表模板（每个差异程序一行）
 
