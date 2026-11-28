@@ -36,6 +36,12 @@ def camel(cwd: Path, out: str) -> None:
     proc = subprocess.run([str(CAMEL), str(CASE)], cwd=cwd, env=env, capture_output=True, text=True, timeout=200)
     if proc.returncode != 0:
         raise SystemExit(f"FAIL: camel failed ({proc.returncode}):\n{proc.stdout[:1500]}\n{proc.stderr[:1500]}")
+    # The program answers a refused export with the error value printed and exit 0 (the branch in
+    # `ort_loop_loaded_weights.cml` returns 1 only when the export answered), so a refusal leaves no
+    # model on disk and the failure below would be `FileNotFoundError` at `onnx.load`, which names
+    # nothing. Say which refusal it hit while it is still in hand.
+    if "kind: ExportUnsupported" in proc.stdout:
+        raise SystemExit(f"FAIL: the export was refused:\n{proc.stdout[:1500]}")
 
 
 def op_types(graph) -> list:
