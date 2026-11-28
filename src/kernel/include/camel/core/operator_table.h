@@ -455,6 +455,13 @@ class OperatorTable {
      */
     const camel::ops::Record *recordOf(OperId id) const;
 
+    /// Whether a declaration writes `resource`: some operator's clause declares an access to that
+    /// resource whose mode writes it (`mode != Read`). The one place the answer is computed, and it
+    /// is computed from the declarations themselves -- not from the resource's class, because one
+    /// class (`Handle`) covers both a draft, which is written, and a read-only handle, which is
+    /// not. `false` when no declaration names the resource: nothing declared writes it.
+    bool mayBeWritten(const sem::Resource &resource) const;
+
     /// True when the operator's kernel takes the with-arguments after the ordinary ones
     /// (OperatorTraits::withAfterNorm).
     bool withAfterNorm(std::string_view uri) const;

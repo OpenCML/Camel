@@ -1297,7 +1297,8 @@ Arrangeable andTerms(const Arrangeable &left, const Arrangeable &right) {
         left.pure && right.pure,
         left.noExternalEffect && right.noExternalEffect,
         left.cannotFault && right.cannotFault,
-        left.terminates && right.terminates};
+        left.terminates && right.terminates,
+        left.noAccessToWrittenResource && right.noAccessToWrittenResource};
 }
 
 /// The four terms of an OPER node, read from the operator and from nothing else. The first three
@@ -1323,6 +1324,12 @@ Arrangeable termsOfOperator(camel::ops::OperId oper) {
         terms.pure             = record->pure();
         terms.noExternalEffect = !record->external();
         terms.cannotFault      = !record->mayFault();
+        // The fifth term is the footprint, not the promise: `pure` above says the clause declared
+        // no write, and this says no resource the clause reads is one a write reaches. A clause
+        // that reads a draft's writable `Handle` is still pure and is still not freely
+        // arrangeable -- one question, two bits, each with its own one statement
+        // (`internal/collab/pure-and-footprint-two-bits.md`).
+        terms.noAccessToWrittenResource = !record->accessesWritableResource();
     } else {
         // No record at all: nobody stated anything about the operator, so none of the three terms
         // holds. The table's derived bits are not a second answer to read here -- falling back to
@@ -1437,7 +1444,7 @@ class ArrangeWalk {
                 switch (view.shapeOf(ref)) {
                 case camel::ops::OperShape::Construction:
                 case camel::ops::OperShape::Access:
-                    return Arrangeable{true, true, true, true};
+                    return Arrangeable{true, true, true, true, true};
                 default:
                     return Arrangeable{};
                 }
@@ -1448,7 +1455,7 @@ class ArrangeWalk {
         case graph::NodeKind::Port:
             // A value and a port of the body: computed from what they read, with nothing to write,
             // nothing to fail and nothing to wait for.
-            return Arrangeable{true, true, true, true};
+            return Arrangeable{true, true, true, true, true};
         case graph::NodeKind::Gate: {
             // The hand-on of an order, and the four terms cannot state "it stands here": a gate is
             // pure, it reaches no resource, it cannot fault and it ends -- and it still may not be
@@ -1473,7 +1480,10 @@ class ArrangeWalk {
             return Arrangeable{};
         }
         case graph::NodeKind::Brch: {
-            Arrangeable terms{true, true, true, true};
+            // The start of the conjunction is AND's identity: the terms hold until a member of the
+            // regions says otherwise, and the fifth one -- the footprint -- is a member's answer
+            // as well, not a refusal made before the walk begins.
+            Arrangeable terms{true, true, true, true, true};
             for (const RegionId region : view.regionsOwnedBy(ref)) {
                 terms = andRegions(view, region, terms);
             }
@@ -1482,12 +1492,14 @@ class ArrangeWalk {
         case graph::NodeKind::Loop: {
             // The loop's own termination term is its form's (design principles 3.10): a `for` and
             // a `for ... while` take a finite sequence, and a `while` has no bound to read, so it
-            // is not known to end.
+            // is not known to end. The rest hold until a member of the regions says otherwise, the
+            // fifth one (the footprint) with them: the start of the conjunction is AND's identity.
             Arrangeable terms{
                 true,
                 true,
                 true,
-                view.loopFormOf(ref).kind != camel::core::LoopKind::While};
+                view.loopFormOf(ref).kind != camel::core::LoopKind::While,
+                true};
             for (const RegionId region : view.regionsOwnedBy(ref)) {
                 terms = andRegions(view, region, terms);
             }
@@ -1613,6 +1625,7 @@ std::string toString(const Arrangeable &arrangeable) {
     add(arrangeable.noExternalEffect, "external effect");
     add(arrangeable.cannotFault, "may fault");
     add(arrangeable.terminates, "may not terminate");
+    add(arrangeable.noAccessToWrittenResource, "reads a resource a write reaches");
     return out;
 }
 

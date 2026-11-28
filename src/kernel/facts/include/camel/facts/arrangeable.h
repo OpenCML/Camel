@@ -66,9 +66,17 @@ struct Arrangeable {
     bool cannotFault = false;
     /// Running it is known to end (design principles 3.4, 3.10).
     bool terminates = false;
+    /// Its accesses name no resource that a write reaches: a read of a resource nobody writes (a
+    /// frozen `graph`, a `spelling`) still holds, a read of a resource some operator writes (a
+    /// draft's writable `Handle`) does not. This is the footprint bit and not the promise: the
+    /// promise (`pure`, `operator_record.h`) says the clause declared no write, and a clause can
+    /// declare no write while reading a resource another operator writes.
+    bool noAccessToWrittenResource = false;
 
     /// The conjunction: what every reader of this fact asks.
-    bool all() const { return pure && noExternalEffect && cannotFault && terminates; }
+    bool all() const {
+        return pure && noExternalEffect && cannotFault && terminates && noAccessToWrittenResource;
+    }
     bool operator==(const Arrangeable &) const = default;
 };
 
