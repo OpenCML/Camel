@@ -1,9 +1,9 @@
 {
   "kind": "promotion",
   "promotion": 79,
-  "tip": "35c115adbd47c0dc0a6e75b6ee0d78a7c2bd6fd8",
-  "measured_tip": "35c115adbd47c0dc0a6e75b6ee0d78a7c2bd6fd8",
-  "pushed_develop_sha": "35c115adbd47c0dc0a6e75b6ee0d78a7c2bd6fd8",
+  "tip": "35c115adbd472f8e307d6d3c3115924770f5874e",
+  "measured_tip": "35c115adbd472f8e307d6d3c3115924770f5874e",
+  "pushed_develop_sha": "35c115adbd472f8e307d6d3c3115924770f5874e",
   "landing_tip": "the record is a documentation commit and lands on whatever integration holds at push time. Integration was held still by the coordinator for the length of this run and the landing (D-1128-34), so the baseline this record merges onto is the tip this layer measured plus the ledger commits only",
   "note": "the layer was measured at 35c115adbd47 and it is the reading that covers the code the seventy-eighth layer could not: seat/batch13 built and read at c32de118018b, fsh-dev's collaboration pages and runner readiness, lane/erase-constant-crash (erasing a constant no longer takes the process down) across facts, the graph draft view, the runtime graph and program, the stdlib graph read/resolve/txn and the tensor elementwise ops, lane/modules-baseline-clean, lane/task415-unary, and the two graph_edits cases that batch added. None of it moved a verdict",
   "tier": "fast",
@@ -57,7 +57,7 @@
   "new_red_names": [],
   "pushed_as": "develop, fast-forwarded from 9502dfe37daf to 35c115adbd47, the tip this layer measured",
   "develop_before": "9502dfe37daf68d40535c28523177e492dc93add",
-  "develop_after": "35c115adbd47c0dc0a6e75b6ee0d78a7c2bd6fd8",
+  "develop_after": "35c115adbd472f8e307d6d3c3115924770f5874e",
   "commits_brought_in": 50,
   "commits_touching_src": 16
 }
