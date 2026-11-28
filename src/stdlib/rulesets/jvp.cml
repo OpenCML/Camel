@@ -1061,6 +1061,43 @@ export rule jvp_idx_take::<T>(xs: T[...], positions: int[]) { index_take(xs, pos
     index_take(dxs, positions)
 } }
 
+// ---- the forward rule of `:op/slice_sub`, the slice of one axis ----
+//
+// `t[a..b]`, `t[a..b..s]`, `t[..b]`, `t[a..]` and the function form `slice<axis, start, end,
+// step>(t)` are one node, and the node's words are read positionally: the value, the axis, the two
+// bounds, the step, and the mask saying which of the two bounds the program wrote (the step-zero
+// check in `src/compile/src/gir/builder_call.cpp` reads the node this way, and the reverse rule of
+// the slice writes all six). A subscript is none of `a <op> b`, `<op> a` or `f(a, b)`, so the node
+// has no token a law's left side could be written with; the call form below is what the operator is
+// spelled as here, and the core binds the key (`:op/slice_sub` -> `slice` at six operands, in
+// `camel/core/forward.h#ruleKeyExceptions()`).
+//
+// A slice is linear: it takes a range of positions of the value along one axis and nothing else, so
+// its tangent is the same slice of the tangent, with the same axis, bounds, step and mask. The axis
+// and the bounds carry no tangent of their own (`Tangent<int>` is `()`), so they do not enter the
+// right side.
+
+/// `slice(t, axis, start, end, step, written)`: what `:op/slice_sub` means, and the left side this
+/// rule is filed under. The six words are the node's own, in the node's order -- the first is the
+/// value, and the last is the two-bit mask (bit 0 the end, bit 1 the start; both written is 3).
+/// Private, like the declarations above and for the same reason: each family that files a law for
+/// this key spells it itself.
+/// @example slice([1.0, 2.0, 3.0, 4.0, 5.0], 0, 1, 3, 1, 3)    // [2.0, 3.0]
+#op(':op/slice_sub')
+func slice::<T>(t: T[...], axis: int, start: int, end: int, step: int, written: int) => T[...] panic
+
+/// `d(t[a..b..s]) = dt[a..b..s]`: the tangent of a range of positions is that range of the tangent.
+/// The operand is `T[...]` rather than `T[]`: a slice takes an array of any rank along the axis it
+/// names, and the transform asks a law at the operand's element type, so `T[]` would say one
+/// dimension of one element and refuse `f32[2, 4]` as a value of `f32[]` (the same reason
+/// `jvp_idx_arr_axis` above is open rank).
+/// @example slice([[0.0, 1.0, 2.0], [3.0, 4.0, 5.0]], 1, 1, 3, 1, 3)    // the columns 1..3 of the tangent
+export rule jvp_slice::<T>(t: T[...], axis: int, start: int, end: int, step: int, written: int) {
+    slice(t, axis, start, end, step, written) => func (dt: T[...]) {
+        slice(dt, axis, start, end, step, written)
+    }
+}
+
 // ---- the forward rule of `tensor:pick_at`, the read that states its length ----
 //
 // `pick_at(xs, position, length)` is `xs[position]` of a rank-1 array whose length `length` states,
