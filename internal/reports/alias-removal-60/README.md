@@ -72,3 +72,48 @@ here was silently accepted.
 - enforced: every other cell is the line the entry's `expect_output_contains` required and the run
   satisfied -- `Pass <name> not found, available passes are:` for a refusal, `(no refusal line;
   exit 0)` for an accepted name. Re-running the same 60 entries re-checks the whole table.
+
+## Defect lead: `std::gc::views_escape` aborts on the smallest program
+
+A defect card will be opened from this; whoever takes it should start here.
+
+**The stderr, whole** (536 bytes on disk at the capture; ANSI colour escapes stripped here, the
+text is otherwise unchanged):
+
+```
+Camel Invariant Violation:
+    Location   : ../src/kernel/core/rtdata/view.cpp(162)
+    Function   : void camel::core::rtdata::assertStoredValueIsNotView(slot_t, const type::Type *, std::string_view)
+    Guarantee  : !isViewSlot(slot, type)
+    Reading    : A compact element view escaped into the reduce accumulator ((int, int)). A view is tied to the thread-local view ring and must be materialised before it is stored.
+
+Stack Trace: (not available on this platform)
+```
+
+**The smallest reproduction**: a file `m.cml` holding
+
+```camel
+func main() sync {
+}
+```
+
+and the command
+
+```
+camel m.cml std::gc::views_escape std::nvm
+```
+
+which exits `134` (SIGABRT) with the text above.
+
+**The control that says the probe is not what broke**: in the same run, the same program, the
+neighbouring pass answers --
+
+```
+camel m.cml std::gc::views std::nvm     -> exit 0, 82 ms
+```
+
+so the program, the pipeline shape and the runner are all fine; the abort is the pass.
+
+**Seen on two trees, byte-identical**: the alias-removal tree `0b1f54dc29` (where the sixty cells
+were read) and the integration tip `094341adb5`. That is what makes it a defect that **predates**
+the alias work rather than one those commits introduced.
