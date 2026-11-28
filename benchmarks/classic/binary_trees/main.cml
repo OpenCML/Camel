@@ -1,0 +1,17 @@
+// RQ1 classic suite: binary-trees. Builds full binary trees of a given depth and counts their nodes.
+
+type Node = { children: Node[] }
+
+func make(d: int) => Node {
+    if d == 0 then { children: [] } else { children: [make(d - 1), make(d - 1)] }
+}
+
+func check(n: Node) => int {
+    return 1 + (loop acc = 0 for c in n.children do acc + check(c))
+}
+
+func main() sync {
+    let depth = 16
+    let total = loop acc = 0 for q in 0 .. 3 do acc + check(make(depth))
+    println(total)
+}

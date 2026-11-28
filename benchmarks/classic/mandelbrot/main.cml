@@ -1,0 +1,15 @@
+// RQ1 classic suite: mandelbrot. Counts the pixels of an n x n grid inside the set.
+
+func iterate(zr: float, zi: float, cr: float, ci: float, i: int) => int {
+    if i == 200 then 200 else {
+        let nr = zr * zr - zi * zi + cr
+        let ni = 2.0 * zr * zi + ci
+        if nr * nr + ni * ni > 4.0 then i else iterate(nr, ni, cr, ci, i + 1)
+    }
+}
+
+func main() sync {
+    let n = 200
+    let inside = loop acc = 0 for i in 0 .. n do acc + (loop row = 0 for j in 0 .. n do row + (if iterate(0.0, 0.0, float(i) * 3.0 / float(n) - 2.0, float(j) * 2.0 / float(n) - 1.0, 0) == 200 then 1 else 0))
+    println(inside)
+}

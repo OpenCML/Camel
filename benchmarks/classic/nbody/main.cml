@@ -1,0 +1,61 @@
+// RQ1 classic suite: nbody. Five bodies, leapfrog steps of 0.01, total energy at the end.
+// The state is one array of 30 floats: for each body x, y, z, vx, vy, vz.
+
+import { sqrt } from math
+
+func mass(i: int) => float {
+    if i == 0 then 1.0 else (if i == 1 then 0.9 else (if i == 2 then 0.8 else (if i == 3 then 0.7 else 0.6)))
+}
+
+func comp(s: float[], i: int, c: int) => float {
+    return s[i * 6 + c]
+}
+
+func vel(s: float[], i: int, c: int) => float {
+    return s[i * 6 + 3 + c]
+}
+
+func accel(s: float[], j: int, c: int) => float {
+    return loop ax = 0.0 for i in 0 .. 5 do ax + (if i == j then 0.0 else {
+        let dx = comp(s, i, 0) - comp(s, j, 0)
+        let dy = comp(s, i, 1) - comp(s, j, 1)
+        let dz = comp(s, i, 2) - comp(s, j, 2)
+        let d2 = dx * dx + dy * dy + dz * dz
+        let inv = 1.0 / (d2 * sqrt(d2))
+        mass(i) * (if c == 0 then dx else (if c == 1 then dy else dz)) * inv
+    })
+}
+
+func step(s: float[], dt: float) => float[] {
+    let nv = [ vel(s, k / 3, k % 3) + dt * accel(s, k / 3, k % 3) for k in 0 .. 15 ]
+    let np = [ comp(s, k / 3, k % 3) + dt * nv[k] for k in 0 .. 15 ]
+    return [ (if k % 6 < 3 then np[k / 6 * 3 + k % 6] else nv[k / 6 * 3 + (k % 6 - 3)]) for k in 0 .. 30 ]
+}
+
+func kinetic(s: float[]) => float {
+    return loop acc = 0.0 for j in 0 .. 5 do acc + (0.5 * mass(j) * (vel(s, j, 0) * vel(s, j, 0) + vel(s, j, 1) * vel(s, j, 1) + vel(s, j, 2) * vel(s, j, 2)))
+}
+
+func potential(s: float[]) => float {
+    return loop acc = 0.0 for i in 0 .. 5 do acc + (loop p = 0.0 for j in 0 .. 5 do p + (if j <= i then 0.0 else {
+        let dx = comp(s, i, 0) - comp(s, j, 0)
+        let dy = comp(s, i, 1) - comp(s, j, 1)
+        let dz = comp(s, i, 2) - comp(s, j, 2)
+        mass(i) * mass(j) / sqrt(dx * dx + dy * dy + dz * dz)
+    }))
+}
+
+func main() sync {
+    let steps = 5000
+    let dt = 0.01
+    let st0 = [
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        4.841431442, -1.160320044, -0.103622044, 0.606326392, 2.811986844, -0.025218361,
+        8.343366718, 4.124798564, -0.403523417, -1.010774346, 1.825662371, 0.008268091,
+        12.894369562, -11.208566928, -0.237546115, 1.131486362, 0.693616560, 0.202992449,
+        15.379697114, -25.919314794, 0.677608747, 1.043144940, 0.498443384, -0.096236481
+    ]
+    let s = loop st = st0 for k in 0 .. steps do step(st, dt)
+    let e = kinetic(s) - potential(s)
+    println(int(e * 1000000000.0))
+}

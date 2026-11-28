@@ -1,0 +1,26 @@
+import { sqrt } from math
+
+func a(i: int, j: int) => float {
+    let ij = i + j
+    return 1.0 / float(ij * (ij + 1) / 2 + i + 1)
+}
+
+func mul_av(v: float[], n: int) => float[] {
+    return [ (loop acc = 0.0 for j in 0 .. n do acc + a(i, j) * v[j]) for i in 0 .. n ]
+}
+
+func mul_atv(v: float[], n: int) => float[] {
+    return [ (loop acc = 0.0 for i in 0 .. n do acc + a(i, j) * v[i]) for j in 0 .. n ]
+}
+
+func dot(u: float[], v: float[], n: int) => float {
+    return loop acc = 0.0 for i in 0 .. n do acc + u[i] * v[i]
+}
+
+func main() sync {
+    let n = 120
+    let u0 = [ 1.0 / float(n) for i in 0 .. n ]
+    let u = loop uu = u0 for k in 0 .. 10 do mul_atv(mul_av(uu, n), n)
+    let v = mul_av(u, n)
+    println(int(sqrt(dot(u, v, n) / dot(v, v, n)) * 1000000000.0))
+}
