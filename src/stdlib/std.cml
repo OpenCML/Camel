@@ -346,6 +346,7 @@ export func prl::<F>(f: F) => F! when is_function::<F>()
 namespace cxx {
     
     /// Inlining only.
+    #op('std:cxx::inline')
     with </// Nodes specialization and inlining may copy before the remaining calls are left as calls;
     /// 0 stops them (design principles 9.6).
     growth_budget: int = 4096>
@@ -372,6 +373,7 @@ namespace cxx {
     export func specialize::<F>(f: F) => F! when is_function::<F>()
     
     /// Constant folding.
+    #op('std:cxx::fold')
     with </// Bytes of constants this pass may materialize in a graph; a value above it is left as the
     /// computation that builds it (design principles 9.6); 0 materializes none.
     constant_budget: int = 8388608>
@@ -379,6 +381,7 @@ namespace cxx {
     
     /// Algebraic simplification (the laws of lib/rules/rules.cml, under the strict numeric policy when
     /// `safe_fp` is true).
+    #op('std:cxx::algebra')
     with <
         /// Keep the algebraic stage to strictly equivalent floating-point transformations
         /// (design principles 7.4).
@@ -392,6 +395,7 @@ namespace cxx {
     /// Saturates the standard rules library (lib/rules/rules.cml) and leaves the program in the state
     /// where a value has several writings; nothing is extracted. The dumps that accept that
     /// state draw it: `camel f.cml std::cxx::saturate std::gir`.
+    #op('std:cxx::saturate')
     with <
         /// Rounds of saturation: every round finds all matches of the rules and applies them, and the
         /// rounds go on while a round adds a writing. 0 applies no rule at all, so the program keeps
@@ -404,9 +408,11 @@ namespace cxx {
     export func saturate::<F>(f: F) => F! when is_function::<F>()
     
     /// Common subexpression elimination.
+    #op('std:cxx::cse')
     export func cse::<F>(f: F) => F! when is_function::<F>()
     
     /// Dead code elimination.
+    #op('std:cxx::dce')
     with </// Remove only the constants and pure operations that no node reads, not gates and syncs.
     values_only: bool = false>
     export func dce::<F>(f: F) => F! when is_function::<F>()
@@ -414,6 +420,7 @@ namespace cxx {
     /// The transitive reduction over ordering edges (docs/design/effects/edges.cn.md 5.4): an order
     /// edge A -> C goes away when a path of order edges already orders the two ends. A sync block's
     /// statements are one chain and carry no redundancy.
+    #op('std:cxx::order')
     export func order::<F>(f: F) => F! when is_function::<F>()
 }
 

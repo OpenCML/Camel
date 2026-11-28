@@ -119,9 +119,16 @@ for (const root of ROOTS) {
 
 // (3) Every declaration has exactly one kernel and every kernel a declaration.
 const declarations = []
+/// The URI a declaration writes in `#op('module:name')`, by the declaration's name: a pass has a
+/// source name (`cxx::cse`, what a pipeline writes as `std::cxx::cse`) and an operator URI
+/// (`std:cxx::cse`), and the declaration is where the two meet. A kernel may be registered under
+/// either, and this check follows the connection the declaration makes instead of spelling one
+/// from the other.
+const operatorUriOwners = new Map()
 {
     const file = path.join(REPO_ROOT, 'src', 'stdlib', 'std.cml')
     let namespace = []
+    let declaredUri
     for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
         const opened = line.trim().match(/^namespace\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{$/)
         if (opened) {
@@ -132,9 +139,19 @@ const declarations = []
             namespace.pop()
             continue
         }
+        const op = line.trim().match(/^#op\('([^']*)'\)$/)
+        if (op) {
+            declaredUri = op[1]
+            continue
+        }
         const func = line.trim().match(/^export\s+func\s+([A-Za-z_][A-Za-z0-9_]*)::<F>/)
         if (func) {
-            declarations.push([...namespace, func[1]].join('::'))
+            const name = [...namespace, func[1]].join('::')
+            declarations.push(name)
+            if (declaredUri !== undefined) {
+                operatorUriOwners.set(declaredUri, name)
+                declaredUri = undefined
+            }
         }
     }
 }
@@ -239,6 +256,22 @@ const implementations = []
                 const core = value.match(/^std::([a-z_][a-z0-9_:]*)$/)
                 if (core) {
                     implementations.push(core[1])
+                    continue
+                }
+                // A kernel may be registered under the operator URI its declaration writes in
+                // `#op` (`std:cxx::cse`), which is not the source name the declaration has
+                // (`cxx::cse`). The declaration connects the two, so this check reads that
+                // connection; a URI no declaration writes is still a kernel with no declaration.
+                const owner = operatorUriOwners.get(value)
+                if (owner !== undefined) {
+                    implementations.push(owner)
+                    continue
+                }
+                if (value.startsWith('std:')) {
+                    problems.push(
+                        `${relative}:${index + 1}: a kernel is registered under the URI '${value}' ` +
+                            `and no declaration writes that URI in an #op: ${trimmed}`
+                    )
                 }
             }
         }

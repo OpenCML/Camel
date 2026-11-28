@@ -49,7 +49,7 @@ PassMaker inlineKernelFor(std::optional<InlineTargetStrategy> strategy, std::str
         };
 }
 
-const PassKernel inlineKernel("std::cxx::inline", inlineKernelFor(std::nullopt, "std::cxx::inline"));
+const PassKernel inlineKernel("std:cxx::inline", inlineKernelFor(std::nullopt, "std::cxx::inline"));
 const PassKernel smallInlineKernel(
     "std::cxx::small",
     inlineKernelFor(InlineTargetStrategy::Small, "std::cxx::small"));

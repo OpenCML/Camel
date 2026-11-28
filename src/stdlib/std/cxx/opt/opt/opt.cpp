@@ -56,8 +56,7 @@ const PassKernel optimizeKernel(
 /// are the library's (`opt::saturate`); unlike it, the extraction is not made, so the program stops
 /// in the state where a value has several writings.
 const PassKernel saturateKernel(
-    "std::cxx::saturate",
-    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+    "std:cxx::saturate", [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<OptimizeSaturatePass>(
             ctx,
             args.getInt("rounds"),

@@ -399,8 +399,7 @@ std::optional<FoundPass> findDescriptor(const context_ptr_t &ctx, const std::str
         // registry is asked by id: a reader that already holds the id (a program calling the pass
         // as a function) asks without spelling the name again.
         const auto operatorId = resolvePassOperator(path);
-        const auto implementation =
-            operatorId.has_value() ? findPassKernel(*operatorId) : std::nullopt;
+        auto implementation   = operatorId.has_value() ? findPassKernel(*operatorId) : std::nullopt;
         // The module's declaration file is read before the pass is looked for in it. A file that
         // does not parse is a diagnostic against that module -- the same one the module loader
         // would give -- and this is where that answer is carried: the report below turns it into
@@ -426,6 +425,17 @@ std::optional<FoundPass> findDescriptor(const context_ptr_t &ctx, const std::str
             return found;
         }
         found.params = declaration->params;
+        // The declaration may say which URI its name stands for (`#op('module:name')`, design
+        // principles 6.2): a pass whose name is namespaced (`std::cxx::cse`) has the source name
+        // the pipeline writes and the URI the operator table holds, and the declaration is where
+        // the two meet. The written name was tried first, above; the URI written in the declaration
+        // is tried only when that failed, and no other spelling of the name is ever derived.
+        if (!implementation && declaration->operatorUri.has_value()) {
+            if (const auto tagged = resolvePassOperator(*declaration->operatorUri);
+                tagged.has_value()) {
+                implementation = findPassKernel(*tagged);
+            }
+        }
         if (!passDeclarationApplies(*declaration, found.inapplicable)) {
             found.inapplicable = path + ": " + found.inapplicable;
             return found;
