@@ -196,6 +196,7 @@ draftOf(const Handle *node, const char *site) {
             site,
             "the node names a published program, and no edit changes a program");
     }
+    requireOpenDraft(node, site);
     auto &draft = transaction->graph();
     if (!draft.alive(node->index())) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the node was removed");
@@ -1287,6 +1288,15 @@ const std::vector<TxnOp> &txnOps() {
 
 /// The graph handles of the draft: the function's own graph and every graph it reaches, each as
 /// the draft of that graph, so a node read through one of them is a node an edit changes.
+void requireOpenDraft(const Handle *handle, const char *site) {
+    const auto *wrapper = static_cast<const ForeignResourceObject *>(handle->draft());
+    if (wrapper != nullptr && wrapper->disposed()) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the draft was committed or aborted already");
+    }
+}
 std::vector<Handle *> draftGraphHandles(const Handle *draftHandle, const char *site) {
     TxnState &state = openState(draftHandle, site);
     auto *wrapper   = static_cast<ForeignResourceObject *>(draftHandle->draft());
