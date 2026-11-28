@@ -1,7 +1,8 @@
-// RQ1 classic suite: fannkuch. Sums the flip counts over every permutation of 0..n-1
-// and reports the largest one; the enumeration is the same recursive one the C++ side uses.
+// RQ1 classic suite: fannkuch. Sums the flip counts over every permutation of 0..n-1 and
+// reports the largest one, together with the number of permutations visited: the C++ column
+// prints the same three numbers.
 
-type Acc = { c: int, m: int }
+type Acc = { c: int, m: int, n: int }
 
 func concat(xs: int[], ys: int[]) => int[] {
     let nx = len(xs)
@@ -19,16 +20,16 @@ func flips(a: int[]) => int {
 
 func value(a: int[]) => Acc {
     let f = flips(a)
-    return { c: if f % 2 == 0 then f else -f, m: f }
+    return { c: if f % 2 == 0 then f else -f, m: f, n: 1 }
 }
 
 func combine(p: Acc, q: Acc) => Acc {
-    return { c: p.c + q.c, m: if p.m > q.m then p.m else q.m }
+    return { c: p.c + q.c, m: if p.m > q.m then p.m else q.m, n: p.n + q.n }
 }
 
 func perms(done: int[], rest: int[]) => Acc {
     if len(rest) == 0 then value(done) else {
-        loop acc = { c: 0, m: 0 } for i in 0 .. len(rest) do combine(acc, perms(concat(done, [rest[i]]), [ rest[j] for j in 0 .. len(rest) if j != i ]))
+        loop acc = { c: 0, m: 0, n: 0 } for i in 0 .. len(rest) do combine(acc, perms(concat(done, [rest[i]]), [ rest[j] for j in 0 .. len(rest) if j != i ]))
     }
 }
 
@@ -37,4 +38,5 @@ func main() sync {
     let r = perms([], [ i for i in 0 .. n ])
     println(r.c)
     println(r.m)
+    println(r.n)
 }

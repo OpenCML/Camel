@@ -1,11 +1,12 @@
-// RQ1 classic suite, C++ column: fannkuch. Same recursive permutation enumeration and the
-// same flip counting as benchmarks/classic/fannkuch/main.cml.
+// RQ1 classic suite, C++ column: fannkuch. Same recursive permutation enumeration, the same
+// flip counting, and the same visited-permutation count as benchmarks/classic/fannkuch/main.cml.
 #include <cstdio>
 #include <vector>
 
 struct Acc {
     long long c;
     long long m;
+    long long n;
 };
 
 static std::vector<int> concat(const std::vector<int> &xs, const std::vector<int> &ys) {
@@ -25,16 +26,16 @@ static long long flips(std::vector<int> a) {
 
 static Acc value(const std::vector<int> &a) {
     long long f = flips(a);
-    return Acc{(f % 2 == 0) ? f : -f, f};
+    return Acc{(f % 2 == 0) ? f : -f, f, 1};
 }
 
 static Acc combine(Acc p, Acc q) {
-    return Acc{p.c + q.c, p.m > q.m ? p.m : q.m};
+    return Acc{p.c + q.c, p.m > q.m ? p.m : q.m, p.n + q.n};
 }
 
 static Acc perms(const std::vector<int> &done, const std::vector<int> &rest) {
     if (rest.empty()) return value(done);
-    Acc acc{0, 0};
+    Acc acc{0, 0, 0};
     for (size_t i = 0; i < rest.size(); ++i) {
         std::vector<int> nextDone = concat(done, {rest[i]});
         std::vector<int> nextRest;
@@ -50,6 +51,6 @@ int main() {
     std::vector<int> all;
     for (int i = 0; i < n; ++i) all.push_back(i);
     Acc r = perms({}, all);
-    std::printf("%lld\n%lld\n", r.c, r.m);
+    std::printf("%lld\n%lld\n%lld\n", r.c, r.m, r.n);
     return 0;
 }
